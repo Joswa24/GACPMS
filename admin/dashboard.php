@@ -16,7 +16,8 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     header('Location: index.php');
     exit();
 }
-
+// Include connection
+include '../connection.php';
 
 // Check if connection is successful
 if (!$db) {
@@ -456,8 +457,6 @@ function getPersonTypeIcon($type) {
 ];
 
 error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
-// Include connection
-include '../connection.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
