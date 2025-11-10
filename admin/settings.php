@@ -1,4 +1,11 @@
 <?php
+// Include connection
+include '../connection.php';
+session_start();
+// Add this at the top of settings.php for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
     unset($_SESSION['success_message']);
@@ -14,13 +21,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     header('Location: index.php');
     exit();
 }
-// Include connection
-include '../connection.php';
-session_start();
-// Add this at the top of settings.php for debugging
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+
 
 // Function to get geolocation data from IP address
 function getGeolocation($ip) {
