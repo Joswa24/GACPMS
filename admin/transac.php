@@ -168,10 +168,7 @@ if ($isAjaxRequest) {
                 jsonResponse('error', 'Invalid request method');
             }
 
-            // Validate required fields
-            if (empty($_POST['id'])) {
-                jsonResponse('error', 'Room ID is required');
-            }
+           
 
             $required = ['roomdpt', 'roomrole', 'roomname', 'roomdesc', 'roompass'];
             foreach ($required as $field) {
