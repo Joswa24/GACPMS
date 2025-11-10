@@ -10,6 +10,40 @@ if (!isset($_SESSION['access']) || !isset($_SESSION['access']['security'])) {
 
 include 'connection.php';
 
+// reCAPTCHA Configuration
+define('RECAPTCHA_SITE_KEY', '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_');
+define('RECAPTCHA_SECRET_KEY', '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-');
+define('RECAPTCHA_VERIFY_URL', 'https://www.google.com/recaptcha/api/siteverify');
+
+// =====================================================================
+// RECAPTCHA VALIDATION FUNCTION
+// =====================================================================
+function validateRecaptcha($recaptchaResponse) {
+    if (empty($recaptchaResponse)) {
+        return ['success' => false, 'error' => 'reCAPTCHA verification failed'];
+    }
+    
+    $postData = http_build_query([
+        'secret' => RECAPTCHA_SECRET_KEY,
+        'response' => $recaptchaResponse,
+        'remoteip' => $_SERVER['REMOTE_ADDR']
+    ]);
+    
+    $options = [
+        'http' => [
+            'method' => 'POST',
+            'header' => 'Content-Type: application/x-www-form-urlencoded',
+            'content' => $postData
+        ]
+    ];
+    
+    $context = stream_context_create($options);
+    $response = file_get_contents(RECAPTCHA_VERIFY_URL, false, $context);
+    $result = json_decode($response, true);
+    
+    return $result;
+}
+
 // Set session variables for gate access
  $_SESSION['department'] = 'Main';
  $_SESSION['location'] = 'Gate';
@@ -292,6 +326,9 @@ function getPhotoForResponse($userData) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    
+    <!-- reCAPTCHA API -->
+    <script src="https://www.google.com/recaptcha/api.js?render=<?php echo RECAPTCHA_SITE_KEY; ?>"></script>
     
     <title>Gate Entrance Scanner</title>
     <link rel="icon" href="uploads/scanner.webp" type="image/webp">
@@ -1079,6 +1116,22 @@ function getPhotoForResponse($userData) {
 .visitor-modal .modal-body {
     padding: 20px;
 }
+
+/* reCAPTCHA badge styling */
+.grecaptcha-badge {
+    visibility: hidden;
+}
+
+/* reCAPTCHA info message */
+.recaptcha-info {
+    font-size: 11px;
+    color: #6c757d;
+    text-align: center;
+    margin-top: 8px;
+    padding: 5px;
+    background: var(--light-bg);
+    border-radius: 4px;
+}
     </style>
 </head>
 
@@ -1092,6 +1145,9 @@ function getPhotoForResponse($userData) {
 <audio id="errorAudio" hidden>
     <source src="admin/audio/error.mp3" type="audio/mpeg">
 </audio>
+
+<!-- Hidden reCAPTCHA token field -->
+<input type="hidden" id="g-recaptcha-response" name="g-recaptcha-response">
 
 <!-- Header - Fixed height, fully visible -->
 <div class="header-container">
@@ -1302,6 +1358,12 @@ function getPhotoForResponse($userData) {
 
             <!-- Result Display -->
             <div id="result"></div>
+            
+            <!-- reCAPTCHA Info -->
+            <div class="recaptcha-info">
+                <i class="fas fa-shield-alt me-1"></i>
+                Protected by reCAPTCHA
+            </div>
         </div>
 
         <!-- Sidebar Section (30%) -->
@@ -1348,6 +1410,9 @@ let scanner = null;
 let barcodeBuffer = '';
 let lastScanTime = 0;
 const scanCooldown = 500; // Reduced cooldown for faster scanning
+
+// reCAPTCHA site key
+const RECAPTCHA_SITE_KEY = '<?php echo RECAPTCHA_SITE_KEY; ?>';
 
 // Role icons mapping
 const roleIcons = {
@@ -1417,49 +1482,70 @@ function onScanSuccess(decodedText, decodedResult) {
         scanner.pause();
     }
     
-    // Process the barcode
-    processBarcode(decodedText);
+    // Process the barcode with reCAPTCHA
+    processBarcodeWithRecaptcha(decodedText);
 }
 
-    // Process scanned barcode
-    // Enhanced barcode processing for gate system
-    function processBarcode(barcode) {
-        console.log("🔍 Processing barcode:", barcode);
-        
-        // Show processing state
-        document.getElementById('result').innerHTML = `
-            <div class="d-flex justify-content-center align-items-center">
-                <div class="spinner-border text-primary me-2" role="status" style="width: 1rem; height: 1rem;">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <span>Processing ID: ${barcode}</span>
+// Enhanced barcode processing with reCAPTCHA
+function processBarcodeWithRecaptcha(barcode) {
+    console.log("🔍 Processing barcode with reCAPTCHA:", barcode);
+    
+    // Show processing state
+    document.getElementById('result').innerHTML = `
+        <div class="d-flex justify-content-center align-items-center">
+            <div class="spinner-border text-primary me-2" role="status" style="width: 1rem; height: 1rem;">
+                <span class="visually-hidden">Loading...</span>
             </div>
-        `;
-        
-        // Disable inputs during processing
-        setInputsDisabled(true);
-        
-        $.ajax({
-            type: "POST",
-            url: "process_gate.php",
-            data: { 
-                barcode: barcode,
-                department: "<?php echo $department; ?>",
-                location: "<?php echo $location; ?>"
-            },
-            dataType: 'json',
-            timeout: 10000, // Reduced timeout for faster response
-            success: function(response) {
-                handleGateScanSuccess(response, barcode);
-            },
-            error: function(xhr, status, error) {
-                handleGateScanError(xhr, status, error, barcode);
-            },
-            complete: function() {
-                setInputsDisabled(false);
-            }
+            <span>Processing ID: ${barcode}</span>
+        </div>
+    `;
+    
+    // Disable inputs during processing
+    setInputsDisabled(true);
+    
+    // Get reCAPTCHA token first
+    grecaptcha.ready(function() {
+        grecaptcha.execute(RECAPTCHA_SITE_KEY, {action: 'gate_access'}).then(function(token) {
+            // Set the token in the hidden field
+            document.getElementById('g-recaptcha-response').value = token;
+            
+            console.log("✅ reCAPTCHA token received, proceeding with gate access...");
+            
+            // Now send the request with reCAPTCHA token
+            $.ajax({
+                type: "POST",
+                url: "process_gate.php",
+                data: { 
+                    barcode: barcode,
+                    department: "<?php echo $department; ?>",
+                    location: "<?php echo $location; ?>",
+                    'g-recaptcha-response': token
+                },
+                dataType: 'json',
+                timeout: 10000,
+                success: function(response) {
+                    // Check if server indicates this is a visitor that needs registration
+                    if (response.requires_visitor_info) {
+                        console.log("🎫 Visitor card detected, showing info modal");
+                        showVisitorInfoModal(barcode);
+                    } else {
+                        handleGateScanSuccess(response, barcode);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    handleGateScanError(xhr, status, error, barcode);
+                },
+                complete: function() {
+                    setInputsDisabled(false);
+                }
+            });
+        }).catch(function(error) {
+            console.error('❌ reCAPTCHA error:', error);
+            showErrorMessage('Security verification failed. Please try again.');
+            setInputsDisabled(false);
         });
-    }
+    });
+}
 
     // Enhanced success handler for gate system
     function handleGateScanSuccess(response, originalBarcode) {
@@ -1596,57 +1682,66 @@ function onScanSuccess(decodedText, decodedResult) {
             `;
         }
     }
-    // Add this function to detect if scanned ID belongs to a visitor
-    function isVisitorID(barcode) {
-        // Check if the scanned ID exists in the visitor table
-        // We'll check this in process_gate.php, but for now use pattern
-        const visitorPattern = /^\d{4}-\d{4}$/;
-        return visitorPattern.test(barcode);
-    }
 
-    // Enhanced barcode processing function
-    function processBarcode(barcode) {
-        console.log("🔍 Processing barcode:", barcode);
+    // Enhanced manual input processing to handle visitors with reCAPTCHA
+    function processManualInput() {
+        const idNumber = document.getElementById('manualIdInput').value.trim();
         
-        // Show processing state
-        document.getElementById('result').innerHTML = `
-            <div class="d-flex justify-content-center align-items-center">
-                <div class="spinner-border text-primary me-2" role="status" style="width: 1rem; height: 1rem;">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <span>Processing ID: ${barcode}</span>
-            </div>
-        `;
+        if (!idNumber) {
+            showErrorMessage("Please enter ID number");
+            speakMessage("Please enter ID number");
+            return;
+        }
         
-        // Disable inputs during processing
+        // Basic ID format validation (0000-0000)
+        const idPattern = /^\d{4}-\d{4}$/;
+        if (!idPattern.test(idNumber)) {
+            showErrorMessage("Invalid ID format. Please use: 0000-0000");
+            return;
+        }
+        
+        showProcessingState(idNumber);
         setInputsDisabled(true);
         
-        $.ajax({
-            type: "POST",
-            url: "process_gate.php",
-            data: { 
-                barcode: barcode,
-                department: "<?php echo $department; ?>",
-                location: "<?php echo $location; ?>",
-                check_visitor: true // Flag to check if this is a visitor
-            },
-            dataType: 'json',
-            timeout: 10000, // Reduced timeout for faster response
-            success: function(response) {
-                // Check if server indicates this is a visitor that needs registration
-                if (response.requires_visitor_info) {
-                    console.log("🎫 Visitor card detected, showing info modal");
-                    showVisitorInfoModal(barcode);
-                } else {
-                    handleGateScanSuccess(response, barcode);
-                }
-            },
-            error: function(xhr, status, error) {
-                handleGateScanError(xhr, status, error, barcode);
-            },
-            complete: function() {
+        // Get reCAPTCHA token for manual input
+        grecaptcha.ready(function() {
+            grecaptcha.execute(RECAPTCHA_SITE_KEY, {action: 'gate_access'}).then(function(token) {
+                document.getElementById('g-recaptcha-response').value = token;
+                
+                // Process as barcode (will check if visitor in process_gate.php)
+                $.ajax({
+                    type: "POST",
+                    url: "process_gate.php",
+                    data: { 
+                        barcode: idNumber,
+                        department: "<?php echo $department; ?>",
+                        location: "<?php echo $location; ?>",
+                        check_visitor: true,
+                        'g-recaptcha-response': token
+                    },
+                    dataType: 'json',
+                    timeout: 10000,
+                    success: function(response) {
+                        // Check if server indicates this is a visitor that needs registration
+                        if (response.requires_visitor_info) {
+                            console.log("🎫 Visitor card detected, showing info modal");
+                            showVisitorInfoModal(idNumber);
+                        } else {
+                            handleGateScanSuccess(response, idNumber);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        handleGateScanError(xhr, status, error, idNumber);
+                    },
+                    complete: function() {
+                        setInputsDisabled(false);
+                    }
+                });
+            }).catch(function(error) {
+                console.error('❌ reCAPTCHA error:', error);
+                showErrorMessage('Security verification failed. Please try again.');
                 setInputsDisabled(false);
-            }
+            });
         });
     }
 
@@ -1684,7 +1779,7 @@ function onScanSuccess(decodedText, decodedResult) {
         });
     }
 
-    // Submit visitor information
+    // Submit visitor information with reCAPTCHA
     function submitVisitorInfo() {
         const form = document.getElementById('visitorInfoForm');
         const submitBtn = document.getElementById('submitVisitorInfo');
@@ -1722,67 +1817,78 @@ function onScanSuccess(decodedText, decodedResult) {
         submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
         submitBtn.disabled = true;
         
-        // Prepare data
-        const visitorData = {
-            visitor_id: document.getElementById('visitorID').value,
-            full_name: fullName,
-            contact_number: contactNumber,
-            purpose: purpose === 'Other' ? document.getElementById('otherPurpose').value.trim() : purpose,
-            person_visiting: document.getElementById('personVisiting').value.trim(),
-            department: "<?php echo $department; ?>",
-            location: "<?php echo $location; ?>",
-            is_visitor_submission: true // Flag to indicate this is visitor data submission
-        };
-        
-        // Send data to server
-        $.ajax({
-            type: "POST",
-            url: "process_gate.php", // Use the same file
-            data: visitorData,
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    // Show success message
-                    showVisitorAlert('Visitor access recorded successfully!', 'success');
-                    
-                    // Update UI with visitor data
-                    updateGateUI({
-                        full_name: visitorData.full_name,
-                        id_number: visitorData.visitor_id,
-                        department: visitorData.department,
-                        role: 'Visitor',
-                        photo: 'admin/uploads/students/default.png',
-                        time_in_out: 'Time In Recorded',
-                        alert_class: 'alert-success'
-                    });
-                    
-                    // Close modal after delay and show confirmation
-                    setTimeout(() => {
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('visitorInfoModal'));
-                        modal.hide();
-                        
-                        // Show confirmation modal
-                        showGateConfirmationModal({
-                            full_name: visitorData.full_name,
-                            id_number: visitorData.visitor_id,
-                            department: visitorData.department,
-                            role: 'Visitor',
-                            photo: 'admin/uploads/students/default.png',
-                            time_in_out: 'Time In Recorded'
-                        });
-                    }, 1500);
-                    
-                } else {
-                    showVisitorAlert(response.message || 'Error recording visitor access', 'danger');
-                    submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit & Record Access';
-                    submitBtn.disabled = false;
-                }
-            },
-            error: function(xhr, status, error) {
-                showVisitorAlert('Error processing visitor information. Please try again.', 'danger');
+        // Get reCAPTCHA token for visitor submission
+        grecaptcha.ready(function() {
+            grecaptcha.execute(RECAPTCHA_SITE_KEY, {action: 'visitor_registration'}).then(function(token) {
+                // Prepare data
+                const visitorData = {
+                    visitor_id: document.getElementById('visitorID').value,
+                    full_name: fullName,
+                    contact_number: contactNumber,
+                    purpose: purpose === 'Other' ? document.getElementById('otherPurpose').value.trim() : purpose,
+                    person_visiting: document.getElementById('personVisiting').value.trim(),
+                    department: "<?php echo $department; ?>",
+                    location: "<?php echo $location; ?>",
+                    is_visitor_submission: true,
+                    'g-recaptcha-response': token
+                };
+                
+                // Send data to server
+                $.ajax({
+                    type: "POST",
+                    url: "process_gate.php", // Use the same file
+                    data: visitorData,
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            // Show success message
+                            showVisitorAlert('Visitor access recorded successfully!', 'success');
+                            
+                            // Update UI with visitor data
+                            updateGateUI({
+                                full_name: visitorData.full_name,
+                                id_number: visitorData.visitor_id,
+                                department: visitorData.department,
+                                role: 'Visitor',
+                                photo: 'admin/uploads/students/default.png',
+                                time_in_out: 'Time In Recorded',
+                                alert_class: 'alert-success'
+                            });
+                            
+                            // Close modal after delay and show confirmation
+                            setTimeout(() => {
+                                const modal = bootstrap.Modal.getInstance(document.getElementById('visitorInfoModal'));
+                                modal.hide();
+                                
+                                // Show confirmation modal
+                                showGateConfirmationModal({
+                                    full_name: visitorData.full_name,
+                                    id_number: visitorData.visitor_id,
+                                    department: visitorData.department,
+                                    role: 'Visitor',
+                                    photo: 'admin/uploads/students/default.png',
+                                    time_in_out: 'Time In Recorded'
+                                });
+                            }, 1500);
+                            
+                        } else {
+                            showVisitorAlert(response.message || 'Error recording visitor access', 'danger');
+                            submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit & Record Access';
+                            submitBtn.disabled = false;
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        showVisitorAlert('Error processing visitor information. Please try again.', 'danger');
+                        submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit & Record Access';
+                        submitBtn.disabled = false;
+                    }
+                });
+            }).catch(function(error) {
+                console.error('❌ reCAPTCHA error:', error);
+                showVisitorAlert('Security verification failed. Please try again.', 'danger');
                 submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit & Record Access';
                 submitBtn.disabled = false;
-            }
+            });
         });
     }
 
@@ -1804,29 +1910,6 @@ function onScanSuccess(decodedText, decodedResult) {
         document.querySelector('#visitorInfoModal .modal-body').insertAdjacentHTML('afterbegin', alertHTML);
     }
 
-    // Enhanced manual input processing to handle visitors
-    function processManualInput() {
-        const idNumber = document.getElementById('manualIdInput').value.trim();
-        
-        if (!idNumber) {
-            showErrorMessage("Please enter ID number");
-            speakMessage("Please enter ID number");
-            return;
-        }
-        
-        // Basic ID format validation (0000-0000)
-        const idPattern = /^\d{4}-\d{4}$/;
-        if (!idPattern.test(idNumber)) {
-            showErrorMessage("Invalid ID format. Please use: 0000-0000");
-            return;
-        }
-        
-        showProcessingState(idNumber);
-        setInputsDisabled(true);
-        
-        // Process as barcode (will check if visitor in process_gate.php)
-        processBarcode(idNumber);
-    }
 // Enhanced photo update function with better error handling
 function updatePersonPhoto(data) {
     const photoElement = document.getElementById('pic');
@@ -2109,31 +2192,6 @@ function speakMessage(message) {
         window.speechSynthesis.speak(speech);
     }
 }
-
-
-// Enhanced manual input processing
-    function processManualInput() {
-        const idNumber = document.getElementById('manualIdInput').value.trim();
-        
-        if (!idNumber) {
-            showErrorMessage("Please enter ID number");
-            speakMessage("Please enter ID number");
-            return;
-        }
-        
-        // Basic ID format validation (0000-0000)
-        const idPattern = /^\d{4}-\d{4}$/;
-        if (!idPattern.test(idNumber)) {
-            showErrorMessage("Invalid ID format. Please use: 0000-0000");
-            return;
-        }
-        
-        showProcessingState(idNumber);
-        setInputsDisabled(true);
-        
-        // Process as barcode
-        processBarcode(idNumber);
-    }
 
     // Add this helper function
     function showProcessingState(idNumber) {
@@ -2423,86 +2481,6 @@ function validateVisitorForm() {
     }
     
     return isValid;
-}
-
-// Update the submitVisitorInfo function to use new validation
-function submitVisitorInfo() {
-    const form = document.getElementById('visitorInfoForm');
-    const submitBtn = document.getElementById('submitVisitorInfo');
-    
-    // Validate form
-    if (!validateVisitorForm()) {
-        showVisitorAlert('Please correct the errors in the form before submitting.', 'danger');
-        return;
-    }
-    
-    // Show loading state
-    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
-    submitBtn.disabled = true;
-    
-    // Prepare data
-    const visitorData = {
-        visitor_id: document.getElementById('visitorID').value,
-        full_name: document.getElementById('fullName').value.trim(),
-        contact_number: document.getElementById('contactNumber').value.trim(),
-        purpose: document.getElementById('purpose').value === 'Other' ? 
-                 document.getElementById('otherPurpose').value.trim() : 
-                 document.getElementById('purpose').value,
-        person_visiting: document.getElementById('personVisiting').value.trim(),
-        department: "<?php echo $department; ?>",
-        location: "<?php echo $location; ?>",
-        is_visitor_submission: true
-    };
-    
-    // Send data to server
-    $.ajax({
-        type: "POST",
-        url: "process_gate.php",
-        data: visitorData,
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                showVisitorAlert('Visitor access recorded successfully!', 'success');
-                
-                // Update UI with visitor data
-                updateGateUI({
-                    full_name: visitorData.full_name,
-                    id_number: visitorData.visitor_id,
-                    department: visitorData.department,
-                    role: 'Visitor',
-                    photo: 'admin/uploads/students/default.png',
-                    time_in_out: 'Time In Recorded',
-                    alert_class: 'alert-success'
-                });
-                
-                // Close modal after delay and show confirmation
-                setTimeout(() => {
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('visitorInfoModal'));
-                    modal.hide();
-                    
-                    // Show confirmation modal
-                    showGateConfirmationModal({
-                        full_name: visitorData.full_name,
-                        id_number: visitorData.visitor_id,
-                        department: visitorData.department,
-                        role: 'Visitor',
-                        photo: 'admin/uploads/students/default.png',
-                        time_in_out: 'Time In Recorded'
-                    });
-                }, 1500);
-                
-            } else {
-                showVisitorAlert(response.message || 'Error recording visitor access', 'danger');
-                submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit & Record Access';
-                submitBtn.disabled = false;
-            }
-        },
-        error: function(xhr, status, error) {
-            showVisitorAlert('Error processing visitor information. Please try again.', 'danger');
-            submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit & Record Access';
-            submitBtn.disabled = false;
-        }
-    });
 }
 </script>
 
