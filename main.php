@@ -329,6 +329,7 @@ function getPhotoForResponse($userData) {
     
     <!-- reCAPTCHA API -->
     <script src="https://www.google.com/recaptcha/api.js?render=<?php echo RECAPTCHA_SITE_KEY; ?>"></script>
+    <script src="https://www.google.com/recaptcha/api.js?render=6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_"></script>
     
     <title>Gate Entrance Scanner</title>
     <link rel="icon" href="uploads/scanner.webp" type="image/webp">
