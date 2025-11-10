@@ -1,25 +1,18 @@
 <?php
-// Allow AJAX requests
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST');
-header('Access-Control-Allow-Headers: X-Requested-With');
 
-// Start session and error reporting ONCE
-session_start();
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-
-// DEBUGGING - Log request details
+// DEBUGGING - Add this at the very top of transac.php
 error_log("=== TRANSAC.PHP CALLED ===");
 error_log("REQUEST METHOD: " . $_SERVER['REQUEST_METHOD']);
 error_log("GET PARAMS: " . print_r($_GET, true));
 error_log("POST PARAMS: " . print_r($_POST, true));
-error_log("FILES: " . print_r($_FILES, true));
 error_log("REQUEST URI: " . $_SERVER['REQUEST_URI']);
+
+
+
 
 include('../connection.php');
 date_default_timezone_set('Asia/Manila');
+session_start();
 
 // Function to send JSON response
 function jsonResponse($status, $message, $data = []) {
@@ -35,18 +28,8 @@ function jsonResponse($status, $message, $data = []) {
     exit;
 }
 
-// Check database connection
-if (!$db) {
-    jsonResponse('error', 'Database connection failed: ' . mysqli_connect_error());
-}
-
 // Get the action from the request
 $action = isset($_GET['action']) ? $_GET['action'] : '';
-
-// Test endpoint to verify transac.php is working
-if ($action === 'test') {
-    jsonResponse('success', 'transac.php is working!', ['timestamp' => date('Y-m-d H:i:s')]);
-}
 
 // Function to validate and sanitize input
 function sanitizeInput($db, $input) {
@@ -296,8 +279,6 @@ if ($isAjaxRequest) {
                 $uploadResult = handleFileUpload('photo', '../uploads/personell/');
                 if ($uploadResult['success']) {
                     $photo = $uploadResult['filename'];
-                } else {
-                    jsonResponse('error', $uploadResult['message']);
                 }
             }
 
@@ -308,10 +289,6 @@ if ($isAjaxRequest) {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
             
             $stmt = $db->prepare($query);
-            if (!$stmt) {
-                jsonResponse('error', 'Database prepare failed: ' . $db->error);
-            }
-            
             $stmt->bind_param(
                 "sssssssss", 
                 $id_number, $last_name, $first_name, $date_of_birth,
@@ -388,8 +365,6 @@ if ($isAjaxRequest) {
                 if ($uploadResult['success']) {
                     $new_photo = $uploadResult['filename'];
                     $photo_update = ", photo = ?";
-                } else {
-                    jsonResponse('error', $uploadResult['message']);
                 }
             }
 
