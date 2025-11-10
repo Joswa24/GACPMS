@@ -1288,7 +1288,7 @@ function getPersonnelPhoto($photo) {
             });
         });
 
-       // Handle delete button click
+// Handle delete button click
 $(document).on('click', '.d_user_id', function() {
     var personnelId = $(this).data('id');
     var personnelName = $(this).attr('user_name');
@@ -1318,12 +1318,16 @@ $(document).on('click', '.d_user_id', function() {
 
             console.log('Sending delete request for ID:', personnelId);
             
+            // Create form data to ensure it's sent as POST
+            var formData = new FormData();
+            formData.append('id', personnelId);
+            
             $.ajax({
                 url: 'transac.php?action=delete_personnel',
                 type: 'POST',
-                data: { 
-                    id: personnelId 
-                },
+                data: formData,
+                contentType: false,  // Important for FormData
+                processData: false,  // Important for FormData
                 dataType: 'json',
                 success: function(response) {
                     console.log('Delete response:', response);
@@ -1365,7 +1369,6 @@ $(document).on('click', '.d_user_id', function() {
         }
     });
 });
-
         // Reset modal when closed
         $('#personnelModal').on('hidden.bs.modal', function () {
             document.getElementById('role').value = 'Student';
