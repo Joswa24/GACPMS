@@ -1,17 +1,7 @@
 <?php
-session_start();
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-
-if (isset($_SESSION['success_message'])) {
-    echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
-    unset($_SESSION['success_message']);
-}
-if (isset($_SESSION['error_message'])) {
-    echo '<div class="alert alert-danger">' . $_SESSION['error_message'] . '</div>';
-    unset($_SESSION['error_message']);
-}
+// REMOVED duplicate session_start() and error reporting - only keep in transac.php
+include '../connection.php';
+date_default_timezone_set('Asia/Manila');
 
 // Check if user is logged in and 2FA verified
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
@@ -19,9 +9,6 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     header('Location: index.php');
     exit();
 }
-// Include connection
-include '../connection.php';
-date_default_timezone_set('Asia/Manila');
 
 // Function to send JSON response
 function jsonResponse($status, $message, $data = []) {
@@ -45,7 +32,6 @@ if (isset($_SESSION['error_message'])) {
     unset($_SESSION['error_message']);
 }
 
-// Function to format ID with hyphen
 // Function to format ID with hyphen (for display consistency)
 function formatID($id) {
     // If it's already in 0000-0000 format, return as is
@@ -86,7 +72,7 @@ function getPersonnelPhoto($photo) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Personnel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
@@ -828,6 +814,18 @@ function getPersonnelPhoto($photo) {
     <script src="js/main.js"></script>
     <script>
     $(document).ready(function() {
+        // Debug AJAX connection
+        console.log('Testing AJAX connection...');
+        
+        // Monitor all AJAX requests
+        $(document).ajaxSend(function(event, xhr, settings) {
+            console.log('AJAX Request:', settings.url, settings.data);
+        });
+
+        $(document).ajaxComplete(function(event, xhr, settings) {
+            console.log('AJAX Response:', xhr.responseText);
+        });
+
         // Initialize DataTable
         var dataTable = $('#myDataTable').DataTable({
             order: [[8, 'desc']],
@@ -1287,111 +1285,41 @@ function getPersonnelPhoto($photo) {
                 }
             });
         });
-// Handle delete button click - DEBUG VERSION
-$(document).on('click', '.d_user_id', function() {
-    var personnelId = $(this).data('id');
-    var personnelName = $(this).attr('user_name');
-    
-    console.log('Delete clicked - ID:', personnelId, 'Name:', personnelName);
-    
-    Swal.fire({
-        title: 'Are you sure?',
-        text: "You are about to delete personnel: " + personnelName,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // Show loading
-            Swal.fire({
-                title: 'Deleting...',
-                text: 'Please wait',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
 
-            console.log('Sending delete request for ID:', personnelId);
+        // ==========
+        // DELETE PERSONNEL - SIMPLIFIED VERSION
+        // ==========
+        $(document).on('click', '.d_user_id', function() {
+            var personnelId = $(this).data('id');
+            var personnelName = $(this).attr('user_name');
             
-            // METHOD 1: Direct POST with explicit headers
-            $.ajax({
-                url: 'transac.php',
-                type: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                data: {
-                    action: 'delete_personnel',
-                    id: personnelId
-                },
-                dataType: 'json',
-                success: function(response) {
-                    console.log('Delete response:', response);
-                    if (response.status === 'success') {
-                        Swal.fire({
-                            title: 'Deleted!',
-                            text: response.message,
-                            icon: 'success',
-                            timer: 2000,
-                            showConfirmButton: false
-                        }).then(() => {
-                            location.reload();
-                        });
-                    } else {
-                        Swal.fire({
-                            title: 'Error!',
-                            text: response.message,
-                            icon: 'error'
-                        });
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Delete AJAX error:', status, error);
-                    console.error('Response text:', xhr.responseText);
-                    console.error('Status:', xhr.status);
-                    
-                    // Try to parse the error response
-                    let errorMessage = 'Failed to delete personnel';
-                    try {
-                        const errorResponse = JSON.parse(xhr.responseText);
-                        if (errorResponse.message) {
-                            errorMessage = errorResponse.message;
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "Delete " + personnelName + "?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.post('transac.php?action=delete_personnel', {id: personnelId})
+                    .done(function(response) {
+                        if (response.status === 'success') {
+                            Swal.fire('Deleted!', response.message, 'success').then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            Swal.fire('Error!', response.message, 'error');
                         }
-                    } catch (e) {
-                        errorMessage = xhr.responseText || 'Unknown error occurred';
-                    }
-                    
-                    Swal.fire({
-                        title: 'Error!',
-                        html: '<div style="text-align: left;">' + 
-                              '<strong>Error Details:</strong><br>' +
-                              'Status: ' + xhr.status + '<br>' +
-                              'Error: ' + error + '<br>' +
-                              'Message: ' + errorMessage +
-                              '</div>',
-                        icon: 'error'
+                    })
+                    .fail(function(xhr, status, error) {
+                        Swal.fire('Error!', 'AJAX Error: ' + error, 'error');
                     });
                 }
             });
-        }
-    });
-});
+        });
 
-// Add this at the bottom of your script to catch any JavaScript errors
-window.addEventListener('error', function(e) {
-    console.error('Global JavaScript Error:', e.error);
-    console.error('Error at:', e.filename, 'line:', e.lineno);
-});
-
-// Test if jQuery is working properly
-$(document).ready(function() {
-    console.log('jQuery is loaded and working');
-    console.log('Delete buttons found:', $('.d_user_id').length);
-});
         // Reset modal when closed
         $('#personnelModal').on('hidden.bs.modal', function () {
             document.getElementById('role').value = 'Student';
