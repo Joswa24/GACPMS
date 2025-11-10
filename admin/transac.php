@@ -161,14 +161,13 @@ if ($isAjaxRequest) {
             } else {
                 jsonResponse('error', 'Failed to add room: ' . $stmt->error);
             }
+            $stmt->close();
             break;
 
         case 'update_room':
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
                 jsonResponse('error', 'Invalid request method');
             }
-
-           
 
             $required = ['roomdpt', 'roomrole', 'roomname', 'roomdesc', 'roompass'];
             foreach ($required as $field) {
@@ -228,6 +227,7 @@ if ($isAjaxRequest) {
             } else {
                 jsonResponse('error', 'Failed to update room: ' . $stmt->error);
             }
+            $stmt->close();
             break;
 
         case 'delete_room':
@@ -284,12 +284,12 @@ if ($isAjaxRequest) {
             } else {
                 jsonResponse('error', 'Failed to delete room: ' . $stmt->error);
             }
+            $stmt->close();
             break;
-
-        // Add other cases here as needed...
 
         default:
             jsonResponse('error', 'Invalid action');
+            break;
     }
 } else {
     // Handle non-AJAX actions (your existing standalone functions)
