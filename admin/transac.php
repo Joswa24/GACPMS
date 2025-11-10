@@ -104,66 +104,97 @@ if ($isAjaxRequest) {
         // ROOM CRUD OPERATIONS - FIXED
         // ========================
         case 'add_room':
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                jsonResponse('error', 'Invalid request method');
-            }
+    error_log("ADD_ROOM action started"); // Debug log
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        error_log("ADD_ROOM: Invalid request method - " . $_SERVER['REQUEST_METHOD']);
+        jsonResponse('error', 'Invalid request method. Expected POST, got ' . $_SERVER['REQUEST_METHOD']);
+    }
 
-            // Validate required fields
-            $required = ['roomdpt', 'roomrole', 'roomname', 'roomdesc', 'roompass'];
-            foreach ($required as $field) {
-                if (empty($_POST[$field])) {
-                    jsonResponse('error', "Missing required field: " . str_replace('room', '', $field));
-                }
-            }
+    // Log all received POST data
+    error_log("ADD_ROOM POST data: " . print_r($_POST, true));
+    
+    // Debug: Check if we're receiving the expected fields
+    $receivedFields = array_keys($_POST);
+    error_log("ADD_ROOM Received fields: " . implode(', ', $receivedFields));
 
-            // Sanitize inputs
-            $department = sanitizeInput($db, $_POST['roomdpt']);
-            $role = sanitizeInput($db, $_POST['roomrole']);
-            $room = sanitizeInput($db, $_POST['roomname']);
-            $descr = sanitizeInput($db, $_POST['roomdesc']);
-            $password = sanitizeInput($db, $_POST['roompass']);
+    // Validate required fields
+    $required = ['roomdpt', 'roomrole', 'roomname', 'roomdesc', 'roompass'];
+    $missing = [];
+    foreach ($required as $field) {
+        if (empty($_POST[$field])) {
+            $missing[] = $field;
+            error_log("ADD_ROOM: Missing field - " . $field);
+        }
+    }
+    
+    if (!empty($missing)) {
+        error_log("ADD_ROOM: Missing required fields - " . implode(', ', $missing));
+        jsonResponse('error', "Missing required fields: " . implode(', ', $missing));
+    }
 
-            // Validate lengths
-            if (strlen($room) > 100) {
-                jsonResponse('error', 'Room name must be less than 100 characters');
-            }
+    try {
+        // Sanitize inputs
+        $department = sanitizeInput($db, $_POST['roomdpt']);
+        $role = sanitizeInput($db, $_POST['roomrole']);
+        $room = sanitizeInput($db, $_POST['roomname']);
+        $descr = sanitizeInput($db, $_POST['roomdesc']);
+        $password = sanitizeInput($db, $_POST['roompass']);
 
-            if (strlen($descr) > 255) {
-                jsonResponse('error', 'Description must be less than 255 characters');
-            }
+        error_log("ADD_ROOM: Sanitized data - Dept: $department, Role: $role, Room: $room, Desc: $descr, Pass: " . (strlen($password) . " chars"));
 
-            if (strlen($password) < 6) {
-                jsonResponse('error', 'Password must be at least 6 characters');
-            }
+        // Validate lengths
+        if (strlen($room) > 100) {
+            jsonResponse('error', 'Room name must be less than 100 characters');
+        }
 
-            // Check if room exists in department
-            $check = $db->prepare("SELECT id FROM rooms WHERE room = ? AND department = ?");
-            $check->bind_param("ss", $room, $department);
-            $check->execute();
-            $check->store_result();
+        if (strlen($descr) > 255) {
+            jsonResponse('error', 'Description must be less than 255 characters');
+        }
 
-            if ($check->num_rows > 0) {
-                $check->close();
-                jsonResponse('error', 'Room already exists in this department');
-            }
+        if (strlen($password) < 6) {
+            jsonResponse('error', 'Password must be at least 6 characters');
+        }
+
+        // Check if room exists in department
+        $check = $db->prepare("SELECT id FROM rooms WHERE room = ? AND department = ?");
+        if (!$check) {
+            throw new Exception('Prepare failed: ' . $db->error);
+        }
+        
+        $check->bind_param("ss", $room, $department);
+        $check->execute();
+        $check->store_result();
+
+        if ($check->num_rows > 0) {
             $check->close();
+            error_log("ADD_ROOM: Room already exists - $room in $department");
+            jsonResponse('error', 'Room "' . $room . '" already exists in ' . $department . ' department');
+        }
+        $check->close();
 
-            // Insert room
-            $stmt = $db->prepare("INSERT INTO rooms (room, authorized_personnel, department, password, descr) VALUES (?, ?, ?, ?, ?)");
-            if (!$stmt) {
-                jsonResponse('error', 'Database prepare failed: ' . $db->error);
-            }
-            
-            $stmt->bind_param("sssss", $room, $role, $department, $password, $descr);
+        // Insert room
+        $stmt = $db->prepare("INSERT INTO rooms (room, authorized_personnel, department, password, descr) VALUES (?, ?, ?, ?, ?)");
+        if (!$stmt) {
+            throw new Exception('Database prepare failed: ' . $db->error);
+        }
+        
+        $stmt->bind_param("sssss", $room, $role, $department, $password, $descr);
 
-            if ($stmt->execute()) {
-                jsonResponse('success', 'Room added successfully');
-            } else {
-                jsonResponse('error', 'Failed to add room: ' . $stmt->error);
-            }
-            $stmt->close();
-            break;
-
+        if ($stmt->execute()) {
+            $newId = $stmt->insert_id;
+            error_log("ADD_ROOM: Success - Room added with ID: $newId");
+            jsonResponse('success', 'Room "' . $room . '" added successfully to ' . $department . ' department', ['id' => $newId]);
+        } else {
+            throw new Exception('Execute failed: ' . $stmt->error);
+        }
+        $stmt->close();
+        
+    } catch (Exception $e) {
+        error_log("ADD_ROOM Exception: " . $e->getMessage());
+        jsonResponse('error', 'Database error: ' . $e->getMessage());
+    }
+    break;
         case 'update_room':
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
                 jsonResponse('error', 'Invalid request method');

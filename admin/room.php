@@ -786,89 +786,130 @@ include '../connection.php';
     }
 
     // ==============
-    // CREATE (ADD ROOM)
-    // ==============
-    $('#roomForm').submit(function(e) {
-        e.preventDefault();
-        
-        $('.error-message').text('');
-        const roomdpt = $('#roomdpt').val();
-        const roomrole = $('#roomrole').val();
-        const roomname = $('#roomname').val().trim();
-        const roomdesc = $('#roomdesc').val().trim();
-        const roompass = $('#roompass').val().trim();
-        let isValid = true;
+// CREATE (ADD ROOM) - FIXED VERSION
+// ==============
+$('#roomForm').submit(function(e) {
+    e.preventDefault();
+    
+    console.log('Add room form submitted');
+    
+    $('.error-message').text('');
+    const roomdpt = $('#roomdpt').val();
+    const roomrole = $('#roomrole').val();
+    const roomname = $('#roomname').val().trim();
+    const roomdesc = $('#roomdesc').val().trim();
+    const roompass = $('#roompass').val().trim();
+    let isValid = true;
 
-        // Validation
-        if (!roomname) { 
-            $('#roomname-error').text('Room name is required'); 
-            isValid = false; 
-        }
-        if (!roomdesc) { 
-            $('#roomdesc-error').text('Description is required'); 
-            isValid = false; 
-        }
-        if (!roompass) { 
-            $('#roompass-error').text('Password is required'); 
-            isValid = false; 
-        } else if (roompass.length < 6) { 
-            $('#roompass-error').text('Password must be at least 6 characters'); 
-            isValid = false; 
-        }
-        
-        if (!isValid) return;
+    console.log('Form data:', { 
+        roomdpt: roomdpt, 
+        roomrole: roomrole, 
+        roomname: roomname, 
+        roomdesc: roomdesc, 
+        roompass: roompass 
+    });
 
-        // Show loading state
-        $('#btn-room').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...');
-        $('#btn-room').prop('disabled', true);
+    // Validation
+    if (!roomname) { 
+        $('#roomname-error').text('Room name is required'); 
+        isValid = false; 
+    }
+    if (!roomdesc) { 
+        $('#roomdesc-error').text('Description is required'); 
+        isValid = false; 
+    }
+    if (!roompass) { 
+        $('#roompass-error').text('Password is required'); 
+        isValid = false; 
+    } else if (roompass.length < 6) { 
+        $('#roompass-error').text('Password must be at least 6 characters'); 
+        isValid = false; 
+    }
+    
+    if (!isValid) {
+        console.log('Form validation failed');
+        return;
+    }
 
-        $.ajax({
-            type: "POST",
-            url: "transac.php?action=add_room",
-            data: { roomdpt, roomrole, roomname, roomdesc, roompass },
-            dataType: 'json',
-            success: function(response) {
-                // Reset button state
-                $('#btn-room').html('Save');
-                $('#btn-room').prop('disabled', false);
-                
-                if (response.status === 'success') {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Success!',
-                        text: response.message,
-                        showConfirmButton: false,
-                        timer: 1500
-                    }).then(() => {
-                        $('#roomModal').modal('hide');
-                        location.reload();
-                    });
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error!',
-                        text: response.message
-                    });
-                }
-            },
-            error: function(xhr, status, error) {
-                // Reset button state
-                $('#btn-room').html('Save');
-                $('#btn-room').prop('disabled', false);
-                
-                console.log('XHR Response:', xhr.responseText);
-                console.log('Status:', status);
-                console.log('Error:', error);
-                
+    // Show loading state
+    $('#btn-room').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...');
+    $('#btn-room').prop('disabled', true);
+
+    console.log('Sending AJAX request...');
+    
+    // FIXED: Use explicit key-value pairs instead of shorthand
+    $.ajax({
+        type: "POST",
+        url: "transac.php?action=add_room",
+        data: { 
+            roomdpt: roomdpt,
+            roomrole: roomrole,
+            roomname: roomname,
+            roomdesc: roomdesc,
+            roompass: roompass
+        },
+        dataType: 'json',
+        success: function(response) {
+            console.log('AJAX Success Response:', response);
+            
+            // Reset button state
+            $('#btn-room').html('Save');
+            $('#btn-room').prop('disabled', false);
+            
+            if (response.status === 'success') {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Success!',
+                    text: response.message,
+                    showConfirmButton: false,
+                    timer: 1500
+                }).then(() => {
+                    $('#roomModal').modal('hide');
+                    location.reload();
+                });
+            } else {
                 Swal.fire({
                     icon: 'error',
                     title: 'Error!',
-                    text: 'An error occurred while processing your request'
+                    text: response.message || 'Unknown error occurred'
                 });
             }
-        });
+        },
+        error: function(xhr, status, error) {
+            console.log('AJAX Error Details:', {
+                xhr: xhr,
+                status: status,
+                error: error,
+                responseText: xhr.responseText
+            });
+            
+            // Reset button state
+            $('#btn-room').html('Save');
+            $('#btn-room').prop('disabled', false);
+            
+            let errorMessage = 'An error occurred while processing your request';
+            
+            // Try to parse error response
+            try {
+                const errorResponse = JSON.parse(xhr.responseText);
+                if (errorResponse.message) {
+                    errorMessage = errorResponse.message;
+                }
+            } catch (e) {
+                // If not JSON, show raw response
+                if (xhr.responseText) {
+                    errorMessage = 'Server response: ' + xhr.responseText.substring(0, 100);
+                }
+            }
+            
+            Swal.fire({
+                icon: 'error',
+                title: 'Request Failed!',
+                html: errorMessage + '<br><br><small>Check browser console for details</small>'
+            });
+        }
     });
-
+});
     // ==========
     // READ (EDIT ROOM)
     // ==========
