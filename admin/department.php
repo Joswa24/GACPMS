@@ -538,7 +538,7 @@ $(document).ready(function() {
     });
 
     // reCAPTCHA site key (replace with your actual key)
-    const RECAPTCHA_SITE_KEY = 'YOUR_RECAPTCHA_V3_SITE_KEY';
+    const RECAPTCHA_SITE_KEY = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
 
     // Helper function to get reCAPTCHA token
     function getRecaptchaToken(action = 'submit') {
