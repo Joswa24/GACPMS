@@ -1,3 +1,4 @@
+
 <?php
 include('../connection.php');
 date_default_timezone_set('Asia/Manila');
@@ -48,7 +49,7 @@ function jsonResponse($status, $message, $data = []) {
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 
 // ================================
-// reCAPTCHA PROTECTED ACTIONS
+// reCAPTCHA PROTECTED ACTIONS - TEMPORARILY DISABLED
 // ================================
 $protectedActions = [
     'add_department', 'update_department', 'delete_department', 
@@ -63,30 +64,28 @@ $protectedActions = [
     'swap_time_schedule', 'revert_swap'
 ];
 
-// Verify reCAPTCHA for protected actions
-if (in_array($action, $protectedActions)) {
-    // Skip reCAPTCHA for development - REMOVE THIS IN PRODUCTION
-    $skipRecaptcha = true; // Set to false in production
-    
-    if (!$skipRecaptcha && (!isset($_POST['recaptcha_token']) || empty($_POST['recaptcha_token']))) {
+// TEMPORARY FIX: Skip all reCAPTCHA checks for now
+$skipRecaptcha = true;
+
+if (in_array($action, $protectedActions) && !$skipRecaptcha) {
+    // Only run reCAPTCHA if not skipped
+    if (!isset($_POST['recaptcha_token']) || empty($_POST['recaptcha_token'])) {
         error_log("reCAPTCHA token missing for action: $action");
         jsonResponse('error', 'Security verification failed. Please refresh the page and try again.');
     }
     
-    if (!$skipRecaptcha) {
-        $recaptchaToken = $_POST['recaptcha_token'];
-        $recaptchaResult = verifyRecaptchaV3($recaptchaToken, $action);
-        
-        if (!$recaptchaResult['success'] || $recaptchaResult['score'] < 0.5) {
-            error_log("reCAPTCHA verification failed for action: $action. Score: " . ($recaptchaResult['score'] ?? 'N/A'));
-            jsonResponse('error', 'Security verification failed. Please try again.');
-        }
-        
-        // Optional: Verify the action matches
-        if (isset($recaptchaResult['action']) && $recaptchaResult['action'] !== $action) {
-            error_log("reCAPTCHA action mismatch. Expected: $action, Got: " . $recaptchaResult['action']);
-            jsonResponse('error', 'Security verification failed.');
-        }
+    $recaptchaToken = $_POST['recaptcha_token'];
+    $recaptchaResult = verifyRecaptchaV3($recaptchaToken, $action);
+    
+    if (!$recaptchaResult['success'] || $recaptchaResult['score'] < 0.5) {
+        error_log("reCAPTCHA verification failed for action: $action. Score: " . ($recaptchaResult['score'] ?? 'N/A'));
+        jsonResponse('error', 'Security verification failed. Please try again.');
+    }
+    
+    // Optional: Verify the action matches
+    if (isset($recaptchaResult['action']) && $recaptchaResult['action'] !== $action) {
+        error_log("reCAPTCHA action mismatch. Expected: $action, Got: " . $recaptchaResult['action']);
+        jsonResponse('error', 'Security verification failed.');
     }
 }
 
