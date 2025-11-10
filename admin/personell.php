@@ -1288,7 +1288,7 @@ function getPersonnelPhoto($photo) {
             });
         });
 
-// Handle delete button click
+// Handle delete button click - SIMPLER VERSION
 $(document).on('click', '.d_user_id', function() {
     var personnelId = $(this).data('id');
     var personnelName = $(this).attr('user_name');
@@ -1318,16 +1318,14 @@ $(document).on('click', '.d_user_id', function() {
 
             console.log('Sending delete request for ID:', personnelId);
             
-            // Create form data to ensure it's sent as POST
-            var formData = new FormData();
-            formData.append('id', personnelId);
-            
+            // Use URL encoded data with proper POST headers
             $.ajax({
-                url: 'transac.php?action=delete_personnel',
+                url: 'transac.php',
                 type: 'POST',
-                data: formData,
-                contentType: false,  // Important for FormData
-                processData: false,  // Important for FormData
+                data: {
+                    action: 'delete_personnel',
+                    id: personnelId
+                },
                 dataType: 'json',
                 success: function(response) {
                     console.log('Delete response:', response);
