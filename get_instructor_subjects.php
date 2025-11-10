@@ -1,5 +1,5 @@
 <?php
-// get_instructor_subjects.php - COMPLETELY REWRITTEN
+// get_instructor_subjects.php - UPDATED WITH SECTION AND YEAR_LEVEL
 
 // Turn on all error reporting
 ini_set('display_errors', 1);
@@ -66,11 +66,12 @@ try {
         }
     }
     
-    // 2. Get schedules for this instructor in the specified room
+    // 2. Get schedules for this instructor in the specified room - UPDATED WITH SECTION AND YEAR_LEVEL
     $schedule_query = "
         SELECT 
             subject, 
             section, 
+            year_level,
             day, 
             start_time, 
             end_time,

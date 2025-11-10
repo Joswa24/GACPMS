@@ -1,5 +1,13 @@
 <?php
 session_start();
+if (isset($_SESSION['reload_flag'])) {
+    // Unset specific session variables
+    unset($_SESSION['month']); 
+    unset($_SESSION['name']);
+    unset($_SESSION['id']);
+} 
+
+ $id = 0;
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
     unset($_SESSION['success_message']);
@@ -8,20 +16,19 @@ if (isset($_SESSION['error_message'])) {
     echo '<div class="alert alert-danger">' . $_SESSION['error_message'] . '</div>';
     unset($_SESSION['error_message']);
 }
+
 // Check if user is logged in and 2FA verified
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
     !isset($_SESSION['2fa_verified']) || $_SESSION['2fa_verified'] !== true) {
     header('Location: index.php');
     exit();
 }
+// Include connection
+include '../connection.php';
+?>
+<?php
+include 'header.php';
 
-if (isset($_SESSION['reload_flag'])) {
-    // Unset specific session variables
-    unset($_SESSION['month']); 
-    unset($_SESSION['name']);
-    unset($_SESSION['id']);
-} 
- $id = 0;
 // Check if there's a search query
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['query'])) {
     
@@ -95,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_holiday'])) {
 <!DOCTYPE html>
 <html lang="en">
 <?php include 'header.php'; ?>
-<?php include '../connection.php'; ?>
+
 <body>
     <div class="container-fluid position-relative bg-white d-flex p-0">
         <?php include 'sidebar.php'; ?>
@@ -255,22 +262,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_holiday'])) {
                         <hr>
                         <div class="table-responsive">
                             <style>
-                                .back-to-top {
-                                    background: linear-gradient(135deg, var(--accent-color), var(--secondary-color)) !important;
-                                    border: none;
-                                    border-radius: 50%;
-                                    width: 50px;
-                                    height: 50px;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    box-shadow: var(--box-shadow);
-                                    transition: var(--transition);
-                                }
-
-                                .back-to-top:hover {
-                                    transform: translateY(-3px);
-                                }
                                 .container {
                                     width: 100%;
                                     max-width: 800px;
@@ -749,7 +740,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_holiday'])) {
             });
         </script>
 
-        <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="fas fa-arrow-up"></i></a>
+        <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="bi bi-arrow-up"></i></a>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="lib/chart/chart.min.js"></script>

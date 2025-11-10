@@ -23,6 +23,7 @@ $errorMessage = '';
 $successMessage = '';
 $instructorInfo = null;
 $showResetModal = false;
+$showPasswordForm = false;
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -87,28 +88,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!isset($_SESSION['verified_instructor_id'])) {
             $errorMessage = "Session expired. Please scan your ID again.";
         } else {
+            // Show password form instead of generating temporary password
+            $showPasswordForm = true;
+            $instructorInfo = $_SESSION['verified_instructor_data'];
+        }
+    }
+    
+    // Handle new password submission
+    if (isset($_POST['set_new_password'])) {
+        // Validate CSRF token
+        if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+            $errorMessage = "Invalid request. Please try again.";
+        } elseif (!isset($_SESSION['verified_instructor_id'])) {
+            $errorMessage = "Session expired. Please scan your ID again.";
+        } else {
             $instructor_id = $_SESSION['verified_instructor_id'];
+            $new_password = $_POST['new_password'];
+            $confirm_password = $_POST['confirm_password'];
             
-            // Generate a random temporary password (8 characters)
-            $tempPassword = bin2hex(random_bytes(4)); // 8 characters
-            $hashedPassword = password_hash($tempPassword, PASSWORD_DEFAULT);
-            
-            // Update the password in the database
-            $updateStmt = $db->prepare("UPDATE instructor_accounts SET password = ? WHERE instructor_id = ?");
-            $updateStmt->bind_param("si", $hashedPassword, $instructor_id);
-            
-            if ($updateStmt->execute()) {
-                $successMessage = "Password reset successful! Your temporary password is: <strong>" . $tempPassword . "</strong><br>Please login and change your password immediately.";
-                
-                // Clear session data after successful reset
-                unset($_SESSION['verified_instructor_id']);
-                unset($_SESSION['verified_instructor_data']);
-                $instructorInfo = null;
-                $showResetModal = false;
+            // Validate passwords
+            if (empty($new_password) || empty($confirm_password)) {
+                $errorMessage = "Please fill in all password fields.";
+            } elseif (strlen($new_password) < 6) {
+                $errorMessage = "Password must be at least 6 characters long.";
+            } elseif ($new_password !== $confirm_password) {
+                $errorMessage = "Passwords do not match. Please try again.";
             } else {
-                $errorMessage = "Error resetting password. Please try again.";
+                // Hash the new password
+                $hashedPassword = password_hash($new_password, PASSWORD_DEFAULT);
+                
+                // Update the password in the database
+                $updateStmt = $db->prepare("UPDATE instructor_accounts SET password = ? WHERE instructor_id = ?");
+                $updateStmt->bind_param("si", $hashedPassword, $instructor_id);
+                
+                if ($updateStmt->execute()) {
+                    $successMessage = "Password reset successful! Your new password has been set.<br>You can now login with your new password.";
+                    
+                    // Clear session data after successful reset
+                    unset($_SESSION['verified_instructor_id']);
+                    unset($_SESSION['verified_instructor_data']);
+                    $instructorInfo = null;
+                    $showResetModal = false;
+                    $showPasswordForm = false;
+                } else {
+                    $errorMessage = "Error resetting password. Please try again.";
+                }
+                $updateStmt->close();
             }
-            $updateStmt->close();
         }
     }
     
@@ -227,6 +253,37 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
             color: var(--accent-color);
         }
         
+        .input-group {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .input-group:focus-within {
+            box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+        }
+        
+        .input-group-text {
+            background-color: var(--light-bg);
+            border: none;
+            padding: 0.75rem 1rem;
+            color: var(--accent-color);
+        }
+        
+        .form-control {
+            border: none;
+            padding: 0.75rem 1rem;
+            background-color: var(--light-bg);
+            transition: all 0.3s ease;
+            font-size: 1rem;
+        }
+        
+        .form-control:focus {
+            background-color: white;
+            box-shadow: none;
+        }
+        
         .scan-indicator {
             text-align: center;
             margin: 10px 0;
@@ -298,6 +355,23 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
+        }
+        
+        .btn-password {
+            background: linear-gradient(135deg, var(--success-color), #17a673);
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 12px;
+            border-radius: 8px;
+            width: 100%;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(25, 135, 84, 0.3);
+        }
+        
+        .btn-password:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(25, 135, 84, 0.4);
         }
         
         .alert {
@@ -457,6 +531,34 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
             }
         }
 
+        /* Password requirements */
+        .password-requirements {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+        }
+        
+        .requirement {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .requirement.valid {
+            color: var(--success-color);
+        }
+        
+        .requirement.invalid {
+            color: var(--danger-color);
+        }
+        
+        .requirement i {
+            margin-right: 8px;
+            font-size: 0.8rem;
+        }
+
         /* Hidden form field */
         .hidden-field {
             position: absolute;
@@ -564,14 +666,15 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
                 </div>
             <?php endif; ?>
 
+            <?php if (!$showPasswordForm): ?>
             <div class="instructions">
                 <h6><i class="fas fa-info-circle me-2"></i>Instructions:</h6>
                 <ul class="mb-0">
                     <li><strong>Click on the scanner box below</strong> to activate the scanner</li>
                     <li>Scan your ID card when the scanner is active</li>
                     <li>Scanned barcode will be displayed automatically</li>
-                    <li>If your ID is verified, a reset confirmation will appear</li>
-                    <li>You will receive a temporary password to login</li>
+                    <li>If your ID is verified, you can set your own new password</li>
+                    <li>You will be able to login with your new password immediately</li>
                 </ul>
             </div>
 
@@ -647,6 +750,94 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
                     </a>
                 </div>
             </form>
+            <?php else: ?>
+            <!-- Password Setting Form -->
+            <div class="instructions">
+                <h6><i class="fas fa-info-circle me-2"></i>Set Your New Password</h6>
+                <p class="mb-0">Please create a new password for your daily use. Make sure it's secure and memorable.</p>
+            </div>
+
+            <?php if ($instructorInfo): ?>
+            <div class="instructor-info">
+                <h5><i class="fas fa-user me-2"></i>Account Information</h5>
+                <div class="info-item">
+                    <span class="info-label">Full Name:</span>
+                    <span class="info-value"><?php echo htmlspecialchars($instructorInfo['fullname']); ?></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">ID Number:</span>
+                    <span class="info-value"><?php echo htmlspecialchars($instructorInfo['id_number']); ?></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Username:</span>
+                    <span class="info-value"><?php echo htmlspecialchars($instructorInfo['username']); ?></span>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <div class="password-requirements">
+                <h6><i class="fas fa-shield-alt me-2"></i>Password Requirements:</h6>
+                <div class="requirement invalid" id="reqLength">
+                    <i class="fas fa-times-circle"></i>
+                    <span>At least 6 characters long</span>
+                </div>
+                <div class="requirement invalid" id="reqMatch">
+                    <i class="fas fa-times-circle"></i>
+                    <span>Passwords must match</span>
+                </div>
+            </div>
+
+            <form method="POST" id="passwordForm">
+                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                <input type="hidden" name="set_new_password" value="1">
+
+                <div class="form-group">
+                    <label for="new_password" class="form-label"><i class="fas fa-lock me-2"></i>New Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-key"></i></span>
+                        <input type="password" 
+                               class="form-control" 
+                               id="new_password" 
+                               name="new_password" 
+                               required
+                               placeholder="Enter your new password"
+                               minlength="6">
+                        <button type="button" class="input-group-text toggle-password" data-target="new_password">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm_password" class="form-label"><i class="fas fa-lock me-2"></i>Confirm Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-key"></i></span>
+                        <input type="password" 
+                               class="form-control" 
+                               id="confirm_password" 
+                               name="confirm_password" 
+                               required
+                               placeholder="Confirm your new password"
+                               minlength="6">
+                        <button type="button" class="input-group-text toggle-password" data-target="confirm_password">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-password mb-3" id="setPasswordBtn" disabled>
+                    <i class="fas fa-save me-2"></i>
+                    <span id="setPasswordText">Set New Password</span>
+                    <span id="setPasswordSpinner" class="spinner-border spinner-border-sm d-none ms-2" role="status"></span>
+                </button>
+
+                <div class="text-center">
+                    <a href="forgot_password.php" class="back-link">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Scanner
+                    </a>
+                </div>
+            </form>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -655,18 +846,18 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-key me-2"></i>Confirm Password Reset</h5>
+                    <h5 class="modal-title"><i class="fas fa-key me-2"></i>Set New Password</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="text-center mb-4">
-                        <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
-                        <h5 class="fw-bold">Are you sure you want to reset your password?</h5>
+                        <i class="fas fa-key fa-3x text-primary mb-3"></i>
+                        <h5 class="fw-bold">Ready to Set Your New Password</h5>
                     </div>
                     
-                    <div class="alert alert-warning">
+                    <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>Important:</strong> This will generate a new temporary password. You must login immediately and change your password.
+                        <strong>You're in control:</strong> You will be able to set your own password for daily use in the next step.
                     </div>
                     
                     <?php if ($instructorInfo): ?>
@@ -696,8 +887,8 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
                                 <i class="fas fa-times me-2"></i>Cancel
                             </button>
                             <button type="submit" class="btn btn-confirm flex-fill" id="confirmResetBtn">
-                                <i class="fas fa-sync-alt me-2"></i>
-                                <span>Reset Password</span>
+                                <i class="fas fa-key me-2"></i>
+                                <span>Set My Password</span>
                                 <span class="spinner-border spinner-border-sm d-none ms-2" id="confirmSpinner"></span>
                             </button>
                         </div>
@@ -885,8 +1076,68 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
             }, 1000);
         }
 
+        // Password validation
+        function validatePassword() {
+            const newPassword = document.getElementById('new_password')?.value || '';
+            const confirmPassword = document.getElementById('confirm_password')?.value || '';
+            const setPasswordBtn = document.getElementById('setPasswordBtn');
+            
+            // Check password length
+            const isLengthValid = newPassword.length >= 6;
+            const reqLength = document.getElementById('reqLength');
+            
+            if (reqLength) {
+                if (isLengthValid) {
+                    reqLength.className = 'requirement valid';
+                    reqLength.innerHTML = '<i class="fas fa-check-circle"></i><span>At least 6 characters long</span>';
+                } else {
+                    reqLength.className = 'requirement invalid';
+                    reqLength.innerHTML = '<i class="fas fa-times-circle"></i><span>At least 6 characters long</span>';
+                }
+            }
+            
+            // Check password match
+            const isMatchValid = newPassword === confirmPassword && newPassword.length > 0;
+            const reqMatch = document.getElementById('reqMatch');
+            
+            if (reqMatch) {
+                if (isMatchValid) {
+                    reqMatch.className = 'requirement valid';
+                    reqMatch.innerHTML = '<i class="fas fa-check-circle"></i><span>Passwords match</span>';
+                } else {
+                    reqMatch.className = 'requirement invalid';
+                    reqMatch.innerHTML = '<i class="fas fa-times-circle"></i><span>Passwords must match</span>';
+                }
+            }
+            
+            // Enable/disable submit button
+            if (setPasswordBtn) {
+                setPasswordBtn.disabled = !(isLengthValid && isMatchValid);
+            }
+            
+            return isLengthValid && isMatchValid;
+        }
+
+        // Toggle password visibility
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.toggle-password')) {
+                const button = e.target.closest('.toggle-password');
+                const targetId = button.getAttribute('data-target');
+                const passwordInput = document.getElementById(targetId);
+                const icon = button.querySelector('i');
+                
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text';
+                    icon.className = 'fas fa-eye-slash';
+                } else {
+                    passwordInput.type = 'password';
+                    icon.className = 'fas fa-eye';
+                }
+            }
+        });
+
         // Form submission handling
-        document.getElementById('scanForm').addEventListener('submit', function(e) {
+        document.getElementById('scanForm')?.addEventListener('submit', function(e) {
             const idNumber = hiddenInput.value.trim();
             
             if (idNumber === '') {
@@ -909,8 +1160,34 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
             verifyBtn.disabled = true;
         });
 
+        // Password form submission
+        document.getElementById('passwordForm')?.addEventListener('submit', function(e) {
+            if (!validatePassword()) {
+                e.preventDefault();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid Password',
+                    text: 'Please check the password requirements and try again.'
+                });
+                return;
+            }
+            
+            // Show loading state
+            const setPasswordBtn = document.getElementById('setPasswordBtn');
+            const setPasswordText = document.getElementById('setPasswordText');
+            const setPasswordSpinner = document.getElementById('setPasswordSpinner');
+            
+            setPasswordText.textContent = 'Setting Password...';
+            setPasswordSpinner.classList.remove('d-none');
+            setPasswordBtn.disabled = true;
+        });
+
+        // Real-time password validation
+        document.getElementById('new_password')?.addEventListener('input', validatePassword);
+        document.getElementById('confirm_password')?.addEventListener('input', validatePassword);
+
         // Reset form handling
-        document.getElementById('resetForm').addEventListener('submit', function(e) {
+        document.getElementById('resetForm')?.addEventListener('submit', function(e) {
             const confirmBtn = document.getElementById('confirmResetBtn');
             const confirmSpinner = document.getElementById('confirmSpinner');
             
@@ -950,6 +1227,9 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
                 document.getElementById('verifyText').textContent = 'Verify ID';
             }
             
+            // Initialize password validation
+            validatePassword();
+            
             console.log('Password recovery page loaded - Scanner system ready');
         });
 
@@ -961,7 +1241,7 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
         });
         <?php endif; ?>
 
-        // Show success message with temporary password
+        // Show success message
         <?php if (!empty($successMessage)): ?>
         document.addEventListener('DOMContentLoaded', function() {
             Swal.fire({
@@ -979,7 +1259,7 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
         <?php endif; ?>
 
         // Handle modal hidden event
-        document.getElementById('resetModal').addEventListener('hidden.bs.modal', function () {
+        document.getElementById('resetModal')?.addEventListener('hidden.bs.modal', function () {
             // Reset scanner state
             deactivateScanner();
             const scannerBox = document.getElementById('scannerBox');
@@ -1003,9 +1283,11 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
             const verifyText = document.getElementById('verifyText');
             const verifySpinner = document.getElementById('verifySpinner');
             
-            verifyText.textContent = 'Scan ID First';
-            verifySpinner.classList.add('d-none');
-            verifyBtn.disabled = true;
+            if (verifyBtn && verifyText && verifySpinner) {
+                verifyText.textContent = 'Scan ID First';
+                verifySpinner.classList.add('d-none');
+                verifyBtn.disabled = true;
+            }
         });
     </script>
 </body>

@@ -1,7 +1,4 @@
 <?php
-// Include connection
-include '../connection.php';
-session_start();
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
     unset($_SESSION['success_message']);
@@ -17,7 +14,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     header('Location: index.php');
     exit();
 }
-
+// Include connection
+include '../connection.php';
+session_start();
 
 function logAccess($userId, $username, $status, $activity = 'Login', $logoutTime = null) {
     global $db;

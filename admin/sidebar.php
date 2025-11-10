@@ -1,6 +1,4 @@
 <?php
-// Include connection
-include '../connection.php';
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
     unset($_SESSION['success_message']);
@@ -13,40 +11,23 @@ if (isset($_SESSION['error_message'])) {
 // Check if user is logged in and 2FA verified
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
     !isset($_SESSION['2fa_verified']) || $_SESSION['2fa_verified'] !== true) {
-    header('Location: index');
+    header('Location: index.php');
     exit();
 }
-
 // Include connection
 include '../connection.php';
-
-// Get current page without .php extension
-$current_script = $_SERVER['SCRIPT_NAME'];
-$current_page = basename($current_script, '.php');
-
-
-$username = "";
-// Fetch data from the user table
-$sql1 = "SELECT * FROM user LIMIT 1";
-$result1 = $db->query($sql1);
-
-if ($result1->num_rows > 0) {
-    $row = $result1->fetch_assoc();
-    $username = $row['username'];
-} 
+session_start();
 ?>
-
 <style>
     :root {
-        --primary-color: #e1e7f0ff;
-        --secondary-color: #b0caf0ff;
-        --accent-color: #4e73df;
-        --light-bg: #f8f9fc;
-        --dark-text: #5a5c69;
-        --warning-color: #f6c23e;
-        --danger-color: #e74a3b;
-    }
-    
+            --primary-color: #e1e7f0ff;
+            --secondary-color: #b0caf0ff;
+            --accent-color: #4e73df;
+            --light-bg: #f8f9fc;
+            --dark-text: #5a5c69;
+            --warning-color: #f6c23e;
+            --danger-color: #e74a3b;
+        }
     .badge1 {
         background-color: #e4652aff;
         color: white;
@@ -153,6 +134,44 @@ if ($result1->num_rows > 0) {
     }
 </style>
 
+<?php
+$current_page = basename($_SERVER['PHP_SELF']);
+include '../connection.php';
+
+// Query to get the count of lost cards requested today
+$query = "SELECT COUNT(*) AS new_lost_cards FROM lostcard WHERE DATE(date_requested) = CURRENT_DATE() AND status = 0";
+$result = $db->query($query);
+$new_lost_cards = 0;
+
+if ($result && $row = $result->fetch_assoc()) {
+    $new_lost_cards = $row['new_lost_cards'];
+} else {
+    // Handle query error
+    echo "Error in fetching the count: " . $db->error;
+}
+
+$logo1 = "";
+// Fetch data from the about table
+$sql = "SELECT * FROM about LIMIT 1";
+$result = $db->query($sql);
+
+if ($result->num_rows > 0) {
+    // Output data of each row
+    $row = $result->fetch_assoc();
+    $logo1 = $row['logo1'];
+} 
+
+$username = "";
+// Fetch data from the about table
+$sql1 = "SELECT * FROM user LIMIT 1";
+$result1 = $db->query($sql1);
+
+if ($result1->num_rows > 0) {
+    // Output data of each row
+    $row = $result1->fetch_assoc();
+    $username = $row['username'];
+} 
+?>
 <div class="sidebar pe-4 pb-3">
     <nav class="navbar navbar-light">
         <a href="dashboard" class="navbar-brand mx-4 mb-4 mt-3">
@@ -160,38 +179,38 @@ if ($result1->num_rows > 0) {
         </a>
         <div class="user-info d-flex align-items-center ms-4 mb-4">
             <div class="position-relative">
-                <img class="rounded-circle profile-img" src="img/2601828.png" alt="" style="width: 45px; height: 45px;">
+                <img class="rounded-circle profile-img" src="img\2601828.png" alt="" style="width: 45px; height: 45px;">
                 <div class="status-indicator rounded-circle border border-2 border-white position-absolute end-0 bottom-0 p-1"></div>
             </div>
             <div class="ms-3">
-                <h6 class="mb-0"><?php echo htmlspecialchars($username); ?></h6>
+                <h6 class="mb-0"><?php echo $username; ?></h6>
                 <span>Administrator</span>
             </div>
         </div>
 
         <div class="navbar-nav w-100">
             <!-- Dashboard -->
-            <a href="dashboard" class="nav-item nav-link <?php echo ($current_page == 'dashboard') ? 'active' : ''; ?>">
+            <a href="dashboard.php" class="nav-item nav-link <?php echo ($current_page == 'dashboard') ? 'active' : ''; ?>">
                 <i class="fa fa-tachometer-alt me-2"></i>Dashboard
             </a>
 
             <!-- Department -->
-            <a href="department" class="nav-item nav-link <?php echo ($current_page == 'department') ? 'active' : ''; ?>">
+            <a href="department.php" class="nav-item nav-link <?php echo ($current_page == 'department') ? 'active' : ''; ?>">
                 <i class="fa fa-city me-2"></i>Department
             </a>
             
-            <a href="room" class="nav-item nav-link <?php echo ($current_page == 'room') ? 'active' : ''; ?>">
+            <a href="room.php" class="nav-item nav-link <?php echo ($current_page == 'room') ? 'active' : ''; ?>">
                 <i class="fa fa-door-open me-2"></i>Room
             </a>
             
             <!-- Roles -->
-            <a href="role" class="nav-item nav-link <?php echo ($current_page == 'role') ? 'active' : ''; ?>">
+            <a href="role.php" class="nav-item nav-link <?php echo ($current_page == 'role') ? 'active' : ''; ?>">
                 <i class="fa fa-user-tie me-2"></i>Roles
             </a>
 
             <!-- Personnel with Submenu -->
             <a class="nav-item nav-link collapsed <?php echo in_array($current_page, ['personell', 'personell_logs']) ? 'active' : ''; ?>" 
-               href="personell" 
+               href="personell.php" 
                data-bs-toggle="collapse" 
                data-bs-target="#personnelSubmenu" 
                aria-expanded="<?php echo in_array($current_page, ['personell', 'personell_logs']) ? 'true' : 'false'; ?>">
@@ -200,17 +219,17 @@ if ($result1->num_rows > 0) {
             <div id="personnelSubmenu" class="collapse <?php echo in_array($current_page, ['personell', 'personell_logs']) ? 'show' : ''; ?>" data-bs-parent=".navbar-nav">
                 <ul class="navbar-nav ps-3">
                     <li>
-                        <a href="personell" class="nav-item nav-link <?php echo ($current_page == 'personell') ? 'active' : ''; ?>">Personnel List</a>
+                        <a href="personell.php" class="nav-item nav-link <?php echo ($current_page == 'personell') ? 'active' : ''; ?>">Personnel List</a>
                     </li>
                     <li>
-                        <a href="personell_logs" class="nav-item nav-link <?php echo ($current_page == 'personell_logs') ? 'active' : ''; ?>">Personnel Logs</a>
+                        <a href="personell_logs.php" class="nav-item nav-link <?php echo ($current_page == 'personell_logs') ? 'active' : ''; ?>">Personnel Logs</a>
                     </li>
                 </ul>
             </div>
 
             <!-- Visitor with Submenu -->
             <a class="nav-item nav-link collapsed <?php echo in_array($current_page, ['visitor', 'visitor_logs']) ? 'active' : ''; ?>" 
-               href="visitor" 
+               href="visitor.php" 
                data-bs-toggle="collapse" 
                data-bs-target="#visitorSubmenu" 
                aria-expanded="<?php echo in_array($current_page, ['visitor', 'visitor_logs']) ? 'true' : 'false'; ?>">
@@ -219,10 +238,10 @@ if ($result1->num_rows > 0) {
             <div id="visitorSubmenu" class="collapse <?php echo in_array($current_page, ['visitor', 'visitor_logs']) ? 'show' : ''; ?>" data-bs-parent=".navbar-nav">
                 <ul class="navbar-nav ps-3">
                     <li>
-                        <a href="visitor" class="nav-item nav-link <?php echo ($current_page == 'visitor') ? 'active' : ''; ?>">Card List</a>
+                        <a href="visitor.php" class="nav-item nav-link <?php echo ($current_page == 'visitor') ? 'active' : ''; ?>">Card List</a>
                     </li>
                     <li>
-                        <a href="visitor_logs" class="nav-item nav-link <?php echo ($current_page == 'visitor_logs') ? 'active' : ''; ?>">Visitor Logs</a>
+                        <a href="visitor_logs.php" class="nav-item nav-link <?php echo ($current_page == 'visitor_logs') ? 'active' : ''; ?>">Visitor Logs</a>
                     </li>
                 </ul>
             </div>
@@ -232,31 +251,31 @@ if ($result1->num_rows > 0) {
                 <small class="text-uppercase">CLASSROOM SYSTEM</small>
             </div>
 
-            <a href="students" class="nav-item nav-link <?php echo ($current_page == 'students') ? 'active' : ''; ?>">
+            <a href="students.php" class="nav-item nav-link <?php echo ($current_page == 'students') ? 'active' : ''; ?>">
                 <i class="fa fa-user-graduate me-2"></i>Manage Students
             </a>
              
-            <a href="instructors" class="nav-item nav-link <?php echo ($current_page == 'instructors') ? 'active' : ''; ?>">
+            <a href="instructors.php" class="nav-item nav-link <?php echo ($current_page == 'instructors') ? 'active' : ''; ?>">
                 <i class="fa fa-chalkboard-teacher me-2"></i>Manage Instructors
             </a>
             
-            <a href="instructor_accounts" class="nav-item nav-link <?php echo ($current_page == 'instructor_accounts') ? 'active' : ''; ?>">
+            <a href="instructor_accounts.php" class="nav-item nav-link <?php echo ($current_page == 'instructor_accounts') ? 'active' : ''; ?>">
                 <i class="fa fa-user-cog me-2"></i>Instructor Accounts
             </a>
             
-            <a href="manage_subjects" class="nav-item nav-link <?php echo ($current_page == 'manage_subjects') ? 'active' : ''; ?>">
+            <a href="manage_subjects.php" class="nav-item nav-link <?php echo ($current_page == 'subjects') ? 'active' : ''; ?>">
                 <i class="fa fa-book me-2"></i>Manage Subjects
             </a>
 
-            <a href="dtr" class="nav-item nav-link <?php echo ($current_page == 'dtr') ? 'active' : ''; ?>">
+            <a href="dtr.php" class="nav-item nav-link <?php echo ($current_page == 'dtr') ? 'active' : ''; ?>">
                 <i class="fa fa-clipboard-list me-2"></i>Generate DTR
             </a>
 
-            <a href="student_logs" class="nav-item nav-link <?php echo ($current_page == 'student_logs') ? 'active' : ''; ?>">
+            <a href="student_logs.php" class="nav-item nav-link <?php echo ($current_page == 'attendance_log') ? 'active' : ''; ?>">
                 <i class="fa fa-history me-2"></i>Attendance Log
             </a>
 
-            <a href="room_schedule" class="nav-item nav-link <?php echo ($current_page == 'room_schedule') ? 'active' : ''; ?>">
+            <a href="room_schedule.php" class="nav-item nav-link <?php echo ($current_page == 'room_schedule') ? 'active' : ''; ?>">
                 <i class="fa fa-calendar-alt me-2"></i>Room Schedules
             </a>
 
@@ -265,10 +284,17 @@ if ($result1->num_rows > 0) {
                 <small class="text-uppercase">SYSTEM</small>
             </div>
 
-            <a href="settings" class="nav-item nav-link <?php echo ($current_page == 'settings') ? 'active' : ''; ?>">
+            <a href="settings.php" class="nav-item nav-link <?php echo ($current_page == 'settings') ? 'active' : ''; ?>">
                 <i class="fa fa-cog me-2"></i>Settings
             </a>
             
+            <!-- Lost Cards Notification -->
+            <?php if ($new_lost_cards > 0): ?>
+            <a href="lost_cards.php" class="nav-item nav-link <?php echo ($current_page == 'lost_cards') ? 'active' : ''; ?>">
+                <i class="fa fa-exclamation-circle me-2"></i>Lost Cards
+                <span class="badge1"><?php echo $new_lost_cards; ?></span>
+            </a>
+            <?php endif; ?>
         </div>
     </nav>
 </div>

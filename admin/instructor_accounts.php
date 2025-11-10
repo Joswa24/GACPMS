@@ -1,6 +1,4 @@
 <?php
-session_start();
-include '../connection.php';
 include 'header.php';
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
@@ -20,6 +18,8 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
 // Include connection
 include '../connection.php';
 
+// Check if user is logged in and has admin privileges
+// Add your admin authentication here
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {

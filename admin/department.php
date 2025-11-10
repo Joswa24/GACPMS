@@ -530,30 +530,12 @@ include '../connection.php';
     <!-- Template Javascript -->
     <script src="js/main.js"></script>
     <script>
-$(document).ready(function() {
+   $(document).ready(function() {
     // Initialize DataTable
     var dataTable = $('#myDataTable').DataTable({
         order: [[0, 'desc']],
         stateSave: true
     });
-
-    // reCAPTCHA site key (replace with your actual key)
-    const RECAPTCHA_SITE_KEY = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
-
-    // Helper function to get reCAPTCHA token
-    function getRecaptchaToken(action = 'submit') {
-        return new Promise((resolve, reject) => {
-            grecaptcha.ready(function() {
-                grecaptcha.execute(RECAPTCHA_SITE_KEY, {action: action})
-                    .then(function(token) {
-                        resolve(token);
-                    })
-                    .catch(function(error) {
-                        reject(error);
-                    });
-            });
-        });
-    }
 
     // Helper function to validate inputs
     function validateInput(input, errorId, message) {
@@ -577,7 +559,7 @@ $(document).ready(function() {
     // ==============
     // CREATE (ADD)
     // ==============
-    $('#departmentForm').submit(async function(e) {
+    $('#departmentForm').submit(function(e) {
         e.preventDefault();
         
         var inputField = document.getElementById('department_name');
@@ -596,76 +578,71 @@ $(document).ready(function() {
         $('#btn-department').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...');
         $('#btn-department').prop('disabled', true);
 
-        try {
-            // Get reCAPTCHA token
-            const recaptchaToken = await getRecaptchaToken('add_department');
-
-            $.ajax({
-                type: "POST",
-                url: "transac.php?action=add_department",
-                data: { 
-                    dptname: dptname, 
-                    dptdesc: dptdesc,
-                    recaptcha_token: recaptchaToken
-                },
-                dataType: 'json',
-                success: function(response) {
-                    // Reset button state
-                    $('#btn-department').html('Save');
-                    $('#btn-department').prop('disabled', false);
-                    
-                    if (response.status === 'success') {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Success!',
-                            text: response.message,
-                            showConfirmButton: false,
-                            timer: 1500
-                        }).then(() => {
-                            $('#departmentModal').modal('hide');
-                            location.reload();
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error!',
-                            text: response.message
-                        });
-                    }
-                },
-                error: function(xhr, status, error) {
-                    // Reset button state
-                    $('#btn-department').html('Save');
-                    $('#btn-department').prop('disabled', false);
-                    
-                    console.log('XHR Response:', xhr.responseText);
-                    console.log('Status:', status);
-                    console.log('Error:', error);
-                    
+        $.ajax({
+            type: "POST",
+            url: "transac.php?action=add_department",
+            data: { dptname: dptname, dptdesc: dptdesc },
+            dataType: 'json',
+            success: function(response) {
+                // Reset button state
+                $('#btn-department').html('Save');
+                $('#btn-department').prop('disabled', false);
+                
+                if (response.status === 'success') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: response.message,
+                        showConfirmButton: false,
+                        timer: 1500
+                    }).then(() => {
+                        $('#departmentModal').modal('hide');
+                        location.reload();
+                    });
+                } else {
                     Swal.fire({
                         icon: 'error',
                         title: 'Error!',
-                        text: 'An error occurred while processing your request'
+                        text: response.message
                     });
                 }
-            });
-        } catch (error) {
-            console.error('reCAPTCHA error:', error);
-            $('#btn-department').html('Save');
-            $('#btn-department').prop('disabled', false);
-            
-            Swal.fire({
-                icon: 'error',
-                title: 'reCAPTCHA Error!',
-                text: 'Please refresh the page and try again'
-            });
-        }
+            },
+            error: function(xhr, status, error) {
+                // Reset button state
+                $('#btn-department').html('Save');
+                $('#btn-department').prop('disabled', false);
+                
+                console.log('XHR Response:', xhr.responseText);
+                console.log('Status:', status);
+                console.log('Error:', error);
+                
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error!',
+                    text: 'An error occurred while processing your request'
+                });
+            }
+        });
+    });
+
+    // ==========
+    // READ (EDIT)
+    // ==========
+    $(document).on('click', '.e_department_id', function() {
+        var id = $(this).data('id');
+        var name = $(this).attr('department_name');
+        var desc = $(this).attr('department_desc');
+        
+        $('#edit_departmentname').val(name);
+        $('#edit_departmentdescription').val(desc);
+        $('#edit_departmentid').val(id);
+        $('#editdepartment-modal').modal('show');
     });
 
     // ==========
     // UPDATE
     // ==========
-    $('#btn-editdepartment').click(async function(e) {
+    $('#btn-editdepartment').click(function(e) {
         e.preventDefault();
         var inputField = document.getElementById('edit_departmentname');
         var inputField1 = document.getElementById('edit_departmentdescription');
@@ -684,164 +661,56 @@ $(document).ready(function() {
         $(this).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...');
         $(this).prop('disabled', true);
 
-        try {
-            // Get reCAPTCHA token
-            const recaptchaToken = await getRecaptchaToken('update_department');
-
-            $.ajax({
-                type: "POST",
-                url: "transac.php?action=update_department",
-                data: { 
-                    id: id, 
-                    dptname: dptname, 
-                    dptdesc: dptdesc,
-                    recaptcha_token: recaptchaToken
-                },
-                dataType: 'json',
-                success: function(response) {
-                    // Reset button state
-                    $('#btn-editdepartment').html('Update');
-                    $('#btn-editdepartment').prop('disabled', false);
-                    
-                    if (response.status === 'success') {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Success!',
-                            text: response.message,
-                            showConfirmButton: false,
-                            timer: 1500
-                        }).then(() => {
-                            $('#editdepartment-modal').modal('hide');
-                            location.reload();
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error!',
-                            text: response.message
-                        });
-                    }
-                },
-                error: function(xhr, status, error) {
-                    // Reset button state
-                    $('#btn-editdepartment').html('Update');
-                    $('#btn-editdepartment').prop('disabled', false);
-                    
-                    console.log('XHR Response:', xhr.responseText);
-                    console.log('Status:', status);
-                    console.log('Error:', error);
-                    
+        $.ajax({
+            type: "POST",
+            url: "transac.php?action=update_department",
+            data: { id: id, dptname: dptname, dptdesc: dptdesc },
+            dataType: 'json',
+            success: function(response) {
+                // Reset button state
+                $('#btn-editdepartment').html('Update');
+                $('#btn-editdepartment').prop('disabled', false);
+                
+                if (response.status === 'success') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: response.message,
+                        showConfirmButton: false,
+                        timer: 1500
+                    }).then(() => {
+                        $('#editdepartment-modal').modal('hide');
+                        location.reload();
+                    });
+                } else {
                     Swal.fire({
                         icon: 'error',
                         title: 'Error!',
-                        text: 'An error occurred while processing your request'
+                        text: response.message
                     });
                 }
-            });
-        } catch (error) {
-            console.error('reCAPTCHA error:', error);
-            $('#btn-editdepartment').html('Update');
-            $('#btn-editdepartment').prop('disabled', false);
-            
-            Swal.fire({
-                icon: 'error',
-                title: 'reCAPTCHA Error!',
-                text: 'Please refresh the page and try again'
-            });
-        }
+            },
+            error: function(xhr, status, error) {
+                // Reset button state
+                $('#btn-editdepartment').html('Update');
+                $('#btn-editdepartment').prop('disabled', false);
+                
+                console.log('XHR Response:', xhr.responseText);
+                console.log('Status:', status);
+                console.log('Error:', error);
+                
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error!',
+                    text: 'An error occurred while processing your request'
+                });
+            }
+        });
     });
 
     // ==========
     // DELETE
     // ==========
-    $(document).on('click', '#btn-deldepartment', async function() {
-        var id = $('#delete_departmentid').val();
-        
-        // Show loading indicator
-        $('#btn-deldepartment').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Deleting...');
-        $('#btn-deldepartment').prop('disabled', true);
-        
-        try {
-            // Get reCAPTCHA token
-            const recaptchaToken = await getRecaptchaToken('delete_department');
-
-            $.ajax({
-                type: 'POST',
-                url: 'transac.php?action=delete_department',
-                data: { 
-                    id: id,
-                    recaptcha_token: recaptchaToken
-                },
-                dataType: 'json',
-                success: function(response) {
-                    // Reset button state
-                    $('#btn-deldepartment').html('Yes');
-                    $('#btn-deldepartment').prop('disabled', false);
-                    
-                    if (response.status === 'success') {
-                        // Close the modal
-                        $('#deldepartment-modal').modal('hide');
-                        
-                        // Remove the row from the table
-                        dataTable.row($('.table-' + id)).remove().draw();
-                        
-                        // Show success message
-                        Swal.fire({
-                            title: 'Success!',
-                            text: response.message,
-                            icon: 'success',
-                            timer: 3000,
-                            showConfirmButton: false
-                        });
-                    } else {
-                        Swal.fire({
-                            title: 'Error!',
-                            text: response.message,
-                            icon: 'error'
-                        });
-                    }
-                },
-                error: function(xhr, status, error) {
-                    // Reset button state
-                    $('#btn-deldepartment').html('Yes');
-                    $('#btn-deldepartment').prop('disabled', false);
-                    
-                    console.log('XHR Response:', xhr.responseText);
-                    console.log('Status:', status);
-                    console.log('Error:', error);
-                    
-                    Swal.fire({
-                        title: 'Error!',
-                        text: 'An error occurred: ' + error,
-                        icon: 'error'
-                    });
-                }
-            });
-        } catch (error) {
-            console.error('reCAPTCHA error:', error);
-            $('#btn-deldepartment').html('Yes');
-            $('#btn-deldepartment').prop('disabled', false);
-            
-            Swal.fire({
-                title: 'reCAPTCHA Error!',
-                text: 'Please refresh the page and try again',
-                icon: 'error'
-            });
-        }
-    });
-
-    // READ operations don't need reCAPTCHA
-    $(document).on('click', '.e_department_id', function() {
-        var id = $(this).data('id');
-        var name = $(this).attr('department_name');
-        var desc = $(this).attr('department_desc');
-        
-        $('#edit_departmentname').val(name);
-        $('#edit_departmentdescription').val(desc);
-        $('#edit_departmentid').val(id);
-        $('#editdepartment-modal').modal('show');
-    });
-
     $(document).on('click', '.d_department_id', function() {
         var id = $(this).data('id');
         var name = $(this).attr('department_name');
@@ -851,11 +720,70 @@ $(document).ready(function() {
         $('#deldepartment-modal').modal('show');
     });
 
+    // Handle the actual deletion when "Yes" is clicked in the modal
+    $(document).on('click', '#btn-deldepartment', function() {
+        var id = $('#delete_departmentid').val();
+        
+        // Show loading indicator
+        $('#btn-deldepartment').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Deleting...');
+        $('#btn-deldepartment').prop('disabled', true);
+        
+        $.ajax({
+            type: 'POST',
+            url: 'transac.php?action=delete_department',
+            data: { id: id },
+            dataType: 'json',
+            success: function(response) {
+                // Reset button state
+                $('#btn-deldepartment').html('Yes');
+                $('#btn-deldepartment').prop('disabled', false);
+                
+                if (response.status === 'success') {
+                    // Close the modal
+                    $('#deldepartment-modal').modal('hide');
+                    
+                    // Remove the row from the table
+                    dataTable.row($('.table-' + id)).remove().draw();
+                    
+                    // Show success message
+                    Swal.fire({
+                        title: 'Success!',
+                        text: response.message,
+                        icon: 'success',
+                        timer: 3000,
+                        showConfirmButton: false
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Error!',
+                        text: response.message,
+                        icon: 'error'
+                    });
+                }
+            },
+            error: function(xhr, status, error) {
+                // Reset button state
+                $('#btn-deldepartment').html('Yes');
+                $('#btn-deldepartment').prop('disabled', false);
+                
+                console.log('XHR Response:', xhr.responseText);
+                console.log('Status:', status);
+                console.log('Error:', error);
+                
+                Swal.fire({
+                    title: 'Error!',
+                    text: 'An error occurred: ' + error,
+                    icon: 'error'
+                });
+            }
+        });
+    });
+
     // Reset modal when closed
     $('#departmentModal').on('hidden.bs.modal', function () {
         resetForm();
     });
-});
-</script>
+    });
+    </script>
 </body>
 </html>

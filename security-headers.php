@@ -7,12 +7,12 @@ function setSecurityHeaders() {
     // Enhanced Content Security Policy with reCAPTCHA
     header("Content-Security-Policy: default-src 'self'; script-src 'self' https://www.google.com https://www.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com 'unsafe-inline'; style-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://www.google.com; frame-ancestors 'none';");
 
-    //Other security headers
-    header("X-Content-Type-Options: nosniff");
-    header("X-Frame-Options: SAMEORIGIN");
-    header("X-XSS-Protection: 1; mode=block");
-    header("Referrer-Policy: strict-origin-when-cross-origin");
-    header("Strict-Transport-Security: max-age=31536000; includeSubDomains");
+    // Other security headers
+    // header("X-Content-Type-Options: nosniff");
+    // header("X-Frame-Options: SAMEORIGIN");
+    // header("X-XSS-Protection: 1; mode=block");
+    // header("Referrer-Policy: strict-origin-when-cross-origin");
+    // header("Strict-Transport-Security: max-age=31536000; includeSubDomains");
     
     // Permissions Policy
     header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()');

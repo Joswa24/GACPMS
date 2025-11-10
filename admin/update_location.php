@@ -1,7 +1,4 @@
 <?php
-// Include connection
-include '../connection.php';
-session_start();
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
     unset($_SESSION['success_message']);
@@ -11,8 +8,15 @@ if (isset($_SESSION['error_message'])) {
     unset($_SESSION['error_message']);
 }
 
-
-
+// Check if user is logged in and 2FA verified
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
+    !isset($_SESSION['2fa_verified']) || $_SESSION['2fa_verified'] !== true) {
+    header('Location: index.php');
+    exit();
+}
+// Include connection
+include '../connection.php';
+session_start();
 
 // Function to get geolocation data from IP address
 function getGeolocation($ip) {

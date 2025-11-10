@@ -1,5 +1,4 @@
 <?php
-session_start();
 // Include your database connection file
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';

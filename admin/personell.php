@@ -1,5 +1,5 @@
 <?php
-session_start();
+
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -22,6 +22,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
 // Include connection
 include '../connection.php';
 date_default_timezone_set('Asia/Manila');
+session_start();
 
 // Function to send JSON response
 function jsonResponse($status, $message, $data = []) {
@@ -1287,111 +1288,77 @@ function getPersonnelPhoto($photo) {
                 }
             });
         });
-// Handle delete button click - DEBUG VERSION
-$(document).on('click', '.d_user_id', function() {
-    var personnelId = $(this).data('id');
-    var personnelName = $(this).attr('user_name');
-    
-    console.log('Delete clicked - ID:', personnelId, 'Name:', personnelName);
-    
-    Swal.fire({
-        title: 'Are you sure?',
-        text: "You are about to delete personnel: " + personnelName,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // Show loading
-            Swal.fire({
-                title: 'Deleting...',
-                text: 'Please wait',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
 
-            console.log('Sending delete request for ID:', personnelId);
+        // Handle delete button click
+        $(document).on('click', '.d_user_id', function() {
+            var personnelId = $(this).data('id');
+            var personnelName = $(this).attr('user_name');
             
-            // METHOD 1: Direct POST with explicit headers
-            $.ajax({
-                url: 'transac.php',
-                type: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                data: {
-                    action: 'delete_personnel',
-                    id: personnelId
-                },
-                dataType: 'json',
-                success: function(response) {
-                    console.log('Delete response:', response);
-                    if (response.status === 'success') {
-                        Swal.fire({
-                            title: 'Deleted!',
-                            text: response.message,
-                            icon: 'success',
-                            timer: 2000,
-                            showConfirmButton: false
-                        }).then(() => {
-                            location.reload();
-                        });
-                    } else {
-                        Swal.fire({
-                            title: 'Error!',
-                            text: response.message,
-                            icon: 'error'
-                        });
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Delete AJAX error:', status, error);
-                    console.error('Response text:', xhr.responseText);
-                    console.error('Status:', xhr.status);
-                    
-                    // Try to parse the error response
-                    let errorMessage = 'Failed to delete personnel';
-                    try {
-                        const errorResponse = JSON.parse(xhr.responseText);
-                        if (errorResponse.message) {
-                            errorMessage = errorResponse.message;
-                        }
-                    } catch (e) {
-                        errorMessage = xhr.responseText || 'Unknown error occurred';
-                    }
-                    
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "You are about to delete personnel: " + personnelName,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete it!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading
                     Swal.fire({
-                        title: 'Error!',
-                        html: '<div style="text-align: left;">' + 
-                              '<strong>Error Details:</strong><br>' +
-                              'Status: ' + xhr.status + '<br>' +
-                              'Error: ' + error + '<br>' +
-                              'Message: ' + errorMessage +
-                              '</div>',
-                        icon: 'error'
+                        title: 'Deleting...',
+                        text: 'Please wait',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    $.ajax({
+                        url: 'transac.php?action=delete_personnel',
+                        type: 'POST',
+                        data: { 
+                            id: personnelId 
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.status === 'success') {
+                                Swal.fire({
+                                    title: 'Deleted!',
+                                    text: response.message,
+                                    icon: 'success',
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire({
+                                    title: 'Error!',
+                                    text: response.message,
+                                    icon: 'error'
+                                });
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            const errorMessage = handleAjaxError(xhr, status, error, 'Failed to delete personnel');
+                            
+                            Swal.fire({
+                                title: 'Error!',
+                                html: '<div style="text-align: left;">' + 
+                                      '<strong>Error Details:</strong><br>' +
+                                      errorMessage + 
+                                      '<br><br><small>Check browser console for more details.</small>' +
+                                      '</div>',
+                                icon: 'error'
+                            });
+                        }
                     });
                 }
             });
-        }
-    });
-});
+        });
 
-// Add this at the bottom of your script to catch any JavaScript errors
-window.addEventListener('error', function(e) {
-    console.error('Global JavaScript Error:', e.error);
-    console.error('Error at:', e.filename, 'line:', e.lineno);
-});
-
-// Test if jQuery is working properly
-$(document).ready(function() {
-    console.log('jQuery is loaded and working');
-    console.log('Delete buttons found:', $('.d_user_id').length);
-});
         // Reset modal when closed
         $('#personnelModal').on('hidden.bs.modal', function () {
             document.getElementById('role').value = 'Student';

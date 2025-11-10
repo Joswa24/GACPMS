@@ -1,26 +1,7 @@
-<?php
-session_start();
-if (isset($_SESSION['success_message'])) {
-    echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
-    unset($_SESSION['success_message']);
-}
-if (isset($_SESSION['error_message'])) {
-    echo '<div class="alert alert-danger">' . $_SESSION['error_message'] . '</div>';
-    unset($_SESSION['error_message']);
-}
-
-// Check if user is logged in and 2FA verified
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
-    !isset($_SESSION['2fa_verified']) || $_SESSION['2fa_verified'] !== true) {
-    header('Location: index.php');
-    exit();
-}
-
-?>
 <!DOCTYPE html>
 <html lang="en">
 <?php include 'header.php'; ?>
-<?php include '../connection.php'; ?>
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -350,22 +331,6 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
             font-weight: 600;
             color: var(--dark-text);
         }
-        .back-to-top {
-            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color)) !important;
-            border: none;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--box-shadow);
-            transition: var(--transition);
-        }
-
-        .back-to-top:hover {
-            transform: translateY(-3px);
-        }
     </style>
 </head>
 
@@ -501,7 +466,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
             <?php include 'footer.php'; ?>
         </div>
 
-         <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="fas fa-arrow-up"></i></a>
+         <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="bi bi-arrow-up"></i></a>
     </div>
 
     <!-- JavaScript Libraries -->

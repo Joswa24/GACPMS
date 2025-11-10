@@ -1,6 +1,6 @@
 <?php
 session_start();
-// Include connection
+include 'header.php';
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
     unset($_SESSION['success_message']);
@@ -16,13 +16,13 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     header('Location: index.php');
     exit();
 }
-
+// Include connection
+include '../connection.php';
+session_start();
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
-    <?php include 'header.php'; ?>
-    <?php include '../connection.php'; ?>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -358,22 +358,6 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
             transform: translateY(-5px);
             box-shadow: 0 6px 20px rgba(92, 149, 233, 0.4);
         }
-        .back-to-top {
-            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color)) !important;
-            border: none;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--box-shadow);
-            transition: var(--transition);
-        }
-
-        .back-to-top:hover {
-            transform: translateY(-3px);
-        }
     </style>
 </head>
 <body>
@@ -621,7 +605,10 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
         </div>
     </div>
 
-    <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="fas fa-arrow-up"></i></a>
+    <!-- Scroll to Top Button -->
+    <div class="scroll-to-top" id="scrollToTop">
+        <i class="fas fa-arrow-up"></i>
+    </div>
 
     <!-- View Details Modal -->
     <div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">

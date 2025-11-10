@@ -6,52 +6,12 @@ ini_set('display_errors', 1);
 // Include required files
 include 'security-headers.php';
 include 'connection.php';
-include 'recaptcha.php';
 
 // Start session first
 session_start();
 // Clear any existing output
 if (ob_get_level() > 0) {
     ob_clean();
-}
-
-// =====================================================================
-// reCAPTCHA VERIFICATION FUNCTION - UPDATED
-// =====================================================================
-function verifyRecaptcha($recaptchaResponse) {
-    // Make sure this matches your site key in the HTML
-    $secret_key = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
-    $url = 'https://www.google.com/recaptcha/api/siteverify';
-    
-    $data = [
-        'secret' => $secret_key,
-        'response' => $recaptchaResponse,
-        'remoteip' => $_SERVER['REMOTE_ADDR']
-    ];
-    
-    $options = [
-        'http' => [
-            'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
-            'method'  => 'POST',
-            'content' => http_build_query($data),
-            'timeout' => 10
-        ]
-    ];
-    
-    $context  = stream_context_create($options);
-    $result = file_get_contents($url, false, $context);
-    
-    if ($result === FALSE) {
-        error_log("reCAPTCHA: Failed to connect to verification service");
-        return (object)['success' => false, 'score' => 0.5, 'error-codes' => ['connection-failed']];
-    }
-    
-    $response = json_decode($result);
-    
-    // Log for debugging (remove in production)
-    error_log("reCAPTCHA Response: " . json_encode($response));
-    
-    return $response;
 }
 
 // =====================================================================
@@ -118,7 +78,7 @@ function validateRoomPassword($db, $department, $location, $password, $id_number
 // SECURITY PERSONNEL VALIDATION
 // =====================================================================
 function validateSecurityPersonnel($db, $id_number, $room) {
-    $clean_id = str_replace('-', '', $id_number);
+    $clean_id =( $id_number);
     
     // Check personell table for security personnel
     $stmt = $db->prepare("SELECT * FROM personell WHERE id_number = ? AND department = 'Main'");
@@ -243,7 +203,6 @@ function validateOtherPersonnel($db, $id_number, $room, $authorizedPersonnel) {
         'room_data' => $room
     ];
 }
-
 function getSubjectDetails($db, $subject, $room) {
     $stmt = $db->prepare("SELECT year_level, section FROM room_schedules WHERE subject = ? AND room_name = ? LIMIT 1");
     $stmt->bind_param("ss", $subject, $room);
@@ -251,60 +210,10 @@ function getSubjectDetails($db, $subject, $room) {
     $result = $stmt->get_result();
     return $result->fetch_assoc() ?? ['year_level' => '1st Year', 'section' => 'A'];
 }
-
 // =====================================================================
-// MAIN LOGIN PROCESSING - UPDATED
+// MAIN LOGIN PROCESSING
 // =====================================================================
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Check if this is just a password validation request
-    $validateOnly = isset($_POST['validate_only']) && $_POST['validate_only'] === 'true';
-    
-    // Verify reCAPTCHA first (skip for validate_only requests)
-    if (!$validateOnly) {
-        $recaptchaResponse = $_POST['recaptcha_response'] ?? '';
-        
-        if (empty($recaptchaResponse)) {
-            http_response_code(400);
-            header('Content-Type: application/json');
-            die(json_encode(['status' => 'error', 'message' => "Security verification failed. Please refresh and try again."]));
-        }
-        
-        $recaptchaResult = verifyRecaptcha($recaptchaResponse);
-        
-        // More lenient scoring for development/testing
-        $minScore = 0.1; // Lowered from 0.3 to 0.1
-        
-        if (!$recaptchaResult->success) {
-            // Log detailed error information
-            error_log("reCAPTCHA Failed - Errors: " . json_encode($recaptchaResult->{'error-codes'} ?? []));
-            
-            // For specific errors, we might want to proceed anyway in development
-            $blockingErrors = ['missing-input-secret', 'invalid-input-secret', 'bad-request'];
-            $recaptchaErrors = $recaptchaResult->{'error-codes'} ?? [];
-            $hasBlockingError = !empty(array_intersect($blockingErrors, $recaptchaErrors));
-            
-            if ($hasBlockingError) {
-                http_response_code(400);
-                header('Content-Type: application/json');
-                die(json_encode([
-                    'status' => 'error', 
-                    'message' => "Security configuration error. Please contact administrator."
-                ]));
-            }
-            
-            // For non-blocking errors, we can proceed with a warning
-            error_log("reCAPTCHA had non-blocking errors, but proceeding with login");
-        }
-        
-        // Check score if available (v3 only)
-        if (isset($recaptchaResult->score) && $recaptchaResult->score < $minScore) {
-            error_log("reCAPTCHA Score too low: " . $recaptchaResult->score);
-            // You might want to implement additional verification here
-            // For now, we'll log but proceed
-            error_log("Low reCAPTCHA score detected, but proceeding with login for testing");
-        }
-    }
-    
     // Sanitize inputs
     $department = sanitizeInput($_POST['roomdpt'] ?? '');
     $location = sanitizeInput($_POST['location'] ?? '');
@@ -337,13 +246,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'status' => 'error', 
             'message' => implode("<br>", $validationResult['errors'])
         ]));
-    }
-
-    // If this is just a password validation request, return success
-    if ($validateOnly) {
-        http_response_code(200);
-        header('Content-Type: application/json');
-        die(json_encode(['status' => 'success', 'message' => 'Password validated successfully']));
     }
 
     // Login successful - set session data based on user type
@@ -413,6 +315,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     header('X-Content-Type-Options: nosniff');
 
     // Return success response
+    // In the login success section of index.php, update the response:
     echo json_encode([
         'status' => 'success',
         'redirect' => $redirectUrl,
@@ -423,6 +326,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     ]);
     exit;
 }
+
 ?>
 
 <!DOCTYPE html>
@@ -434,19 +338,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta name="description" content="Gate and Personnel Management System">
     <meta name="robots" content="noindex, nofollow">
     
-    <!-- FIXED Content Security Policy -->
-    <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self';
-        script-src 'self' https://www.google.com https://www.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com 'unsafe-inline' 'unsafe-eval';
-        style-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
-        font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.gstatic.com;
-        img-src 'self' data: https:;
-        connect-src 'self' https://www.google.com https://recaptcha.google.com https://cdn.jsdelivr.net;
-        frame-src https://www.google.com;
-    ">
-    
-    <!-- reCAPTCHA API -->
-    <script src="https://www.google.com/recaptcha/api.js?render=6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_"></script>
+    <!-- CORRECTED Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; 
+    script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com 'unsafe-inline' 'unsafe-eval'; 
+    style-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; 
+    font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.gstatic.com; 
+    img-src 'self' data: https:; 
+    connect-src 'self'; 
+    frame-ancestors 'none';">
     
     <!-- Security Meta Tags -->
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -457,9 +356,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <!-- CSS -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="admin/css/bootstrap.min.css">
     <!-- SweetAlert CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    
     <style>
         :root {
             --primary-color: #e1e7f0ff;
@@ -1132,6 +1032,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     </div>
                 </div>
                 
+                <!-- ID Input Mode Toggle - REMOVED since we only want Scan Only -->
+                
                 <!-- Option 2: Scan Only -->
                 <div class="form-group" id="scanInputGroup">
                     <label class="form-label"><i class="fas fa-barcode"></i>Scan ID Card</label>
@@ -1175,9 +1077,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <input type="hidden" name="selected_subject" id="selected_subject" value="">
                 <input type="hidden" name="selected_room" id="selected_room" value="">
                 <input type="hidden" name="selected_time" id="selected_time" value="">
-                
-                <!-- reCAPTCHA Token -->
-                <input type="hidden" name="recaptcha_response" id="recaptchaResponse">
                 
                 <button type="submit" class="btn btn-primary mb-3" id="loginButton">
                     <i class="fas fa-sign-in-alt me-2"></i>Login
@@ -1233,8 +1132,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
     </div>
 
-        <!-- Scripts - FIXED -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="admin/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- SweetAlert JS -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -1285,7 +1184,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Initial check
         $('#roomdpt').trigger('change');
 
-        // Form submission handler - UPDATED WITH reCAPTCHA
+        // Form submission handler
         $('#logform').on('submit', function(e) {
             e.preventDefault();
             
@@ -1307,34 +1206,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 return;
             }
             
-            console.log('🔄 Starting reCAPTCHA...');
+            console.log('🔄 Proceeding with login logic...');
             
-            // Execute reCAPTCHA first
-            grecaptcha.ready(function() {
-                console.log('✅ reCAPTCHA ready, executing...');
-                
-                grecaptcha.execute('6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_', {action: 'login'})
-                .then(function(token) {
-                    console.log('✅ reCAPTCHA token generated:', token.substring(0, 50) + '...');
-                    
-                    // Add token to form
-                    $('#recaptchaResponse').val(token);
-                    
-                    console.log('🔄 Proceeding with login logic...');
-                    
-                    // Continue with existing logic
-                    // FIRST validate password for the room, THEN handle subject selection
-                    validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
-                })
-                .catch(function(error) {
-                    console.error('❌ reCAPTCHA error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Security Check Failed',
-                        text: 'Please refresh the page and try again.'
-                    });
-                });
-            });
+            // FIRST validate password for the room, THEN handle subject selection
+            validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
         });
 
         // NEW FUNCTION: Validate password BEFORE showing subject modal

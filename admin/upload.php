@@ -1,5 +1,4 @@
 <?php
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $file = $_FILES['photo'] ?? null; // Use null coalescing to ensure no warning if 'photo' is missing
     $maxFileSize = 2 * 1024 * 1024; // 2MB in bytes
