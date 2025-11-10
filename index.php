@@ -1,33 +1,19 @@
 <?php
-// Simple error reporting
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
-// Include required files
-//include 'security-headers.php';
-include 'connection.php';
-
-// Start session first
+date_default_timezone_set('Asia/Manila');
 session_start();
-// Clear any existing output
-if (ob_get_level() > 0) {
-    ob_clean();
+
+// Check if user is logged in as security personnel
+if (!isset($_SESSION['access']) || !isset($_SESSION['access']['security'])) {
+    header("Location: index.php");
+    exit();
 }
+
+include 'connection.php';
 
 // reCAPTCHA Configuration
 define('RECAPTCHA_SITE_KEY', '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_');
 define('RECAPTCHA_SECRET_KEY', '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-');
 define('RECAPTCHA_VERIFY_URL', 'https://www.google.com/recaptcha/api/siteverify');
-
-// =====================================================================
-// HELPER FUNCTION - Improved Sanitization
-// =====================================================================
-function sanitizeInput($data) {
-    if (is_array($data)) {
-        return array_map('sanitizeInput', $data);
-    }
-    return htmlspecialchars(stripslashes(trim($data)), ENT_QUOTES, 'UTF-8');
-}
 
 // =====================================================================
 // RECAPTCHA VALIDATION FUNCTION
@@ -58,369 +44,294 @@ function validateRecaptcha($recaptchaResponse) {
     return $result;
 }
 
-// =====================================================================
-// PASSWORD VALIDATION FUNCTION - Universal for all rooms
-// =====================================================================
-function validateRoomPassword($db, $department, $location, $password, $id_number) {
-    $errors = [];
-    
-    // Step 1: Validate room exists and get room details
-    $stmt = $db->prepare("SELECT * FROM rooms WHERE department = ? AND room = ?");
-    $stmt->bind_param("ss", $department, $location);
-    $stmt->execute();
-    $roomResult = $stmt->get_result();
+// Set session variables for gate access
+ $_SESSION['department'] = 'Main';
+ $_SESSION['location'] = 'Gate';
+ $_SESSION['descr'] = 'Gate';
 
-    if ($roomResult->num_rows === 0) {
-        $errors[] = "Room not found in this department.";
-        return ['success' => false, 'errors' => $errors];
+// Safely get department and location from session
+ $department = isset($_SESSION['department']) ? $_SESSION['department'] : 'Main';
+ $location = isset($_SESSION['location']) ? $_SESSION['location'] : 'Gate';
+
+ $logo1 = $nameo = $address = $logo2 = "";
+
+// Fetch data from the about table
+if (isset($db)) {
+    $sql = "SELECT * FROM about LIMIT 1";
+    $result = $db->query($sql);
+
+    if ($result && $result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        $logo1 = $row['logo1'];
+        $nameo = $row['name'];
+        $address = $row['address'];
+        $logo2 = $row['logo2'];
     }
-
-    $room = $roomResult->fetch_assoc();
-
-    // Step 2: Verify password for this specific room - THIS IS THE KEY FIX
-    $stmt = $db->prepare("SELECT * FROM rooms WHERE department = ? AND room = ? AND password = ?");
-    $stmt->bind_param("sss", $department, $location, $password);
-    $stmt->execute();
-    $passwordResult = $stmt->get_result();
-
-    // THIS CHECK MUST HAPPEN FOR ALL ROOMS, NOT JUST GATE
-    if ($passwordResult->num_rows === 0) {
-        $errors[] = "Invalid password for this room.";
-        return ['success' => false, 'errors' => $errors];
-    }
-
-    // Step 3: Check user authorization based on room type
-    $authorizedPersonnel = $room['authorized_personnel'] ?? '';
-    
-    // Gate access - Security personnel only
-    if ($department === 'Main' && $location === 'Gate') {
-        return validateSecurityPersonnel($db, $id_number, $room);
-    }
-    
-    // Classroom access - Instructors only (default for academic rooms)
-    if (empty($authorizedPersonnel) || 
-        stripos($authorizedPersonnel, 'Instructor') !== false || 
-        stripos($authorizedPersonnel, 'Faculty') !== false) {
-        return validateInstructor($db, $id_number, $room);
-    }
-    
-    // Other specialized rooms - Check specific personnel types
-    return validateOtherPersonnel($db, $id_number, $room, $authorizedPersonnel);
-}
-
-// =====================================================================
-// SECURITY PERSONNEL VALIDATION
-// =====================================================================
-function validateSecurityPersonnel($db, $id_number, $room) {
-    $clean_id =( $id_number);
-    
-    // Check personell table for security personnel
-    $stmt = $db->prepare("SELECT * FROM personell WHERE id_number = ? AND department = 'Main'");
-    $stmt->bind_param("s", $clean_id);
-    $stmt->execute();
-    $securityResult = $stmt->get_result();
-
-    if ($securityResult->num_rows === 0) {
-        // Try with role-based search
-        $stmt = $db->prepare("SELECT * FROM personell WHERE id_number = ? AND role LIKE '%Security%'");
-        $stmt->bind_param("s", $clean_id);
-        $stmt->execute();
-        $securityResult = $stmt->get_result();
-    }
-
-    if ($securityResult->num_rows === 0) {
-        return [
-            'success' => false, 
-            'errors' => ['Security personnel not found with this ID.']
-        ];
-    }
-
-    $securityGuard = $securityResult->fetch_assoc();
-    
-    // Check if they have security role
-    $role = strtolower($securityGuard['role'] ?? '');
-    $isSecurity = stripos($role, 'security') !== false || stripos($role, 'guard') !== false;
-    
-    if (!$isSecurity) {
-        return [
-            'success' => false, 
-            'errors' => ["Unauthorized access. User found but not security personnel. Role: " . ($securityGuard['role'] ?? 'Unknown')]
-        ];
-    }
-
-    return [
-        'success' => true,
-        'user_type' => 'security',
-        'user_data' => [
-            'id' => $securityGuard['id'],
-            'fullname' => $securityGuard['first_name'] . ' ' . $securityGuard['last_name'],
-            'id_number' => $securityGuard['id_number'],
-            'role' => $securityGuard['role']
-        ],
-        'room_data' => $room
-    ];
-}
-
-// =====================================================================
-// INSTRUCTOR VALIDATION
-// =====================================================================
-function validateInstructor($db, $id_number, $room) {
-    // Verify ID number against instructor table
-    $stmt = $db->prepare("SELECT * FROM instructor WHERE id_number = ?");
-    $stmt->bind_param("s", $id_number);
-    $stmt->execute();
-    $instructorResult = $stmt->get_result();
-
-    if ($instructorResult->num_rows === 0) {
-        return [
-            'success' => false, 
-            'errors' => ['Instructor not found with this ID number.']
-        ];
-    }
-
-    $instructor = $instructorResult->fetch_assoc();
-
-    return [
-        'success' => true,
-        'user_type' => 'instructor',
-        'user_data' => [
-            'id' => $instructor['id'],
-            'fullname' => $instructor['fullname'],
-            'id_number' => $instructor['id_number']
-        ],
-        'room_data' => $room
-    ];
     
 }
 
-// =====================================================================
-// OTHER PERSONNEL VALIDATION
-// =====================================================================
-function validateOtherPersonnel($db, $id_number, $room, $authorizedPersonnel) {
-    $clean_id = str_replace('-', '', $id_number);
-    
-    // Check personell table
-    $stmt = $db->prepare("SELECT * FROM personell WHERE id_number = ?");
-    $stmt->bind_param("s", $clean_id);
-    $stmt->execute();
-    $personnelResult = $stmt->get_result();
+// ============================================
+// ENHANCED PHOTO PATH FUNCTIONS FOR MAIN.PHP
+// ============================================
 
-    if ($personnelResult->num_rows === 0) {
-        return [
-            'success' => false, 
-            'errors' => ['Personnel not found with this ID.']
+/**
+ * Get instructor photo path with multiple fallbacks
+ */
+function getInstructorPhotoPath($instructor) {
+    $defaultPhoto = 'admin/uploads/students/default.png';
+    
+    if (is_array($instructor)) {
+        $photo = isset($instructor['photo']) ? $instructor['photo'] : '';
+    } else {
+        $photo = $instructor;
+    }
+    
+    if (!empty($photo) && $photo !== 'default.png') {
+        $possiblePaths = [
+            'admin/uploads/instructors/' . $photo,
+            '../admin/uploads/instructors/' . $photo,
+            './admin/uploads/instructors/' . $photo,
+            'uploads/instructors/' . $photo,
+            '../uploads/instructors/' . $photo,
+            './uploads/instructors/' . $photo,
+            $_SERVER['DOCUMENT_ROOT'] . '/admin/uploads/instructors/' . $photo,
+            dirname(__FILE__) . '/../admin/uploads/instructors/' . $photo
         ];
-    }
-
-    $personnel = $personnelResult->fetch_assoc();
-    
-    // Check if personnel role matches authorized personnel for this room
-    $personnelRole = strtolower($personnel['role'] ?? '');
-    $requiredRole = strtolower($authorizedPersonnel);
-    
-    if (stripos($personnelRole, $requiredRole) === false) {
-        return [
-            'success' => false, 
-            'errors' => ["Unauthorized access. Your role '{$personnel['role']}' does not match required role '{$authorizedPersonnel}' for this room."]
-        ];
-    }
-
-    return [
-        'success' => true,
-        'user_type' => 'personnel',
-        'user_data' => [
-            'id' => $personnel['id'],
-            'fullname' => $personnel['first_name'] . ' ' . $personnel['last_name'],
-            'id_number' => $personnel['id_number'],
-            'role' => $personnel['role']
-        ],
-        'room_data' => $room
-    ];
-}
-
-function getSubjectDetails($db, $subject, $room) {
-    $stmt = $db->prepare("SELECT year_level, section FROM room_schedules WHERE subject = ? AND room_name = ? LIMIT 1");
-    $stmt->bind_param("ss", $subject, $room);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    return $result->fetch_assoc() ?? ['year_level' => '1st Year', 'section' => 'A'];
-}
-
-// =====================================================================
-// MAIN LOGIN PROCESSING
-// =====================================================================
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Sanitize inputs
-    $department = sanitizeInput($_POST['roomdpt'] ?? '');
-    $location = sanitizeInput($_POST['location'] ?? '');
-    $password = $_POST['Ppassword'] ?? '';
-    $id_number = sanitizeInput($_POST['Pid_number'] ?? '');
-    $selected_subject = sanitizeInput($_POST['selected_subject'] ?? '');
-    $selected_room = sanitizeInput($_POST['selected_room'] ?? '');
-    $recaptcha_response = $_POST['g-recaptcha-response'] ?? '';
-
-    // Validate reCAPTCHA first
-    $recaptchaResult = validateRecaptcha($recaptcha_response);
-    if (!$recaptchaResult['success']) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        die(json_encode([
-            'status' => 'error', 
-            'message' => 'reCAPTCHA verification failed. Please try again.'
-        ]));
-    }
-
-    // Optional: Check reCAPTCHA score (0.5 is typical threshold)
-    $score = $recaptchaResult['score'] ?? 0;
-    if ($score < 0.5) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        die(json_encode([
-            'status' => 'error', 
-            'message' => 'Suspicious activity detected. Please try again.'
-        ]));
-    }
-
-    // Validate required inputs
-    $errors = [];
-    if (empty($department)) $errors[] = "Department is required";
-    if (empty($location)) $errors[] = "Location is required";
-    if (empty($password)) $errors[] = "Password is required";
-    if (empty($id_number)) $errors[] = "ID number is required";
-    
-    if (!empty($errors)) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        die(json_encode(['status' => 'error', 'message' => implode("<br>", $errors)]));
-    }
-
-    // Universal password validation for all rooms
-    $validationResult = validateRoomPassword($db, $department, $location, $password, $id_number);
-    
-    if (!$validationResult['success']) {
-        sleep(2); // Rate limiting
-        http_response_code(401);
-        header('Content-Type: application/json');
-        die(json_encode([
-            'status' => 'error', 
-            'message' => implode("<br>", $validationResult['errors'])
-        ]));
-    }
-
-    // Login successful - set session data based on user type
-    $userType = $validationResult['user_type'];
-    $userData = $validationResult['user_data'];
-    $roomData = $validationResult['room_data'];
-
-    $_SESSION['access'] = [
-        'user_type' => $userType,
-        'last_activity' => time()
-    ];
-
-    // Set user-specific session data
-    if ($userType === 'security') {
-        $_SESSION['access']['security'] = $userData;
-        $_SESSION['access']['room'] = $roomData;
-        $redirectUrl = 'main.php';
         
-    } elseif ($userType === 'instructor') {
-        $_SESSION['access']['instructor'] = $userData;
-        $_SESSION['access']['room'] = $roomData;
-        $_SESSION['access']['subject'] = [
-            'name' => $selected_subject,
-            'room' => $selected_room,
-            'time' => $_POST['selected_time'] ?? ''
-        ];
-        $redirectUrl = 'main1.php';
-                
-
-        // Record instructor session start time
-        $currentTime = date('Y-m-d H:i:s');
-        $_SESSION['instructor_login_time'] = $currentTime;
-
-        // Get year_level and section from the selected subject
-        $subjectDetails = getSubjectDetails($db, $selected_subject, $selected_room);
-        $yearLevel = $subjectDetails['year_level'] ?? "1st Year";
-        $section = $subjectDetails['section'] ?? "A";
-
-        // Create instructor attendance summary record
-        $instructorId = $userData['id'];
-        $instructorName = $userData['fullname'];
-        $subjectName = $selected_subject;
-        $sessionDate = date('Y-m-d');
-        $timeIn = date('H:i:s');
-
-        $sessionSql = "INSERT INTO instructor_attendance_summary 
-                    (instructor_id, instructor_name, subject_name, year_level, section, 
-                        total_students, present_count, absent_count, attendance_rate,
-                        session_date, time_in, time_out) 
-                    VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0.00, ?, ?, '00:00:00')";
-        $stmt = $db->prepare($sessionSql);
-        $stmt->bind_param("issssss", $instructorId, $instructorName, $subjectName, $yearLevel, $section, $sessionDate, $timeIn);
-        $stmt->execute();
-        $_SESSION['attendance_session_id'] = $stmt->insert_id;
-
+        foreach ($possiblePaths as $path) {
+            if (strpos($path, $_SERVER['DOCUMENT_ROOT']) === 0 || strpos($path, dirname(__FILE__)) === 0) {
+                if (file_exists($path)) {
+                    if (strpos($path, $_SERVER['DOCUMENT_ROOT']) === 0) {
+                        return str_replace($_SERVER['DOCUMENT_ROOT'], '', $path);
+                    } else {
+                        return 'admin/uploads/instructors/' . $photo;
+                    }
+                }
+            } else {
+                if (file_exists($path)) {
+                    return $path;
+                }
+            }
+        }
+        
+        if (!empty($photo)) {
+            return 'admin/uploads/instructors/' . $photo;
+        }
     }
-    // Regenerate session ID to prevent session fixation
-    session_regenerate_id(true);
-
-    // Clear any existing output
-    while (ob_get_level()) {
-        ob_end_clean();
-    }
-
-    // Set proper headers
-    header('Content-Type: application/json');
-    header('X-Content-Type-Options: nosniff');
-
-    // Return success response
-    echo json_encode([
-        'status' => 'success',
-        'redirect' => $redirectUrl,
-        'message' => 'Login successful',
-        'user_type' => $userType,
-        'instructor_id' => $userData['id'],
-        'instructor_name' => $userData['fullname']
-    ]);
-    exit;
+    
+    return $defaultPhoto;
 }
 
+/**
+ * Get student photo path with multiple fallbacks
+ */
+function getStudentsPhotoPath($student) {
+    $defaultPhoto = 'admin/uploads/students/default.png';
+    
+    if (is_array($student)) {
+        $photo = isset($student['photo']) ? $student['photo'] : '';
+    } else {
+        $photo = $student;
+    }
+    
+    if (!empty($photo) && $photo !== 'default.png') {
+        $possiblePaths = [
+            'admin/uploads/students/' . $photo,
+            '../admin/uploads/students/' . $photo,
+            './admin/uploads/students/' . $photo,
+            'uploads/students/' . $photo,
+            '../uploads/students/' . $photo,
+            './uploads/students/' . $photo,
+            $_SERVER['DOCUMENT_ROOT'] . '/admin/uploads/students/' . $photo,
+            dirname(__FILE__) . '/../admin/uploads/students/' . $photo
+        ];
+        
+        foreach ($possiblePaths as $path) {
+            if (strpos($path, $_SERVER['DOCUMENT_ROOT']) === 0 || strpos($path, dirname(__FILE__)) === 0) {
+                if (file_exists($path)) {
+                    if (strpos($path, $_SERVER['DOCUMENT_ROOT']) === 0) {
+                        return str_replace($_SERVER['DOCUMENT_ROOT'], '', $path);
+                    } else {
+                        return 'admin/uploads/students/' . $photo;
+                    }
+                }
+            } else {
+                if (file_exists($path)) {
+                    return $path;
+                }
+            }
+        }
+        
+        if (!empty($photo)) {
+            return 'admin/uploads/students/' . $photo;
+        }
+    }
+    
+    return $defaultPhoto;
+}
+
+/**
+ * Get personnel photo path with multiple fallbacks - USING ONLY "PERSONELL"
+ */
+function getPersonellPhotoPath($personell) {
+    $defaultPhoto = 'admin/uploads/students/default.png';
+    
+    if (is_array($personell)) {
+        $photo = isset($personell['photo']) ? $personell['photo'] : '';
+    } else {
+        $photo = $personell;
+    }
+    
+    if (!empty($photo) && $photo !== 'default.png') {
+        $possiblePaths = [
+            'admin/uploads/personell/' . $photo,
+            '../admin/uploads/personell/' . $photo,
+            './admin/uploads/personell/' . $photo,
+            'uploads/personell/' . $photo,
+            '../uploads/personell/' . $photo,
+            './uploads/personell/' . $photo,
+            $_SERVER['DOCUMENT_ROOT'] . '/admin/uploads/personell/' . $photo,
+            dirname(__FILE__) . '/../admin/uploads/personell/' . $photo
+        ];
+        
+        foreach ($possiblePaths as $path) {
+            if (strpos($path, $_SERVER['DOCUMENT_ROOT']) === 0 || strpos($path, dirname(__FILE__)) === 0) {
+                if (file_exists($path)) {
+                    if (strpos($path, $_SERVER['DOCUMENT_ROOT']) === 0) {
+                        return str_replace($_SERVER['DOCUMENT_ROOT'], '', $path);
+                    } else {
+                        return 'admin/uploads/personell/' . $photo;
+                    }
+                }
+            } else {
+                if (file_exists($path)) {
+                    return $path;
+                }
+            }
+        }
+        
+        if (!empty($photo)) {
+            return 'admin/uploads/personell/' . $photo;
+        }
+    }
+    
+    return $defaultPhoto;
+}
+
+/**
+ * Universal photo path function that automatically detects user type
+ */
+function getUniversalPhotoPath($userData) {
+    if (!is_array($userData)) {
+        return 'admin/uploads/students/default.png';
+    }
+    
+    $role = isset($userData['person_type']) ? strtolower($userData['person_type']) : '';
+    $photo = isset($userData['photo']) ? $userData['photo'] : '';
+    
+    switch($role) {
+        case 'instructor':
+        case 'faculty':
+            return getInstructorPhotoPath($userData);
+            
+        case 'student':
+            return getStudentsPhotoPath($userData);
+            
+        case 'personell':
+            return getPersonellPhotoPath($userData);
+        case 'staff':
+            return getPersonellPhotoPath($userData);
+        case 'admin':
+        case 'security':
+            return getPersonellPhotoPath($userData);
+            
+        case 'visitor':
+            if (!empty($photo)) {
+                $visitorPath = 'admin/uploads/visitors/' . $photo;
+                if (file_exists($visitorPath) || file_exists('../' . $visitorPath)) {
+                    return $visitorPath;
+                }
+            }
+            return 'admin/uploads/students/default.png';
+            
+        default:
+            return 'admin/uploads/students/default.png';
+    }
+}
+
+/**
+ * Check if photo file actually exists, return default if not
+ */
+function validatePhotoPath($photoPath) {
+    $defaultPhoto = 'admin/uploads/students/default.png';
+    
+    if (empty($photoPath) || $photoPath === $defaultPhoto) {
+        return $defaultPhoto;
+    }
+    
+    $pathsToCheck = [
+        $photoPath,
+        '../' . $photoPath,
+        './' . $photoPath,
+        dirname(__FILE__) . '/' . $photoPath
+    ];
+    
+    foreach ($pathsToCheck as $path) {
+        if (file_exists($path)) {
+            return $photoPath;
+        }
+    }
+    
+    return $defaultPhoto;
+}
+
+/**
+ * Convert photo to base64 if file exists, otherwise return default
+ */
+function getPhotoForResponse($userData) {
+    $photoPath = getUniversalPhotoPath($userData);
+    $validatedPath = validatePhotoPath($photoPath);
+    
+    // If it's a file path and file exists, convert to base64
+    if (!empty($validatedPath) && $validatedPath !== 'admin/uploads/students/default.png' && file_exists($validatedPath)) {
+        $imageData = file_get_contents($validatedPath);
+        if ($imageData !== false) {
+            $mimeType = mime_content_type($validatedPath);
+            return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+        }
+    }
+    
+    // Return default photo as base64 or empty string
+    $defaultPath = 'admin/uploads/students/default.png';
+    if (file_exists($defaultPath)) {
+        $imageData = file_get_contents($defaultPath);
+        $mimeType = mime_content_type($defaultPath);
+        return 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+    }
+    
+    return ''; // Return empty if no photo available
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>GACPMS</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="description" content="Gate and Personnel Management System">
-    <meta name="robots" content="noindex, nofollow">
-    
-    <!-- CORRECTED Content Security Policy - Added reCAPTCHA domains -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; 
-    script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com https://www.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval'; 
-    style-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://www.google.com 'unsafe-inline'; 
-    font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.gstatic.com; 
-    img-src 'self' data: https:; 
-    connect-src 'self' https://www.google.com; 
-    frame-ancestors 'none';">
-    
-    <!-- Security Meta Tags -->
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="referrer" content="strict-origin-when-cross-origin">
-    
-    <link rel="icon" href="admin/uploads/logo.png" type="image/png">
-    
-    <!-- CSS -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="admin/css/bootstrap.min.css">
-    <!-- SweetAlert CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/grow_up.css">
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.2/css/boxicons.min.css' rel='stylesheet'>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode/minified/html5-qrcode.min.js"></script>
     
     <!-- reCAPTCHA API -->
     <script src="https://www.google.com/recaptcha/api.js?render=<?php echo RECAPTCHA_SITE_KEY; ?>"></script>
     
+    <title>Gate Entrance Scanner</title>
+    <link rel="icon" href="uploads/scanner.webp" type="image/webp">
     <style>
         :root {
             --primary-color: #e1e7f0ff;
@@ -1205,909 +1116,1375 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 .visitor-modal .modal-body {
     padding: 20px;
 }
+
+/* reCAPTCHA badge styling */
+.grecaptcha-badge {
+    visibility: hidden;
+}
+
+/* reCAPTCHA info message */
+.recaptcha-info {
+    font-size: 11px;
+    color: #6c757d;
+    text-align: center;
+    margin-top: 8px;
+    padding: 5px;
+    background: var(--light-bg);
+    border-radius: 4px;
+}
     </style>
 </head>
-<body>
-    <div class="login-container">
-        <div class="login-header">
-            <div class="header-content">
-                <div class="d-flex align-items-center justify-content-between mb-4">
-                    <h3 class="text-primary mb-0">GACPMS</h3>
-                    <h5 class="text-muted mb-0">Location</h5>
-                </div>
-            </div>
-        </div>
-        
-        <div class="card-body">
-            <form id="logform" method="POST" novalidate autocomplete="on">
-                <div id="alert-container" class="alert alert-danger d-none" role="alert"></div>
-                
-                <!-- Hidden reCAPTCHA token field -->
-                <input type="hidden" name="g-recaptcha-response" id="g-recaptcha-response">
-                
-                <div class="form-group">
-                    <label for="roomdpt" class="form-label"><i class="fas fa-building"></i>Department</label>
-                    <select class="form-select" name="roomdpt" id="roomdpt" required autocomplete="organization">
-                        <option value="Main" selected>Main</option>
-                        <?php
-                        $sql = "SELECT department_name FROM department WHERE department_name != 'Main'";
-                        $result = $db->query($sql);
-                        while ($row = $result->fetch_assoc()):
-                        ?>
-                        <option value="<?= htmlspecialchars($row['department_name']) ?>">
-                            <?= htmlspecialchars($row['department_name']) ?>
-                        </option>
-                        <?php endwhile; ?>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="location" class="form-label"><i class="fas fa-map-marker-alt"></i>Location</label>
-                    <select class="form-select" name="location" id="location" required autocomplete="organization-title">
-                        <option value="Gate" selected>Gate</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="password" class="form-label"><i class="fas fa-lock"></i>Password</label>
-                    <div class="input-group password-field">
-                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                        <input type="password" class="form-control" id="password" name="Ppassword" required autocomplete="current-password">
-                        <button class="password-toggle" type="button" id="togglePassword">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Option 2: Scan Only -->
-                <div class="form-group" id="scanInputGroup">
-                    <label class="form-label"><i class="fas fa-barcode"></i>Scan ID Card</label>
-                    
-                    <!-- Scanner Box - This is where users click and scan -->
-                    <div class="scanner-container" id="scannerBox">
-                        <div class="scanner-icon">
-                            <i class="fas fa-barcode"></i>
-                        </div>
-                        <div class="scanner-title" id="scannerTitle">
-                            Click to Activate Scanner
-                        </div>
-                        <div class="scanner-instruction" id="scannerInstruction">
-                            Click this box then scan your ID card
-                        </div>
-                        
-                        <!-- Barcode Display Area -->
-                        <div class="barcode-display" id="barcodeDisplay">
-                            <span class="barcode-placeholder" id="barcodePlaceholder">Barcode will appear here after scanning</span>
-                            <span id="barcodeValue" class="d-none"></span>
-                        </div>
-                    </div>
 
-                    <div class="scan-indicator scan-animation" id="scanIndicator">
-                        <i class="fas fa-rss me-2"></i>Scanner Ready - Click the box above to start scanning
-                    </div>
-                </div>
-                
-                <!-- Hidden field for scan mode -->
-                <input type="text" class="hidden-field" id="scan-id-input" name="Pid_number" required>
-                
-                <!-- Gate access information -->
-                <div id="gateAccessInfo" class="gate-access-info d-none">
-                    <i class="fas fa-shield-alt"></i>
-                    <div>
-                        <strong>Gate Access Mode:</strong> Security personnel only
-                    </div>
-                </div>
-                
-                <!-- Hidden fields for selected subject -->
-                <input type="hidden" name="selected_subject" id="selected_subject" value="">
-                <input type="hidden" name="selected_room" id="selected_room" value="">
-                <input type="hidden" name="selected_time" id="selected_time" value="">
-                
-                <button type="submit" class="btn btn-primary mb-3" id="loginButton">
-                    <i class="fas fa-sign-in-alt me-2"></i>Login
-                </button>
-                
-                <!-- reCAPTCHA info -->
-                <div class="recaptcha-info">
-                    <i class="fas fa-shield-alt me-1"></i>
-                    Protected by reCAPTCHA
-                </div>
-                
-                <div class="login-footer">
-                    <a href="terms.php" class="terms-link">Terms and Conditions</a>
-                    <div class="text-muted">© <?php echo date('Y'); ?></div>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <!-- Subject Selection Modal -->
-    <div class="modal fade" id="subjectModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+<body onload="startTime()">
+<audio id="myAudio" hidden>
+    <source src="admin/audio/alert.mp3" type="audio/mpeg">
+</audio> 
+<audio id="successAudio" hidden>
+    <source src="admin/audio/success.mp3" type="audio/mpeg">
+</audio>
+<audio id="errorAudio" hidden>
+    <source src="admin/audio/error.mp3" type="audio/mpeg">
+</audio>
+
+<!-- Hidden reCAPTCHA token field -->
+<input type="hidden" id="g-recaptcha-response" name="g-recaptcha-response">
+
+<!-- Header - Fixed height, fully visible -->
+<div class="header-container">
+    <img src="uploads/Head-removebg-preview.png" alt="Header" class="header-image">
+</div>
+
+
+    <!-- Enhanced Confirmation Modal -->
+    <div class="modal fade confirmation-modal" id="confirmationModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Select Your Subject for <span id="modalRoomName"></span></h5>
+                    <h5 class="modal-title" id="modalTitle">
+                        <i class="fas fa-door-open me-2"></i>Gate Access Recorded
+                    </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="alert alert-info mb-3">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Please select the subject you're currently teaching in this room and click "Confirm Selection".
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table subject-table" id="subjectTable">
-                            <thead>
-                                <tr>
-                                    <th width="5%">Select</th>
-                                    <th>Subject</th>
-                                    <th>Year Level</th>
-                                    <th>Section</th>
-                                    <th>Day</th>
-                                    <th>Time</th>
-                                </tr>
-                            </thead>
-                            <tbody id="subjectList">
-                                <!-- Subjects will be loaded here via AJAX -->
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="modal-body text-center">
+                    <!-- Dynamic content will be inserted here by JavaScript -->
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" id="cancelSubject">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="confirmSubject" disabled>
-                        <span class="spinner-border spinner-border-sm d-none" id="confirmSpinner" role="status" aria-hidden="true"></span>
-                        Confirm Selection
+                    <button type="button" class="btn btn-ok" data-bs-dismiss="modal">
+                        <i class="fas fa-check me-2"></i>OK
                     </button>
                 </div>
             </div>
         </div>
     </div>
+    <!-- Visitor Information Modal - Adjusted Container Size -->
+<div class="modal fade visitor-modal" id="visitorInfoModal" tabindex="-1" aria-labelledby="visitorInfoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="visitorInfoModalLabel">
+                    <i class="fas fa-user-clock me-2"></i>Visitor Registration Required
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="visitor-info-alert">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-info-circle fa-lg me-3"></i>
+                        <div>
+                            <h6 class="mb-1" style="color: var(--icon-color);">Visitor Registration</h6>
+                            <p class="mb-0">Please provide your information for gate access. All fields marked with <span class="text-danger">*</span> are required.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-12">
+                        <form id="visitorInfoForm" novalidate>
+                            <input type="hidden" id="visitorID" value="">
+                            
+                            <!-- Full Name Field -->
+                            <div class="mb-3">
+                                <label for="fullName" class="form-label">
+                                    <i class="fas fa-user me-1"></i>Full Name <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="fullName" 
+                                       required 
+                                       placeholder="Enter your full name (letters and spaces only)"
+                                       maxlength="100"
+                                       pattern="[A-Za-z\s]+"
+                                       oninput="validateFullName(this)">
+                                <div class="invalid-feedback">
+                                    Please enter a valid full name (letters and spaces only, no numbers or special characters).
+                                </div>
+                                <div class="character-count" id="nameCharCount">0/100 characters</div>
+                            </div>
+                            
+                            <!-- Contact Number Field -->
+                            <div class="mb-3">
+                                <label for="contactNumber" class="form-label">
+                                    <i class="fas fa-phone me-1"></i>Contact Number <span class="text-danger">*</span>
+                                </label>
+                                <input type="tel" 
+                                       class="form-control" 
+                                       id="contactNumber" 
+                                       required 
+                                       placeholder="Enter 11-digit contact number"
+                                       maxlength="11"
+                                       pattern="[0-9]{11}"
+                                       oninput="validateContactNumber(this)">
+                                <div class="invalid-feedback">
+                                    Please enter a valid 11-digit contact number (numbers only).
+                                </div>
+                                <div class="character-count" id="contactCharCount">0/11 digits</div>
+                            </div>
+                            
+                            <!-- Purpose of Visit -->
+                            <div class="mb-3">
+                                <label for="purpose" class="form-label">
+                                    <i class="fas fa-bullseye me-1"></i>Purpose of Visit <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select" id="purpose" required onchange="toggleOtherPurpose()">
+                                    <option value="">Select purpose...</option>
+                                    <option value="Meeting">Meeting</option>
+                                    <option value="Delivery">Delivery</option>
+                                    <option value="Maintenance">Maintenance</option>
+                                    <option value="Interview">Interview</option>
+                                    <option value="Training">Training</option>
+                                    <option value="Official Business">Official Business</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                <div class="invalid-feedback">
+                                    Please select a purpose for your visit.
+                                </div>
+                            </div>
+                            
+                            <!-- Other Purpose Field (Conditional) -->
+                            <div class="mb-3" id="otherPurposeContainer" style="display: none;">
+                                <label for="otherPurpose" class="form-label">
+                                    <i class="fas fa-edit me-1"></i>Specify Purpose
+                                </label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="otherPurpose" 
+                                       placeholder="Please specify your purpose"
+                                       maxlength="100"
+                                       oninput="updateCharacterCount('otherPurpose', 'otherPurposeCharCount', 100)">
+                                <div class="character-count" id="otherPurposeCharCount">0/100 characters</div>
+                            </div>
+                            
+                            <!-- Person/Department Visiting -->
+                            <div class="mb-3">
+                                <label for="personVisiting" class="form-label">
+                                    <i class="fas fa-building me-1"></i>Person/Department Visiting
+                                </label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="personVisiting" 
+                                       placeholder="Who are you visiting? (Optional)"
+                                       maxlength="100"
+                                       oninput="updateCharacterCount('personVisiting', 'personVisitingCharCount', 100)">
+                                <div class="character-count" id="personVisitingCharCount">0/100 characters</div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-warning" id="submitVisitorInfo">
+                    <i class="fas fa-check me-2"></i>Submit & Record Access
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Main Container - Scroll Design -->
+<div class="main-container">
+    <!-- Navigation Tabs -->
+    <div class="modern-tabs">
+        <ul class="nav nav-pills justify-content-center">
+            <li class="nav-item">
+                <a class="nav-link active" aria-current="page" href="#">
+                    <i class="fas fa-qrcode me-2"></i>Gate Scanner
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="gate_logs.php">
+                    <i class="fas fa-history me-2"></i>Access Log
+                </a>
+            </li>
+        </ul>
+    </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script src="admin/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- SweetAlert JS -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Content Area - Allow scrolling -->
+    <div class="content-area">
+        <!-- Scanner Section (70%) -->
+        <div class="scanner-section">
+            <!-- Department/Location Info -->
+            <div class="dept-location-info">
+                <div class="row">
+                    <center>
+                        <h3><i class="fas fa-map-marker-alt me-2"></i>Location: <?php echo $department; echo $location; ?></h3>
+                    </center>    
+                </div>
+            </div>
+
+            <!-- Clock Display -->
+            <div class="clock-display">
+                <div id="clock" class="mb-2"></div>
+                <div id="currentDate"></div>
+            </div>
+
+            <!-- Scanner Alert -->
+            <div class="scanner-alert">
+                <h4 id="in_out" class="mb-0" style="color: var(--icon-color);">
+                    <i class="fas fa-id-card me-2"></i>Scan Your ID Card for Gate Access
+                </h4>
+            </div>
+
+            <!-- Scanner Container -->
+            <div class="scanner-container">
+                <div id="largeReader"></div>
+                <div class="scanner-overlay">
+                    <div class="scanner-frame">
+                        <div class="scanner-laser"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Result Display -->
+            <div id="result"></div>
+            
+            <!-- reCAPTCHA Info -->
+            <div class="recaptcha-info">
+                <i class="fas fa-shield-alt me-1"></i>
+                Protected by reCAPTCHA
+            </div>
+        </div>
+
+        <!-- Sidebar Section (30%) -->
+        <div class="sidebar-section">
+            <!-- Person Photo -->
+            <img id="pic" class="person-photo" 
+                 src="assets/img/section/type.jpg"
+                 alt="Person Photo Preview">
+
+            <!-- Manual Input Section -->
+            <div class="manual-input-section">
+                <h4><i class="fas fa-keyboard me-2"></i> Manual Entry</h4>
+                <p class="text-center text-muted mb-3" style="font-size: 0.8rem;">For visitors or forgot ID</p>
+                
+                <div class="input-group mb-3">
+                    <input type="text" 
+                           class="form-control" 
+                           id="manualIdInput" 
+                           placeholder="0000-0000"
+                           aria-label="Person ID"
+                           maxlength="9"
+                           pattern="[0-9]{4}-[0-9]{4}">
+                    <button class="btn btn-primary" 
+                            id="manualSubmitBtn"
+                            onclick="processManualInput()">
+                        <i class="fas fa-paper-plane me-2"></i>Submit
+                    </button>
+                </div>
+                
+                <div class="text-center mt-auto">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Enter 8 digits or use format 0000-0000
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Global variables
+let scanner = null;
+let barcodeBuffer = '';
+let lastScanTime = 0;
+const scanCooldown = 500; // Reduced cooldown for faster scanning
+
+// reCAPTCHA site key
+const RECAPTCHA_SITE_KEY = '<?php echo RECAPTCHA_SITE_KEY; ?>';
+
+// Role icons mapping
+const roleIcons = {
+    'Student': 'fa-user-graduate',
+    'Faculty': 'fa-chalkboard-teacher',
+    'Staff': 'fa-user-tie',
+    'Admin': 'fa-user-cog',
+    'Security': 'fa-shield-alt',
+    'Visitor': 'fa-user-clock',
+    'IT Personnel': 'fa-laptop-code',
+    'Instructor': 'fa-chalkboard-teacher'
+};
+
+// Scanner Initialization and Control Functions
+// Enhanced scanner initialization for faster scanning
+function initScanner() {
+    if (scanner) {
+        scanner.clear().catch(console.error);
+    }
     
-    <script>
-    // reCAPTCHA site key
-    const RECAPTCHA_SITE_KEY = '<?php echo RECAPTCHA_SITE_KEY; ?>';
+    scanner = new Html5QrcodeScanner('largeReader', { 
+        qrbox: {
+            width: 300,
+            height: 300,
+        },
+        fps: 30, // Increased FPS for faster scanning
+        rememberLastUsedCamera: true,
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+        showTorchButtonIfSupported: true
+    });
     
-    // Security: Prevent console access in production
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        console.log = function() {};
-        console.warn = function() {};
-        console.error = function() {};
+    // Remove the permission request image by hiding the element
+    const permissionElement = document.querySelector('#largeReader img');
+    if (permissionElement) {
+        permissionElement.style.display = 'none';
+    }
+    
+    scanner.render(onScanSuccess, onScanError);
+}
+
+function onScanError(error) {
+    // Only log actual errors, not benign "no code found" errors
+    if (!error.includes('NotFoundException') && !error.includes('No MultiFormat Readers')) {
+        console.error('Scanner error:', error);
+    }
+    
+    // Hide any permission-related images
+    const permissionElement = document.querySelector('#largeReader img');
+    if (permissionElement) {
+        permissionElement.style.display = 'none';
+    }
+}
+
+// Optimized scan success handler
+function onScanSuccess(decodedText, decodedResult) {
+    const currentTime = new Date().getTime();
+    
+    // Check if enough time has passed since last scan
+    if (currentTime - lastScanTime < scanCooldown) {
+        return; // Ignore scans that happen too quickly
+    }
+    
+    lastScanTime = currentTime;
+    
+    // Stop scanner temporarily to prevent multiple scans
+    if (scanner) {
+        scanner.pause();
+    }
+    
+    // Process the barcode with reCAPTCHA
+    processBarcodeWithRecaptcha(decodedText);
+}
+
+// Enhanced barcode processing with reCAPTCHA
+function processBarcodeWithRecaptcha(barcode) {
+    console.log("🔍 Processing barcode with reCAPTCHA:", barcode);
+    
+    // Show processing state
+    document.getElementById('result').innerHTML = `
+        <div class="d-flex justify-content-center align-items-center">
+            <div class="spinner-border text-primary me-2" role="status" style="width: 1rem; height: 1rem;">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span>Processing ID: ${barcode}</span>
+        </div>
+    `;
+    
+    // Disable inputs during processing
+    setInputsDisabled(true);
+    
+    // Get reCAPTCHA token first
+    grecaptcha.ready(function() {
+        grecaptcha.execute(RECAPTCHA_SITE_KEY, {action: 'gate_access'}).then(function(token) {
+            // Set the token in the hidden field
+            document.getElementById('g-recaptcha-response').value = token;
+            
+            console.log("✅ reCAPTCHA token received, proceeding with gate access...");
+            
+            // Now send the request with reCAPTCHA token
+            $.ajax({
+                type: "POST",
+                url: "process_gate.php",
+                data: { 
+                    barcode: barcode,
+                    department: "<?php echo $department; ?>",
+                    location: "<?php echo $location; ?>",
+                    'g-recaptcha-response': token
+                },
+                dataType: 'json',
+                timeout: 10000,
+                success: function(response) {
+                    // Check if server indicates this is a visitor that needs registration
+                    if (response.requires_visitor_info) {
+                        console.log("🎫 Visitor card detected, showing info modal");
+                        showVisitorInfoModal(barcode);
+                    } else {
+                        handleGateScanSuccess(response, barcode);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    handleGateScanError(xhr, status, error, barcode);
+                },
+                complete: function() {
+                    setInputsDisabled(false);
+                }
+            });
+        }).catch(function(error) {
+            console.error('❌ reCAPTCHA error:', error);
+            showErrorMessage('Security verification failed. Please try again.');
+            setInputsDisabled(false);
+        });
+    });
+}
+
+    // Enhanced success handler for gate system
+    function handleGateScanSuccess(response, originalBarcode) {
+        console.log("✅ GATE SUCCESS - Raw response:", response);
+        
+        if (!response || typeof response !== 'object') {
+            console.error("❌ Invalid response format");
+            showGateSuccessFallback(originalBarcode);
+            return;
+        }
+        
+        if (response.error) {
+            console.log("❌ Server error:", response.error);
+            showErrorMessage(response.error);
+            speakMessage(response.error);
+            // Clear and reset after error
+            setTimeout(() => {
+                clearAndResetScanner();
+            }, 2000);
+            return;
+        }
+
+        // Log successful person data retrieval
+        console.log("🎓 Person Data Retrieved:", {
+            name: response.full_name,
+            id: response.id_number,
+            department: response.department,
+            role: response.role,
+            photo: response.photo
+        });
+
+        // Update UI and show confirmation
+        updateGateUI(response);
+        updatePersonPhoto(response);
+        showGateConfirmationModal(response);
     }
 
-    // Scanner state management
-    let isScannerActive = false;
-    let scanBuffer = '';
-    let scanTimeout;
-
-    $(document).ready(function() {
-        // Initialize scanner functionality
-        initScanner();
+    // Enhanced error handler for gate system
+    function handleGateScanError(xhr, status, error, originalBarcode) {
+        console.error("❌ GATE AJAX ERROR:");
+        console.error("Status:", status);
+        console.error("Error:", error);
+        console.error("Response text:", xhr.responseText);
         
-        // Password visibility toggle
-        $('#togglePassword').click(function() {
-            const icon = $(this).find('i');
-            const passwordField = $('#password');
-            
-            if (passwordField.attr('type') === 'password') {
-                passwordField.attr('type', 'text');
-                icon.removeClass('fa-eye').addClass('fa-eye-slash');
-            } else {
-                passwordField.attr('type', 'password');
-                icon.removeClass('fa-eye-slash').addClass('fa-eye');
-            }
-        });
-        
-        // Show/hide gate access info based on department selection
-        $('#roomdpt, #location').change(function() {
-            const department = $('#roomdpt').val();
-            const location = $('#location').val();
-            
-            if (department === 'Main' && location === 'Gate') {
-                $('#gateAccessInfo').removeClass('d-none');
-            } else {
-                $('#gateAccessInfo').addClass('d-none');
-            }
-        });
-
-        // Initial check
-        $('#roomdpt').trigger('change');
-
-        // Form submission handler with reCAPTCHA
-        $('#logform').on('submit', function(e) {
-            e.preventDefault();
-            
-            const idNumber = $('#scan-id-input').val();
-            const password = $('#password').val();
-            const department = $('#roomdpt').val();
-            const selectedRoom = $('#location').val();
-            
-            // Validate ID format
-            if (!/^\d{4}-\d{4}$/.test(idNumber)) {
-                showAlert('Please scan a valid ID card (format: 0000-0000)');
-                activateScanner();
-                return;
-            }
-            
-            if (!password) {
-                showAlert('Please enter your password');
-                $('#password').focus();
-                return;
-            }
-            
-            console.log('🔄 Getting reCAPTCHA token...');
-            
-            // Get reCAPTCHA token first
-            grecaptcha.ready(function() {
-                grecaptcha.execute(RECAPTCHA_SITE_KEY, {action: 'login'}).then(function(token) {
-                    // Set the token in the hidden field
-                    $('#g-recaptcha-response').val(token);
-                    
-                    console.log('✅ reCAPTCHA token received, proceeding with login...');
-                    
-                    // Now validate password and proceed
-                    validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
-                }).catch(function(error) {
-                    console.error('❌ reCAPTCHA error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Security Check Failed',
-                        text: 'Unable to verify reCAPTCHA. Please refresh the page and try again.'
-                    });
-                });
-            });
-        });
-
-        // Validate password BEFORE showing subject modal
-        function validateRoomPasswordBeforeSubject(department, location, password, idNumber) {
-            // Show loading state
-            $('#loginButton').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Validating...');
-            $('#loginButton').prop('disabled', true);
-            
-            // Create form data with reCAPTCHA token
-            const formData = {
-                roomdpt: department,
-                location: location,
-                Ppassword: password,
-                Pid_number: idNumber,
-                'g-recaptcha-response': $('#g-recaptcha-response').val(),
-                validate_only: 'true'
-            };
-            
-            $.ajax({
-                url: '', // same PHP page
-                type: 'POST',
-                data: formData,
-                dataType: 'json',
-                success: function(response) {
-                    // Reset button state
-                    $('#loginButton').html('<i class="fas fa-sign-in-alt me-2"></i>Login');
-                    $('#loginButton').prop('disabled', false);
-                    
-                    if (response.status === 'success') {
-                        // Password is valid, now check if we need subject selection
-                        if (department === 'Main' && location === 'Gate') {
-                            // Gate access - submit directly
-                            submitLoginForm();
-                        } else if (!$('#selected_subject').val()) {
-                            // Classroom access - show subject selection
-                            showSubjectSelectionModal();
-                        } else {
-                            // Subject already selected - submit directly
-                            submitLoginForm();
-                        }
-                    } else {
-                        // Password validation failed
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Login Failed',
-                            text: response.message || 'Invalid password or credentials'
-                        });
-                    }
-                },
-                error: function(xhr, status, error) {
-                    // Reset button state
-                    $('#loginButton').html('<i class="fas fa-sign-in-alt me-2"></i>Login');
-                    $('#loginButton').prop('disabled', false);
-                    
-                    let errorMessage = 'Password validation failed. Please try again.';
-                    
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        errorMessage = response.message || errorMessage;
-                    } catch (e) {
-                        errorMessage = xhr.responseText || errorMessage;
-                    }
-                    
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: errorMessage
-                    });
-                }
-            });
-        }
-
-        // Show subject selection modal
-        function showSubjectSelectionModal() {
-            const idNumber = $('#scan-id-input').val();
-            const selectedRoom = $('#location').val();
-            
-            if (!idNumber || !selectedRoom) {
-                showAlert('Please select a location first');
-                return;
-            }
-            
-            // Clear previous selections
-            $('#selected_subject').val('');
-            $('#selected_room').val('');
-            $('#selected_time').val('');
-            $('.subject-radio').prop('checked', false);
-            $('#confirmSubject').prop('disabled', true);
-            
-            $('#subjectList').html(`
-                <tr>
-                    <td colspan="5" class="text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading subjects...</span>
-                        </div>
-                        <div class="mt-2 text-muted">Loading subjects for ${selectedRoom}...</div>
-                    </td>
-                </tr>
-            `);
-            
-            const subjectModal = new bootstrap.Modal(document.getElementById('subjectModal'));
-            subjectModal.show();
-            
-            $('#modalRoomName').text(selectedRoom);
-            loadInstructorSubjects(idNumber, selectedRoom);
-        }
-
-        // Load subjects for instructor with enhanced error handling
-        function loadInstructorSubjects(idNumber, selectedRoom) {
-            // Clean the ID number by removing hyphens
-            const cleanId = idNumber.replace(/-/g, '');
-            
-            console.log('🔍 Loading subjects for:', {
-                idNumber: idNumber,
-                cleanId: cleanId,
-                room: selectedRoom
-            });
-            
-            $('#subjectList').html(`
-                <tr>
-                    <td colspan="5" class="text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading subjects...</span>
-                        </div>
-                        <div class="mt-2 text-muted">Loading subjects for ${selectedRoom}...</div>
-                    </td>
-                </tr>
-            `);
-
-            $.ajax({
-                url: 'get_instructor_subjects.php',
-                type: 'GET',
-                data: { 
-                    id_number: cleanId,
-                    room_name: selectedRoom
-                },
-                dataType: 'text',
-                timeout: 15000,
-                success: function(rawResponse) {
-                    console.log('📨 Raw API Response:', rawResponse);
-                    
-                    let data;
-                    try {
-                        data = JSON.parse(rawResponse);
-                        console.log('✅ Parsed JSON:', data);
-                    } catch (e) {
-                        console.error('❌ JSON Parse Error:', e);
-                        console.error('Raw response that failed to parse:', rawResponse);
-                        
-                        $('#subjectList').html(`
-                            <tr>
-                                <td colspan="5" class="text-center text-danger">
-                                    <i class="fas fa-exclamation-circle me-2"></i>
-                                    Server returned invalid JSON format
-                                    <br><small class="text-muted">Check browser console for details</small>
-                                    <br><small class="text-muted">Response: ${rawResponse.substring(0, 100)}...</small>
-                                </td>
-                            </tr>
-                        `);
-                        return;
-                    }
-                    
-                    if (data.status === 'success') {
-                        if (data.data && data.data.length > 0) {
-                            displaySubjects(data.data, selectedRoom);
-                        } else {
-                            $('#subjectList').html(`
-                                <tr>
-                                    <td colspan="5" class="text-center">
-                                        <div class="alert alert-warning mb-0">
-                                            <i class="fas fa-info-circle me-2"></i>
-                                            No scheduled subjects found for ${selectedRoom}
-                                            ${data.debug_info ? `<br><small>Instructor: ${data.debug_info.instructor_name}</small>` : ''}
-                                        </div>
-                                    </td>
-                                </tr>
-                            `);
-                        }
-                    } else {
-                        $('#subjectList').html(`
-                            <tr>
-                                <td colspan="5" class="text-center text-danger">
-                                    <i class="fas fa-exclamation-triangle me-2"></i>
-                                    ${data.message || 'Unknown error occurred'}
-                                    ${data.debug ? `<br><small class="text-muted">Debug: ${JSON.stringify(data.debug)}</small>` : ''}
-                                </td>
-                            </tr>
-                        `);
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('🚨 AJAX Error:', {
-                        status: status,
-                        error: error,
-                        responseText: xhr.responseText,
-                        statusCode: xhr.status,
-                        readyState: xhr.readyState
-                    });
-                    
-                    let errorMessage = 'Failed to load subjects. ';
-                    
-                    if (status === 'timeout') {
-                        errorMessage = 'Request timed out after 15 seconds.';
-                    } else if (status === 'parsererror') {
-                        errorMessage = 'Server returned invalid data format.';
-                    } else if (xhr.status === 404) {
-                        errorMessage = 'API endpoint not found.';
-                    } else if (xhr.status === 500) {
-                        errorMessage = 'Server internal error.';
-                    } else if (xhr.status === 0) {
-                        errorMessage = 'Cannot connect to server. Check if server is running.';
-                    } else {
-                        errorMessage = `Network error: ${error}`;
-                    }
-                    
-                    $('#subjectList').html(`
-                        <tr>
-                            <td colspan="5" class="text-center text-danger">
-                                <i class="fas fa-exclamation-circle me-2"></i>
-                                ${errorMessage}
-                                <br><small class="text-muted">Status: ${xhr.status} - ${status}</small>
-                                <br><small class="text-muted">Check browser console for details</small>
-                            </td>
-                        </tr>
-                    `);
-                }
-            });
-        }
-
-        function showSubjectError(message) {
-            $('#subjectList').html(`
-                <tr>
-                    <td colspan="5" class="text-center text-danger">
-                        <i class="fas fa-exclamation-circle me-2"></i>
-                        ${message}
-                        <br><small class="text-muted">Check browser console for details</small>
-                    </td>
-                </tr>
-            `);
-        }
-
-        // Display subjects in the modal table
-        function displaySubjects(schedules, selectedRoom) {
-            let html = '';
-            const now = new Date();
-            const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' });
-            const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
-            
-            let hasAvailableSubjects = false;
-            
-            schedules.forEach(schedule => {
-                const isToday = schedule.day === currentDay;
+        // Try to parse response even if AJAX reports error
+        if (xhr.responseText && xhr.responseText.trim() !== '') {
+            try {
+                const parsedResponse = JSON.parse(xhr.responseText);
+                console.log("📦 Parsed response despite AJAX error:", parsedResponse);
                 
-                let startMinutes = null;
-                let endMinutes = null;
-                
-                if (schedule.start_time) {
-                    const [hour, minute, second] = schedule.start_time.split(':');
-                    startMinutes = parseInt(hour, 10) * 60 + parseInt(minute, 10);
-                }
-                
-                if (schedule.end_time) {
-                    const [hour, minute, second] = schedule.end_time.split(':');
-                    endMinutes = parseInt(hour, 10) * 60 + parseInt(minute, 10);
-                }
-                
-                const isEnabled = isToday && startMinutes !== null && 
-                                 (currentTimeMinutes <= endMinutes);
-                
-                const startTimeFormatted = schedule.start_time ? 
-                    new Date(`1970-01-01T${schedule.start_time}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 
-                    'N/A';
-                    
-                const endTimeFormatted = schedule.end_time ? 
-                    new Date(`1970-01-01T${schedule.end_time}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 
-                    'N/A';
-                
-                let rowClass = '';
-                let statusBadge = '';
-                
-                if (!isToday) {
-                    rowClass = 'table-secondary';
-                    statusBadge = '<span class="badge bg-secondary ms-1">Not Today</span>';
-                } else if (!isEnabled) {
-                    rowClass = 'table-warning';
-                    statusBadge = '<span class="badge bg-warning ms-1">Class Ended</span>';
+                if (parsedResponse.error) {
+                    showErrorMessage(parsedResponse.error);
+                    // Clear and reset after error
+                    setTimeout(() => {
+                        clearAndResetScanner();
+                    }, 2000);
                 } else {
-                    hasAvailableSubjects = true;
-                    statusBadge = '<span class="badge bg-success ms-1">Available</span>';
+                    updateGateUI(parsedResponse);
+                    updatePersonPhoto(parsedResponse);
+                    showGateConfirmationModal(parsedResponse);
+                    return;
                 }
+            } catch (e) {
+                console.log("❌ Could not parse response as JSON:", e.message);
+            }
+        }
+        
+        // Fallback to success since access was likely recorded
+        showGateSuccessFallback(originalBarcode);
+    }
+
+    function showGateSuccessFallback(barcode) {
+        console.log("🔄 Using gate fallback success display");
+        
+        const fallbackData = {
+            full_name: "Person",
+            id_number: barcode,
+            department: "<?php echo $department; ?>",
+            photo: "admin/uploads/students/default.png",
+            role: "User",
+            time_in_out: "Access Recorded Successfully",
+            alert_class: "alert-success",
+            access_type: "time_in"
+        };
+        
+        updateGateUI(fallbackData);
+        updatePersonPhoto(fallbackData);
+        showGateConfirmationModal(fallbackData);
+    }
+
+    function setInputsDisabled(disabled) {
+        document.getElementById('manualIdInput').disabled = disabled;
+        document.getElementById('manualSubmitBtn').disabled = disabled;
+    }
+
+// Update gate UI with access data
+
+    function updateGateUI(data) {
+        const inOutElement = document.getElementById('in_out');
+        
+        // Use the correct response fields from process_gate.php
+        if (data.time_in_out === 'Time In Recorded' || data.time_in_out === 'TIME IN') {
+            inOutElement.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>ENTRY GRANTED - TIME IN RECORDED';
+            inOutElement.style.color = 'var(--icon-color)';
+        } else if (data.time_in_out === 'Time Out Recorded' || data.time_in_out === 'TIME OUT') {
+            inOutElement.innerHTML = '<i class="fas fa-sign-out-alt me-2"></i>EXIT RECORDED - TIME OUT RECORDED';
+            inOutElement.style.color = '#f72585';
+        } else if (data.error) {
+            inOutElement.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${data.error}`;
+            inOutElement.style.color = '#e74a3b';
+        } else if (data.time_in_out === 'Already timed out today') {
+            inOutElement.innerHTML = '<i class="fas fa-check-circle me-2"></i>ALREADY TIMED OUT TODAY';
+            inOutElement.style.color = '#6c757d';
+        } else {
+            inOutElement.innerHTML = '<i class="fas fa-id-card me-2"></i>Scan Your ID Card for Gate Access';
+            inOutElement.style.color = 'var(--icon-color)';
+        }
+        
+        // Update result display
+        if (data.time_in_out && !data.error) {
+            const alertClass = data.alert_class || 'alert-success';
+            document.getElementById('result').innerHTML = `
+                <div class="alert ${alertClass} py-2" role="alert">
+                    <i class="fas fa-check-circle me-2"></i>
+                    ${data.time_in_out}
+                </div>
+            `;
+        } else if (data.error) {
+            document.getElementById('result').innerHTML = `
+                <div class="alert alert-danger py-2" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    ${data.error}
+                </div>
+            `;
+        }
+    }
+
+    // Enhanced manual input processing to handle visitors with reCAPTCHA
+    function processManualInput() {
+        const idNumber = document.getElementById('manualIdInput').value.trim();
+        
+        if (!idNumber) {
+            showErrorMessage("Please enter ID number");
+            speakMessage("Please enter ID number");
+            return;
+        }
+        
+        // Basic ID format validation (0000-0000)
+        const idPattern = /^\d{4}-\d{4}$/;
+        if (!idPattern.test(idNumber)) {
+            showErrorMessage("Invalid ID format. Please use: 0000-0000");
+            return;
+        }
+        
+        showProcessingState(idNumber);
+        setInputsDisabled(true);
+        
+        // Get reCAPTCHA token for manual input
+        grecaptcha.ready(function() {
+            grecaptcha.execute(RECAPTCHA_SITE_KEY, {action: 'gate_access'}).then(function(token) {
+                document.getElementById('g-recaptcha-response').value = token;
                 
-                html += `
-                    <tr class="modal-subject-row ${rowClass}">
-                        <td>
-                            <input type="radio" class="form-check-input subject-radio" 
-                                   name="selectedSubject"
-                                   data-subject="${schedule.subject || ''}"
-                                   data-room="${schedule.room_name || selectedRoom}"
-                                   data-time="${startTimeFormatted} - ${endTimeFormatted}"
-                                   data-year-level="${schedule.year_level || ''}"
-                                   data-section="${schedule.section || ''}"
-                                   ${!isEnabled ? 'disabled' : ''}>
-                        </td>
-                        <td>
-                            ${schedule.subject || 'N/A'}
-                            ${statusBadge}
-                        </td>
-                        <td>${schedule.year_level || 'N/A'}</td>
-                        <td>${schedule.section || 'N/A'}</td>
-                        <td>${schedule.day || 'N/A'}</td>
-                        <td>${startTimeFormatted} - ${endTimeFormatted}</td>
-                    </tr>`;
-            });
-            
-            if (!hasAvailableSubjects && schedules.length > 0) {
-                html = `
-                    <tr>
-                        <td colspan="6" class="text-center">
-                            <div class="alert alert-info mb-0">
-                                <i class="fas fa-info-circle me-2"></i>
-                                No available subjects at this time. Subjects are only available on their scheduled day.
-                            </div>
-                        </td>
-                    </tr>
-                ` + html;
-            }
-            
-            if (schedules.length === 0) {
-                html = `
-                    <tr>
-                        <td colspan="6" class="text-center">
-                            <div class="alert alert-warning mb-0">
-                                <i class="fas fa-info-circle me-2"></i>
-                                No subjects found for this room.
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }
-            
-            $('#subjectList').html(html);
-        }
-
-        // Handle subject selection with radio buttons
-        $(document).on('change', '.subject-radio', function() {
-            if ($(this).is(':checked') && !$(this).is(':disabled')) {
-                $('#selected_subject').val($(this).data('subject'));
-                $('#selected_room').val($(this).data('room'));
-                $('#selected_time').val($(this).data('time'));
-                $('#confirmSubject').prop('disabled', false);
-            }
-        });
-
-        // Confirm subject selection
-        $('#confirmSubject').click(function() {
-            const subject = $('#selected_subject').val();
-            const room = $('#selected_room').val();
-            
-            if (!subject || !room) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'No Subject Selected',
-                    text: 'Please select a subject first.'
-                });
-                return;
-            }
-            
-            // Close modal and submit form
-            $('#subjectModal').modal('hide');
-            submitLoginForm();
-        });
-
-        // Cancel subject selection
-        $('#cancelSubject').click(function() {
-            $('#subjectModal').modal('hide');
-            $('#selected_subject').val('');
-            $('#selected_room').val('');
-            $('#selected_time').val('');
-            $('.subject-radio').prop('checked', false);
-        });
-
-        // Handle modal hidden event
-        $('#subjectModal').on('hidden.bs.modal', function() {
-            if (!$('#selected_subject').val()) {
-                activateScanner();
-            }
-        });
-
-        // Submit login form to server with reCAPTCHA
-        function submitLoginForm() {
-            const formData = $('#logform').serialize();
-            
-            Swal.fire({
-                title: 'Logging in...',
-                allowOutsideClick: false,
-                didOpen: () => Swal.showLoading()
-            });
-
-            $.ajax({
-                url: '', // same PHP page
-                type: 'POST',
-                data: formData,
-                dataType: 'json',
-                success: function(response) {
-                    Swal.close();
-                    if (response.status === 'success') {
-                        // Store critical session data in localStorage as backup
-                        localStorage.setItem('instructor_id', response.instructor_id || '');
-                        localStorage.setItem('instructor_name', response.instructor_name || '');
-                        
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Login Successful',
-                            text: response.message || 'Redirecting...',
-                            timer: 1500,
-                            showConfirmButton: false,
-                            willClose: () => {
-                                window.location.href = response.redirect;
-                            }
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Login Failed',
-                            text: response.message || 'Invalid credentials'
-                        });
-                    }
-                },
-                error: function(xhr, status, error) {
-                    Swal.close();
-                    
-                    let errorMessage = 'Login request failed. Please try again.';
-                    
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        errorMessage = response.message || errorMessage;
-                    } catch (e) {
-                        errorMessage = xhr.responseText || errorMessage;
-                        if (errorMessage.length > 100) {
-                            errorMessage = errorMessage.substring(0, 100) + '...';
+                // Process as barcode (will check if visitor in process_gate.php)
+                $.ajax({
+                    type: "POST",
+                    url: "process_gate.php",
+                    data: { 
+                        barcode: idNumber,
+                        department: "<?php echo $department; ?>",
+                        location: "<?php echo $location; ?>",
+                        check_visitor: true,
+                        'g-recaptcha-response': token
+                    },
+                    dataType: 'json',
+                    timeout: 10000,
+                    success: function(response) {
+                        // Check if server indicates this is a visitor that needs registration
+                        if (response.requires_visitor_info) {
+                            console.log("🎫 Visitor card detected, showing info modal");
+                            showVisitorInfoModal(idNumber);
+                        } else {
+                            handleGateScanSuccess(response, idNumber);
                         }
+                    },
+                    error: function(xhr, status, error) {
+                        handleGateScanError(xhr, status, error, idNumber);
+                    },
+                    complete: function() {
+                        setInputsDisabled(false);
                     }
-                    
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: errorMessage
-                    });
-                    
-                    console.error('Login error:', xhr.responseText);
-                }
-            });
-        }
-
-        // Utility alert
-        function showAlert(message) {
-            $('#alert-container').removeClass('d-none').text(message);
-        }
-
-        // Fetch rooms when department changes
-        $('#roomdpt').change(function() {
-            const department = $(this).val();
-            if (department === "Main") {
-                $('#location').html('<option value="Gate" selected>Gate</option>');
-                return;
-            }
-            
-            $.get('get_rooms.php', { department: department })
-                .done(function(data) {
-                    $('#location').html(data);
-                })
-                .fail(function() {
-                    $('#location').html('<option value="">Error loading rooms</option>');
                 });
+            }).catch(function(error) {
+                console.error('❌ reCAPTCHA error:', error);
+                showErrorMessage('Security verification failed. Please try again.');
+                setInputsDisabled(false);
+            });
         });
+    }
 
-        // Initial focus - activate scanner by default
-        setTimeout(function() {
-            activateScanner();
-        }, 300);
+    // Visitor Information Modal
+    function showVisitorInfoModal(visitorID) {
+        // Set the visitor ID
+        document.getElementById('visitorID').value = visitorID;
+        
+        // Reset form
+        document.getElementById('visitorInfoForm').reset();
+        document.getElementById('otherPurposeContainer').style.display = 'none';
+        
+        // Show modal
+        const visitorModal = new bootstrap.Modal(document.getElementById('visitorInfoModal'));
+        visitorModal.show();
+        
+        // Set up event listeners
+        setupVisitorModalEvents();
+    }
+
+    // Set up event listeners for visitor modal
+    function setupVisitorModalEvents() {
+        // Purpose dropdown change
+        document.getElementById('purpose').addEventListener('change', function() {
+            const otherContainer = document.getElementById('otherPurposeContainer');
+            otherContainer.style.display = this.value === 'Other' ? 'block' : 'none';
+        });
+        
+        // Form submission
+        document.getElementById('submitVisitorInfo').addEventListener('click', submitVisitorInfo);
+        
+        // Modal hidden event
+        document.getElementById('visitorInfoModal').addEventListener('hidden.bs.modal', function() {
+            clearAndResetScanner();
+        });
+    }
+
+    // Submit visitor information with reCAPTCHA
+    function submitVisitorInfo() {
+        const form = document.getElementById('visitorInfoForm');
+        const submitBtn = document.getElementById('submitVisitorInfo');
+        
+        // Basic validation
+        const fullName = document.getElementById('fullName').value.trim();
+        const contactNumber = document.getElementById('contactNumber').value.trim();
+        const purpose = document.getElementById('purpose').value;
+        
+        if (!fullName) {
+            showVisitorAlert('Please enter your full name', 'danger');
+            document.getElementById('fullName').focus();
+            return;
+        }
+        
+        if (!contactNumber) {
+            showVisitorAlert('Please enter your contact number', 'danger');
+            document.getElementById('contactNumber').focus();
+            return;
+        }
+        
+        if (!purpose) {
+            showVisitorAlert('Please select purpose of visit', 'danger');
+            document.getElementById('purpose').focus();
+            return;
+        }
+        
+        if (purpose === 'Other' && !document.getElementById('otherPurpose').value.trim()) {
+            showVisitorAlert('Please specify your purpose', 'danger');
+            document.getElementById('otherPurpose').focus();
+            return;
+        }
+        
+        // Show loading state
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+        submitBtn.disabled = true;
+        
+        // Get reCAPTCHA token for visitor submission
+        grecaptcha.ready(function() {
+            grecaptcha.execute(RECAPTCHA_SITE_KEY, {action: 'visitor_registration'}).then(function(token) {
+                // Prepare data
+                const visitorData = {
+                    visitor_id: document.getElementById('visitorID').value,
+                    full_name: fullName,
+                    contact_number: contactNumber,
+                    purpose: purpose === 'Other' ? document.getElementById('otherPurpose').value.trim() : purpose,
+                    person_visiting: document.getElementById('personVisiting').value.trim(),
+                    department: "<?php echo $department; ?>",
+                    location: "<?php echo $location; ?>",
+                    is_visitor_submission: true,
+                    'g-recaptcha-response': token
+                };
+                
+                // Send data to server
+                $.ajax({
+                    type: "POST",
+                    url: "process_gate.php", // Use the same file
+                    data: visitorData,
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            // Show success message
+                            showVisitorAlert('Visitor access recorded successfully!', 'success');
+                            
+                            // Update UI with visitor data
+                            updateGateUI({
+                                full_name: visitorData.full_name,
+                                id_number: visitorData.visitor_id,
+                                department: visitorData.department,
+                                role: 'Visitor',
+                                photo: 'admin/uploads/students/default.png',
+                                time_in_out: 'Time In Recorded',
+                                alert_class: 'alert-success'
+                            });
+                            
+                            // Close modal after delay and show confirmation
+                            setTimeout(() => {
+                                const modal = bootstrap.Modal.getInstance(document.getElementById('visitorInfoModal'));
+                                modal.hide();
+                                
+                                // Show confirmation modal
+                                showGateConfirmationModal({
+                                    full_name: visitorData.full_name,
+                                    id_number: visitorData.visitor_id,
+                                    department: visitorData.department,
+                                    role: 'Visitor',
+                                    photo: 'admin/uploads/students/default.png',
+                                    time_in_out: 'Time In Recorded'
+                                });
+                            }, 1500);
+                            
+                        } else {
+                            showVisitorAlert(response.message || 'Error recording visitor access', 'danger');
+                            submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit & Record Access';
+                            submitBtn.disabled = false;
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        showVisitorAlert('Error processing visitor information. Please try again.', 'danger');
+                        submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit & Record Access';
+                        submitBtn.disabled = false;
+                    }
+                });
+            }).catch(function(error) {
+                console.error('❌ reCAPTCHA error:', error);
+                showVisitorAlert('Security verification failed. Please try again.', 'danger');
+                submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Submit & Record Access';
+                submitBtn.disabled = false;
+            });
+        });
+    }
+
+    // Helper function to show alerts in visitor modal
+    function showVisitorAlert(message, type) {
+        // Remove existing alerts
+        const existingAlert = document.querySelector('#visitorInfoModal .alert');
+        if (existingAlert) {
+            existingAlert.remove();
+        }
+        
+        const alertHTML = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+        
+        document.querySelector('#visitorInfoModal .modal-body').insertAdjacentHTML('afterbegin', alertHTML);
+    }
+
+// Enhanced photo update function with better error handling
+function updatePersonPhoto(data) {
+    const photoElement = document.getElementById('pic');
+    let photoPath = "admin/uploads/students/default.png";
+    
+    if (data.photo) {
+        if (data.photo.startsWith('data:image')) {
+            // Base64 photo
+            photoPath = data.photo;
+        } else {
+            // File path photo - handle different user types
+            photoPath = getPhotoPathByUserType(data);
+        }
+    }
+    
+    // Add cache busting timestamp
+    const timestamp = new Date().getTime();
+    const finalPath = photoPath + (photoPath.includes('?') ? '&' : '?') + "t=" + timestamp;
+    
+    // Set the source
+    photoElement.src = finalPath;
+    
+    // Handle image loading errors
+    photoElement.onerror = function() {
+        console.warn('Failed to load photo:', finalPath, 'Using default');
+        this.src = "admin/uploads/students/default.png?t=" + timestamp;
+        this.onerror = null; // Prevent infinite loop
+    };
+    
+    // Handle successful load
+    photoElement.onload = function() {
+        console.log('Photo loaded successfully:', finalPath);
+    };
+}
+
+// Enhanced JavaScript photo path helper
+function getPhotoPathByUserType(data) {
+    const role = data.role ? data.role.toLowerCase() : '';
+    const photo = data.photo || '';
+    
+    // If photo already contains full path, return as is
+    if (photo.startsWith('admin/uploads/') || photo.startsWith('uploads/') || 
+        photo.startsWith('../') || photo.startsWith('./') || 
+        photo.startsWith('http') || photo.startsWith('data:image')) {
+        return photo;
+    }
+    
+    // Determine path based on role using consistent PHP function logic
+    switch(role) {
+        case 'instructor':
+        case 'faculty':
+            return `admin/uploads/instructors/${photo}`;
+            
+        case 'student':
+            return `admin/uploads/students/${photo}`;
+            
+        case 'staff':
+        case 'admin':
+        case 'security':
+        case 'personell':
+            return `admin/uploads/personell/${photo}`;
+        case 'visitor':
+            return `admin/uploads/visitors/${photo}`;
+            
+        default:
+            // Try to infer from other data
+            if (data.user_type) {
+                const userType = data.user_type.toLowerCase();
+                if (userType.includes('student')) {
+                    return `admin/uploads/students/${photo}`;
+                } else if (userType.includes('instructor') || userType.includes('faculty')) {
+                    return `admin/uploads/instructors/${photo}`;
+                } else if (userType.includes('staff') || userType.includes('admin')) {
+                    return `admin/uploads/personell/${photo}`;
+                }
+            }
+            return `admin/uploads/students/${photo}`; // Default fallback
+    }
+}
+
+// ENHANCED: Show comprehensive confirmation modal
+function showGateConfirmationModal(data) {
+    console.log("🎯 Showing gate confirmation modal with:", data);
+    
+    const now = new Date();
+    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateString = now.toLocaleDateString([], { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
     });
 
-    // =====================================================================
-    // SCANNER FUNCTIONALITY
-    // =====================================================================
-    function initScanner() {
-        const scannerBox = document.getElementById('scannerBox');
-        const scanIndicator = document.getElementById('scanIndicator');
+    // Determine access type and styling
+    let accessType, statusClass, statusIcon, statusText, voiceMessage;
+    
+    if (data.time_in_out === 'Time In Recorded' || data.time_in_out === 'TIME IN') {
+        accessType = 'ENTRY GRANTED';
+        statusClass = 'time-in';
+        statusIcon = 'fas fa-sign-in-alt';
+        statusText = 'TIME IN RECORDED';
+        voiceMessage = `Welcome ${data.full_name || ''}. Time in recorded at ${timeString}.`;
+    } else if (data.time_in_out === 'Time Out Recorded' || data.time_in_out === 'TIME OUT') {
+        accessType = 'EXIT RECORDED';
+        statusClass = 'time-out';
+        statusIcon = 'fas fa-sign-out-alt';
+        statusText = 'TIME OUT RECORDED';
+        voiceMessage = `Goodbye ${data.full_name || ''}. Time out recorded at ${timeString}.`;
+    } else if (data.error) {
+        accessType = 'ACCESS DENIED';
+        statusClass = 'access-denied';
+        statusIcon = 'fas fa-exclamation-triangle';
+        statusText = data.error;
+        voiceMessage = data.error;
+    } else {
+        accessType = 'ACCESS RECORDED';
+        statusClass = 'time-in';
+        statusIcon = 'fas fa-check-circle';
+        statusText = 'ACCESS RECORDED';
+        voiceMessage = "Access recorded successfully";
+    }
 
-        scannerBox.addEventListener('click', function() {
-            if (!isScannerActive) {
-                activateScanner();
-            }
+    // Set photo with fallback
+    let photoPath = data.photo || "admin/uploads/students/default.png";
+    
+    // Update modal content
+    const modalBody = document.querySelector('.confirmation-modal .modal-body');
+    modalBody.innerHTML = `
+        <!-- Photo Container -->
+        <div class="person-photo-container">
+            <img id="modalPersonPhoto" 
+                src="${photoPath}" 
+                alt="Person Photo" 
+                class="person-photo"
+                onerror="this.src='assets/img/section/type.jpg'">
+            ${data.role === 'Visitor' ? '<div class="visitor-badge">VISITOR</div>' : ''}
+        </div>
+
+        <!-- Person Name -->
+        <h4 id="modalPersonName" class="mb-3" style="color: var(--icon-color); font-weight: 600;">
+            ${data.full_name || 'Unknown Person'}
+        </h4>
+        
+        <!-- Person Information Card -->
+        <div class="person-info-card">
+            <div class="row text-start">
+                <div class="col-6 mb-2">
+                    <strong><i class="fas fa-id-card me-1"></i> ID Number:</strong><br>
+                    <span id="modalPersonId" style="color: var(--dark-text); font-size: 0.95rem;">
+                        ${data.id_number || 'N/A'}
+                    </span>
+                </div>
+                <div class="col-6 mb-2">
+                    <strong><i class="fas fa-user-tag me-1"></i> Role:</strong><br>
+                    <span id="modalPersonRole" style="color: var(--dark-text); font-size: 0.95rem;">
+                        <i class="fas ${getRoleIcon(data.role)} me-1"></i>
+                        ${data.role || 'N/A'}
+                    </span>
+                </div>
+                <!-- REMOVED: Department and Location fields -->
+            </div>
+        </div>
+        
+        <!-- Access Status -->
+        <div class="access-status ${statusClass} mt-3">
+            <i class="${statusIcon} me-2"></i>
+            <span id="modalAccessStatus" class="fw-bold">${statusText}</span>
+        </div>
+        
+        <!-- Time Display -->
+        <div class="time-display mt-3">
+            <div class="row">
+                <div class="col-6">
+                    <small class="text-muted">Time In</small>
+                    <div id="modalTimeIn" class="fw-bold text-primary">
+                        ${data.time_in || timeString}
+                    </div>
+                </div>
+                <div class="col-6">
+                    <small class="text-muted">Time Out</small>
+                    <div id="modalTimeOut" class="fw-bold text-primary">
+                        ${data.time_out || '-'}
+                    </div>
+                </div>
+            </div>
+            <div class="text-muted small mt-2">
+                <i class="far fa-calendar me-1"></i>${dateString}
+            </div>
+        </div>
+    `;
+
+    // Update modal header based on access type
+    const modalTitle = document.querySelector('.confirmation-modal .modal-title');
+    modalTitle.innerHTML = `
+        <i class="${statusIcon} me-2"></i>
+        ${accessType}
+    `;
+
+    // Update modal footer button
+    const modalFooter = document.querySelector('.confirmation-modal .modal-footer');
+    modalFooter.innerHTML = `
+        <button type="button" class="btn btn-primary px-4 py-2" onclick="closeGateModalAndContinue()">
+            <i class="fas fa-check me-2"></i>Confirm & Continue
+        </button>
+    `;
+
+    // Speak the message
+    speakMessage(voiceMessage);
+
+    // Show modal
+    const modalElement = document.getElementById('confirmationModal');
+    const modal = new bootstrap.Modal(modalElement);
+    
+    modal.show();
+
+    // Hide scanner overlay while modal is open
+    document.querySelector('.scanner-overlay').style.display = 'none';
+
+    // Restart scanner once modal is closed
+    modalElement.addEventListener('hidden.bs.modal', function () {
+        console.log("🎯 Gate modal closed, clearing and resetting");
+        clearAndResetScanner();
+    }, { once: true });
+}
+
+    // Function to close modal and continue
+    function closeGateModalAndContinue() {
+        const modalEl = document.getElementById('confirmationModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modalInstance.hide();
+
+        modalEl.addEventListener('hidden.bs.modal', function() {
+            clearAndResetScanner();
+        }, { once: true });
+    }
+
+// Helper function to get role icons
+function getRoleIcon(role) {
+    return roleIcons[role] || 'fa-user';
+}
+
+// Play access sound
+function playAccessSound(isSuccess) {
+    const audio = document.getElementById(isSuccess ? 'successAudio' : 'errorAudio');
+    audio.currentTime = 0;
+    audio.play().catch(error => {
+        console.log('Audio playback failed:', error);
+    });
+}
+
+// Show error message
+function showErrorMessage(message) {
+    document.getElementById('result').innerHTML = `
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <div>${message}</div>
+        </div>
+    `;
+    playAccessSound(false);
+    speakMessage(message);
+}
+
+// Speak message
+function speakMessage(message) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        
+        const speech = new SpeechSynthesisUtterance();
+        speech.text = message;
+        speech.volume = 1;
+        speech.rate = 1;
+        speech.pitch = 1.1;
+        
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+            const voice = voices.find(v => v.lang.includes('en')) || voices[0];
+            speech.voice = voice;
+        }
+        
+        window.speechSynthesis.speak(speech);
+    }
+}
+
+    // Add this helper function
+    function showProcessingState(idNumber) {
+        document.getElementById('result').innerHTML = `
+            <div class="d-flex justify-content-center align-items-center">
+                <div class="spinner-border text-primary me-2" role="status" style="width: 1rem; height: 1rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <span>Processing ID: ${idNumber}</span>
+            </div>
+        `;
+    }
+// Time and Date Functions
+function startTime() {
+    const today = new Date();
+    let h = today.getHours();
+    let m = today.getMinutes();
+    let s = today.getSeconds();
+    let period = h >= 12 ? 'PM' : 'AM';
+    
+    // Convert to 12-hour format
+    h = h % 12;
+    h = h ? h : 12; // the hour '0' should be '12'
+    
+    m = checkTime(m);
+    s = checkTime(s);
+    
+    document.getElementById('clock').innerHTML = h + ":" + m + ":" + s + " " + period;
+    
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    document.getElementById('currentDate').innerHTML = today.toLocaleDateString('en-US', options);
+    
+    setTimeout(startTime, 1000);
+}
+
+function checkTime(i) {
+    if (i < 10) {i = "0" + i};  // add zero in front of numbers < 10
+    return i;
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize speech synthesis
+    if ('speechSynthesis' in window) {
+        let voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) {
+            window.speechSynthesis.onvoiceschanged = function() {
+                voices = window.speechSynthesis.getVoices();
+            };
+        }
+    }
+    
+    // Check for camera permissions and initialize scanner
+    navigator.mediaDevices.getUserMedia({ video: true })
+        .then(() => {
+            initScanner();
+        })
+        .catch(err => {
+            console.error("Scanner permission denied:", err);
+            showErrorMessage("Tap Your ID to the Scanner");
         });
-
-        document.addEventListener('keydown', handleKeyPress);
-    }
-
-    function activateScanner() {
-        isScannerActive = true;
-        const scannerBox = document.getElementById('scannerBox');
-        const scannerTitle = document.getElementById('scannerTitle');
-        const scannerInstruction = document.getElementById('scannerInstruction');
-        const scanIndicator = document.getElementById('scanIndicator');
-        const scannerIcon = scannerBox.querySelector('.scanner-icon i');
-
-        scannerBox.classList.add('scanning');
-        scannerBox.classList.remove('scanned');
-        scannerTitle.textContent = 'Scanner Active - Scan Now';
-        scannerInstruction.textContent = 'Point your barcode scanner and scan the ID card';
-        scanIndicator.innerHTML = '<i class="fas fa-barcode me-2"></i>Scanner Active - Ready to receive scan';
-        scanIndicator.style.color = 'var(--accent-color)';
-        scannerIcon.className = 'fas fa-barcode';
-
-        scanBuffer = '';
-        clearTimeout(scanTimeout);
-
-        console.log('Scanner activated - ready to scan');
-    }
-
-    function deactivateScanner() {
-        isScannerActive = false;
-        const scannerBox = document.getElementById('scannerBox');
-        const scanIndicator = document.getElementById('scanIndicator');
-
-        scannerBox.classList.remove('scanning');
-        scanIndicator.innerHTML = '<i class="fas fa-rss me-2"></i>Scanner Ready - Click the box to scan again';
-        scanIndicator.style.color = 'var(--accent-color)';
-
-        console.log('Scanner deactivated');
-    }
-
-    function handleKeyPress(e) {
-        if (!isScannerActive || isTypingInFormField(e)) {
-            return;
-        }
-
-        clearTimeout(scanTimeout);
-
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            processScan(scanBuffer);
-            scanBuffer = '';
-            return;
-        }
-
-        if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-            e.preventDefault();
-            scanBuffer += e.key;
-            console.log('Scanner input:', e.key, 'Buffer:', scanBuffer);
-        }
-
-        scanTimeout = setTimeout(() => {
-            console.log('Scanner buffer cleared due to inactivity');
-            scanBuffer = '';
-        }, 200);
-    }
-
-    function isTypingInFormField(e) {
-        const activeElement = document.activeElement;
-        const formFields = ['INPUT', 'TEXTAREA', 'SELECT'];
+    
+    // Set up manual input field for numeric only with auto-formatting
+    const manualInput = document.getElementById('manualIdInput');
+    
+    // Only allow numbers and hyphen
+    manualInput.addEventListener('input', function(e) {
+        // Remove any non-numeric characters except hyphen
+        let value = this.value.replace(/[^0-9-]/g, '');
         
-        if (formFields.includes(activeElement.tagName)) {
-            return true;
+        // Auto-format as 0000-0000 when 8 digits are entered
+        if (value.length === 8 && !value.includes('-')) {
+            value = value.substring(0, 4) + '-' + value.substring(4, 8);
         }
         
+        // Update the input value
+        this.value = value;
+        
+        // Auto-submit when format is complete
+        if (/^\d{4}-\d{4}$/.test(value)) {
+            processManualInput();
+        }
+    });
+    
+    // Prevent paste of non-numeric characters
+    manualInput.addEventListener('paste', function(e) {
+        e.preventDefault();
+        let pastedData = (e.clipboardData || window.clipboardData).getData('text');
+        // Remove non-numeric characters
+        pastedData = pastedData.replace(/[^0-9]/g, '');
+        
+        // Auto-format if 8 digits
+        if (pastedData.length === 8) {
+            pastedData = pastedData.substring(0, 4) + '-' + pastedData.substring(4, 8);
+        }
+        
+        // Insert the cleaned data
+        document.execCommand('insertText', false, pastedData);
+        
+        // Auto-submit if format is complete
+        if (/^\d{4}-\d{4}$/.test(pastedData)) {
+            setTimeout(() => processManualInput(), 100);
+        }
+    });
+    
+    // Focus on input field
+    manualInput.focus();
+});
+
+// Handle page visibility changes
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        if (scanner) scanner.clear().catch(() => {});
+    } else {
+        initScanner();
+    }
+});
+
+// Clean up on page unload
+window.addEventListener('beforeunload', function() {
+    if (scanner) scanner.clear().catch(() => {});
+});
+
+// Restart scanner function
+function restartScanner() {
+    if (scanner) {
+        scanner.clear().then(() => {
+            initScanner();
+        }).catch(err => {
+            console.error('Error restarting scanner:', err);
+            initScanner();
+        });
+    } else {
+        initScanner();
+    }
+}
+
+// NEW: Clear and reset scanner after success/error
+function clearAndResetScanner() {
+    console.log("🔄 Clearing and resetting scanner display");
+    
+    // Clear manual input field
+    document.getElementById('manualIdInput').value = '';
+    
+    // Reset scanner alert to default
+    document.getElementById('in_out').innerHTML = '<i class="fas fa-id-card me-2"></i>Scan Your ID Card for Gate Access';
+    document.getElementById('in_out').style.color = 'var(--icon-color)';
+    
+    // Clear result display
+    document.getElementById('result').innerHTML = '';
+    
+    // Reset person photo to default
+    document.getElementById('pic').src = 'assets/img/section/type.jpg';
+    
+    // Show scanner overlay
+    document.querySelector('.scanner-overlay').style.display = 'flex';
+    
+    // Re-enable inputs
+    setInputsDisabled(false);
+    
+    // Focus on manual input
+    document.getElementById('manualIdInput').focus();
+    
+    // Restart scanner
+    restartScanner();
+}
+// Input validation functions for visitor modal
+function validateFullName(input) {
+    const value = input.value.trim();
+    const nameRegex = /^[A-Za-z\s]+$/;
+    const charCount = document.getElementById('nameCharCount');
+    
+    // Update character count
+    charCount.textContent = `${value.length}/100 characters`;
+    if (value.length > 80) {
+        charCount.classList.add('warning');
+    } else {
+        charCount.classList.remove('warning');
+    }
+    
+    // Validate pattern
+    if (value && !nameRegex.test(value)) {
+        input.classList.add('is-invalid');
         return false;
+    } else {
+        input.classList.remove('is-invalid');
+        return true;
     }
+}
 
-    function formatIdNumber(id) {
-        const cleaned = id.replace(/\D/g, '');
-        
-        if (cleaned.length === 8) {
-            return cleaned.substring(0, 4) + '-' + cleaned.substring(4, 8);
-        }
-        
-        return cleaned;
+function validateContactNumber(input) {
+    const value = input.value.trim();
+    const contactRegex = /^[0-9]{0,11}$/;
+    const charCount = document.getElementById('contactCharCount');
+    
+    // Update character count
+    charCount.textContent = `${value.length}/11 digits`;
+    if (value.length === 11) {
+        charCount.classList.add('warning');
+    } else {
+        charCount.classList.remove('warning');
     }
+    
+    // Remove any non-numeric characters
+    const numericValue = value.replace(/[^0-9]/g, '');
+    if (numericValue !== value) {
+        input.value = numericValue;
+    }
+    
+    // Validate pattern
+    if (value && !contactRegex.test(value)) {
+        input.classList.add('is-invalid');
+        return false;
+    } else {
+        input.classList.remove('is-invalid');
+        return true;
+    }
+}
 
-    function processScan(data) {
-        if (data.trim().length > 0) {
-            const formattedValue = formatIdNumber(data.trim());
-            
-            console.log('Raw scan data:', data);
-            console.log('Formatted ID:', formattedValue);
-            
-            $('#scan-id-input').val(formattedValue);
-            
-            updateBarcodeDisplay(formattedValue);
-            
-            const scannerBox = document.getElementById('scannerBox');
-            const scannerTitle = document.getElementById('scannerTitle');
-            const scannerInstruction = document.getElementById('scannerInstruction');
-            const scanIndicator = document.getElementById('scanIndicator');
-            
-            scannerBox.classList.remove('scanning');
-            scannerBox.classList.add('scanned');
-            scannerTitle.textContent = 'ID Scanned Successfully!';
-            scannerInstruction.textContent = 'ID: ' + formattedValue;
-            scanIndicator.innerHTML = '<i class="fas fa-check-circle me-2"></i>Barcode scanned successfully!';
-            scanIndicator.style.color = 'var(--success-color)';
-            
-            setTimeout(() => {
-                console.log('Auto-validating scanned ID:', formattedValue);
-                $('#logform').trigger('submit');
-            }, 1000);
-            
-            setTimeout(deactivateScanner, 2000);
-        }
+function updateCharacterCount(inputId, countId, maxLength) {
+    const input = document.getElementById(inputId);
+    const count = document.getElementById(countId);
+    const value = input.value;
+    
+    count.textContent = `${value.length}/${maxLength} characters`;
+    if (value.length > maxLength * 0.8) {
+        count.classList.add('warning');
+    } else {
+        count.classList.remove('warning');
     }
+}
 
-    function updateBarcodeDisplay(value) {
-        const barcodeDisplay = document.getElementById('barcodeDisplay');
-        const barcodePlaceholder = document.getElementById('barcodePlaceholder');
-        const barcodeValue = document.getElementById('barcodeValue');
-        
-        barcodePlaceholder.classList.add('d-none');
-        barcodeValue.textContent = value;
-        barcodeValue.classList.remove('d-none');
-        barcodeValue.classList.add('barcode-value');
-        
-        barcodeDisplay.classList.add('barcode-value');
-        
-        setTimeout(() => {
-            barcodeDisplay.classList.remove('barcode-value');
-        }, 1000);
+function toggleOtherPurpose() {
+    const purpose = document.getElementById('purpose').value;
+    const otherContainer = document.getElementById('otherPurposeContainer');
+    const otherInput = document.getElementById('otherPurpose');
+    
+    if (purpose === 'Other') {
+        otherContainer.style.display = 'block';
+        otherInput.required = true;
+    } else {
+        otherContainer.style.display = 'none';
+        otherInput.required = false;
+        otherInput.value = '';
     }
+}
 
-    function resetScannerUI() {
-        const scannerBox = document.getElementById('scannerBox');
-        const scannerTitle = document.getElementById('scannerTitle');
-        const scannerInstruction = document.getElementById('scannerInstruction');
-        const scanIndicator = document.getElementById('scanIndicator');
-        const barcodePlaceholder = document.getElementById('barcodePlaceholder');
-        const barcodeValue = document.getElementById('barcodeValue');
-        
-        scannerBox.classList.remove('scanning', 'scanned');
-        scannerTitle.textContent = 'Click to Activate Scanner';
-        scannerInstruction.textContent = 'Click this box then scan your ID card';
-        scanIndicator.innerHTML = '<i class="fas fa-rss me-2"></i>Scanner Ready - Click the box above to start scanning';
-        scanIndicator.style.color = 'var(--accent-color)';
-        barcodePlaceholder.classList.remove('d-none');
-        barcodeValue.classList.add('d-none');
-        barcodeValue.textContent = '';
-        
-        deactivateScanner();
+// Enhanced form validation for visitor submission
+function validateVisitorForm() {
+    const fullName = document.getElementById('fullName');
+    const contactNumber = document.getElementById('contactNumber');
+    const purpose = document.getElementById('purpose');
+    const otherPurpose = document.getElementById('otherPurpose');
+    
+    let isValid = true;
+    
+    // Validate Full Name
+    if (!validateFullName(fullName) || !fullName.value.trim()) {
+        fullName.classList.add('is-invalid');
+        isValid = false;
+    } else {
+        fullName.classList.remove('is-invalid');
     }
-    </script>
+    
+    // Validate Contact Number
+    if (!validateContactNumber(contactNumber) || contactNumber.value.length !== 11) {
+        contactNumber.classList.add('is-invalid');
+        isValid = false;
+    } else {
+        contactNumber.classList.remove('is-invalid');
+    }
+    
+    // Validate Purpose
+    if (!purpose.value) {
+        purpose.classList.add('is-invalid');
+        isValid = false;
+    } else {
+        purpose.classList.remove('is-invalid');
+    }
+    
+    // Validate Other Purpose if selected
+    if (purpose.value === 'Other' && !otherPurpose.value.trim()) {
+        otherPurpose.classList.add('is-invalid');
+        isValid = false;
+    } else {
+        otherPurpose.classList.remove('is-invalid');
+    }
+    
+    return isValid;
+}
+</script>
+
+<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
