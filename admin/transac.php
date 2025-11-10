@@ -258,41 +258,41 @@ if ($isAjaxRequest) {
             $stmt->close();
             break;
 
-        case 'delete_room':
+       case 'delete_room':
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         jsonResponse('error', 'Invalid request method');
     }
 
-    // Validate required field
-    if (empty($_POST['id'])) {
-        jsonResponse('error', 'Room ID is required');
+    // Validate required field - now using room_name instead of id
+    if (empty($_POST['room_name'])) {
+        jsonResponse('error', 'Room name is required');
     }
 
     // Sanitize input
-    $id = intval($_POST['id']);
-    error_log("Attempting to delete room with ID: " . $id); // Log for debugging
+    $roomName = trim($_POST['room_name']);
+    error_log("Attempting to delete room with name: " . $roomName);
 
-    if ($id <= 0) {
-        jsonResponse('error', 'Invalid room ID: ' . $id);
+    if (empty($roomName)) {
+        jsonResponse('error', 'Invalid room name');
     }
 
     try {
         // Check if room exists first
-        $checkRoom = $db->prepare("SELECT id, room FROM rooms WHERE id = ?");
+        $checkRoom = $db->prepare("SELECT id, room FROM rooms WHERE room = ?");
         if (!$checkRoom) {
             throw new Exception('Prepare failed: ' . $db->error);
         }
         
-        $checkRoom->bind_param("i", $id);
+        $checkRoom->bind_param("s", $roomName);
         $checkRoom->execute();
         $checkRoom->store_result();
         
         if ($checkRoom->num_rows === 0) {
             $checkRoom->close();
-            jsonResponse('error', 'Room not found with ID: ' . $id);
+            jsonResponse('error', 'Room not found: "' . $roomName . '"');
         }
         
-        // Get room name for dependency check
+        // Get room details
         $checkRoom->bind_result($roomId, $roomName);
         $checkRoom->fetch();
         $checkRoom->close();
@@ -313,13 +313,13 @@ if ($isAjaxRequest) {
             jsonResponse('error', 'Cannot delete room "' . $roomName . '" - it has ' . $scheduleCount . ' scheduled class(es)');
         }
 
-        // Delete room
-        $stmt = $db->prepare("DELETE FROM rooms WHERE id = ?");
+        // Delete room by name
+        $stmt = $db->prepare("DELETE FROM rooms WHERE room = ?");
         if (!$stmt) {
             throw new Exception('Prepare failed: ' . $db->error);
         }
         
-        $stmt->bind_param("i", $id);
+        $stmt->bind_param("s", $roomName);
         
         if ($stmt->execute()) {
             if ($stmt->affected_rows > 0) {
