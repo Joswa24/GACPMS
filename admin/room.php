@@ -23,6 +23,7 @@ include '../connection.php';
 <html lang="en">
 <?php include 'header.php'; ?>
 
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -32,7 +33,6 @@ include '../connection.php';
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <style>
-        /* Your existing CSS styles remain the same */
         :root {
             --primary-color: #e1e7f0ff;
             --secondary-color: #b0caf0ff;
@@ -510,7 +510,12 @@ include '../connection.php';
                                                         class="btn btn-sm btn-edit e_room_id">
                                                     <i class="fas fa-edit"></i> Edit 
                                                 </button>
-                                                <button data-id="<?php echo $row['id']; ?>" 
+                                                <button authrole="<?php echo $row['authorized_personnel'];?>" 
+                                                        descr="<?php echo $row['descr'];?>" 
+                                                        pass="<?php echo $row['password'];?>" 
+                                                        room="<?php echo $row['room'];?>" 
+                                                        department="<?php echo $row['department'];?>"  
+                                                        data-id="<?php echo $row['id']; ?>" 
                                                         class="btn btn-sm btn-delete d_room_id">
                                                     <i class="fas fa-trash"></i> Delete 
                                                 </button>
@@ -705,480 +710,449 @@ include '../connection.php';
 
     <script>
     $(document).ready(function() {
-        // Initialize DataTable
-        var dataTable = $('#myDataTable').DataTable({
-            order: [[0, 'desc']],
-            stateSave: true
-        });
+    // Initialize DataTable
+    var dataTable = $('#myDataTable').DataTable({
+        order: [[0, 'desc']],
+        stateSave: true
+    });
 
-        // Password visibility toggle function for modal inputs
-        function togglePasswordVisibility(inputId, button) {
-            const input = document.getElementById(inputId);
-            const icon = button.querySelector('i');
-            
-            if (input.type === 'password') {
-                input.type = 'text';
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-eye-slash');
-            } else {
-                input.type = 'password';
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            }
+    // Password visibility toggle function for modal inputs
+    function togglePasswordVisibility(inputId, button) {
+        const input = document.getElementById(inputId);
+        const icon = button.querySelector('i');
+        
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
         }
+    }
 
-        // Password toggle function for table view
-        $(document).on('click', '.toggle-password', function() {
-            const button = $(this);
-            const targetId = button.data('target');
-            const actualPassword = button.data('password');
-            const passwordSpan = $('#' + targetId);
-            const icon = button.find('i');
+    // Password toggle function for table view
+    $(document).on('click', '.toggle-password', function() {
+        const button = $(this);
+        const targetId = button.data('target');
+        const actualPassword = button.data('password');
+        const passwordSpan = $('#' + targetId);
+        const icon = button.find('i');
+        
+        if (passwordSpan.hasClass('encrypted-password')) {
+            // Show actual password
+            passwordSpan.removeClass('encrypted-password')
+                       .addClass('actual-password')
+                       .text(actualPassword);
+            icon.removeClass('fa-eye').addClass('fa-eye-slash');
+            button.addClass('btn-warning').removeClass('btn-view');
             
-            if (passwordSpan.hasClass('encrypted-password')) {
-                // Show actual password
-                passwordSpan.removeClass('encrypted-password')
-                           .addClass('actual-password')
-                           .text(actualPassword);
-                icon.removeClass('fa-eye').addClass('fa-eye-slash');
-                button.addClass('btn-warning').removeClass('btn-view');
+            // Auto hide after 5 seconds
+            setTimeout(() => {
+                if (passwordSpan.hasClass('actual-password')) {
+                    passwordSpan.removeClass('actual-password')
+                               .addClass('encrypted-password')
+                               .html('••••••••••');
+                    icon.removeClass('fa-eye-slash').addClass('fa-eye');
+                    button.removeClass('btn-warning').addClass('btn-view');
+                }
+            }, 5000);
+        } else {
+            // Hide password
+            passwordSpan.removeClass('actual-password')
+                       .addClass('encrypted-password')
+                       .html('••••••••••');
+            icon.removeClass('fa-eye-slash').addClass('fa-eye');
+            button.removeClass('btn-warning').addClass('btn-view');
+        }
+    });
+
+    // Reset form function
+    function resetForm() {
+        $('.error-message').text('');
+        $('#roomForm')[0].reset();
+        // Reset password visibility
+        const eyeIcons = document.querySelectorAll('.password-toggle i');
+        eyeIcons.forEach(icon => {
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        });
+        const passwordInputs = document.querySelectorAll('input[type="text"][id$="pass"]');
+        passwordInputs.forEach(input => {
+            input.type = 'password';
+        });
+    }
+
+    // ==============
+    // CREATE (ADD ROOM)
+    // ==============
+    $('#roomForm').submit(function(e) {
+        e.preventDefault();
+        
+        $('.error-message').text('');
+        const roomdpt = $('#roomdpt').val();
+        const roomrole = $('#roomrole').val();
+        const roomname = $('#roomname').val().trim();
+        const roomdesc = $('#roomdesc').val().trim();
+        const roompass = $('#roompass').val().trim();
+        let isValid = true;
+
+        // Validation
+        if (!roomname) { 
+            $('#roomname-error').text('Room name is required'); 
+            isValid = false; 
+        }
+        if (!roomdesc) { 
+            $('#roomdesc-error').text('Description is required'); 
+            isValid = false; 
+        }
+        if (!roompass) { 
+            $('#roompass-error').text('Password is required'); 
+            isValid = false; 
+        } else if (roompass.length < 6) { 
+            $('#roompass-error').text('Password must be at least 6 characters'); 
+            isValid = false; 
+        }
+        
+        if (!isValid) return;
+
+        // Show loading state
+        $('#btn-room').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...');
+        $('#btn-room').prop('disabled', true);
+
+        $.ajax({
+            type: "POST",
+            url: "transac.php?action=add_room",
+            data: { roomdpt, roomrole, roomname, roomdesc, roompass },
+            dataType: 'json',
+            success: function(response) {
+                // Reset button state
+                $('#btn-room').html('Save');
+                $('#btn-room').prop('disabled', false);
                 
-                // Auto hide after 5 seconds
-                setTimeout(() => {
-                    if (passwordSpan.hasClass('actual-password')) {
-                        passwordSpan.removeClass('actual-password')
-                                   .addClass('encrypted-password')
-                                   .html('••••••••••');
-                        icon.removeClass('fa-eye-slash').addClass('fa-eye');
-                        button.removeClass('btn-warning').addClass('btn-view');
-                    }
-                }, 5000);
-            } else {
-                // Hide password
-                passwordSpan.removeClass('actual-password')
-                           .addClass('encrypted-password')
-                           .html('••••••••••');
-                icon.removeClass('fa-eye-slash').addClass('fa-eye');
-                button.removeClass('btn-warning').addClass('btn-view');
+                if (response.status === 'success') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: response.message,
+                        showConfirmButton: false,
+                        timer: 1500
+                    }).then(() => {
+                        $('#roomModal').modal('hide');
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error!',
+                        text: response.message
+                    });
+                }
+            },
+            error: function(xhr, status, error) {
+                // Reset button state
+                $('#btn-room').html('Save');
+                $('#btn-room').prop('disabled', false);
+                
+                console.log('XHR Response:', xhr.responseText);
+                console.log('Status:', status);
+                console.log('Error:', error);
+                
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error!',
+                    text: 'An error occurred while processing your request'
+                });
             }
         });
+    });
 
-        // Reset form function
-        function resetForm() {
-            $('.error-message').text('');
-            $('#roomForm')[0].reset();
-            // Reset password visibility
-            const eyeIcons = document.querySelectorAll('.password-toggle i');
-            eyeIcons.forEach(icon => {
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            });
-            const passwordInputs = document.querySelectorAll('input[type="text"][id$="pass"]');
-            passwordInputs.forEach(input => {
-                input.type = 'password';
-            });
+    // ==========
+    // READ (EDIT ROOM)
+    // ==========
+    $(document).on('click', '.e_room_id', function() {
+        const id = $(this).data('id');
+        const department = $(this).attr('department');
+        const role = $(this).attr('authrole');
+        const room = $(this).attr('room');
+        const descr = $(this).attr('descr');
+        const pass = $(this).attr('pass');
+
+        // Populate edit form
+        $('#edit_roomid').val(id);
+        $('#eroomdpt').val(department);
+        $('#eroomrole').val(role);
+        $('#eroomname').val(room);
+        $('#eroomdesc').val(descr);
+        $('#eroompass').val(pass);
+        
+        // Reset password visibility
+        const eyeIcon = document.querySelector('#editRoomModal .password-toggle i');
+        eyeIcon.classList.remove('fa-eye-slash');
+        eyeIcon.classList.add('fa-eye');
+        $('#eroompass').attr('type', 'password');
+        
+        // Show modal
+        $('#editRoomModal').modal('show');
+    });
+
+    // ==========
+    // UPDATE ROOM
+    // ==========
+    $('#editRoomForm').submit(function(e) {
+        e.preventDefault();
+        
+        const id = $('#edit_roomid').val();
+        const roomdpt = $('#eroomdpt').val();
+        const roomrole = $('#eroomrole').val();
+        const roomname = $('#eroomname').val().trim();
+        const roomdesc = $('#eroomdesc').val().trim();
+        const roompass = $('#eroompass').val().trim();
+
+        // Validation
+        let isValid = true;
+        if (!roomname) { 
+            $('#eroomname-error').text('Room name is required'); 
+            isValid = false; 
+        } else { 
+            $('#eroomname-error').text(''); 
         }
+        if (!roomdesc) { 
+            $('#eroomdesc-error').text('Description is required'); 
+            isValid = false; 
+        } else { 
+            $('#eroomdesc-error').text(''); 
+        }
+        if (!roompass) { 
+            $('#eroompass-error').text('Password is required'); 
+            isValid = false; 
+        } else if (roompass.length < 6) { 
+            $('#eroompass-error').text('Password must be at least 6 characters'); 
+            isValid = false; 
+        } else { 
+            $('#eroompass-error').text(''); 
+        }
+        
+        if (!isValid) return;
 
-        // ==============
-        // CREATE (ADD ROOM) - CORRECTED
-        // ==============
-        $('#roomForm').submit(function(e) {
-            e.preventDefault();
-            
-            $('.error-message').text('');
-            const roomdpt = $('#roomdpt').val();
-            const roomrole = $('#roomrole').val();
-            const roomname = $('#roomname').val().trim();
-            const roomdesc = $('#roomdesc').val().trim();
-            const roompass = $('#roompass').val().trim();
-            let isValid = true;
+        // Show loading state
+        $('#btn-editroom').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...');
+        $('#btn-editroom').prop('disabled', true);
 
-            // Validation
-            if (!roomname) { 
-                $('#roomname-error').text('Room name is required'); 
-                isValid = false; 
-            }
-            if (!roomdesc) { 
-                $('#roomdesc-error').text('Description is required'); 
-                isValid = false; 
-            }
-            if (!roompass) { 
-                $('#roompass-error').text('Password is required'); 
-                isValid = false; 
-            } else if (roompass.length < 6) { 
-                $('#roompass-error').text('Password must be at least 6 characters'); 
-                isValid = false; 
-            }
-            
-            if (!isValid) return;
-
-            // Show loading state
-            const $btn = $('#btn-room');
-            $btn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...');
-            $btn.prop('disabled', true);
-
-            $.ajax({
-                type: "POST",
-                url: "transac.php?action=add_room",
-                data: { 
-                    roomdpt: roomdpt,
-                    roomrole: roomrole,
-                    roomname: roomname,
-                    roomdesc: roomdesc,
-                    roompass: roompass 
-                },
-                dataType: 'json',
-                success: function(response) {
-                    $btn.html('Save');
-                    $btn.prop('disabled', false);
-                    
-                    if (response.status === 'success') {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Success!',
-                            text: response.message,
-                            showConfirmButton: false,
-                            timer: 1500
-                        }).then(() => {
-                            $('#roomModal').modal('hide');
-                            location.reload();
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error!',
-                            text: response.message
-                        });
-                    }
-                },
-                error: function(xhr, status, error) {
-                    $btn.html('Save');
-                    $btn.prop('disabled', false);
-                    
-                    console.error('AJAX Error:', {
-                        response: xhr.responseText,
-                        status: status,
-                        error: error
+        $.ajax({
+            type: "POST",
+            url: "transac.php?action=update_room",
+            data: { 
+                id: id,
+                roomdpt: roomdpt,
+                roomrole: roomrole,
+                roomname: roomname,
+                roomdesc: roomdesc,
+                roompass: roompass
+            },
+            dataType: 'json',
+            success: function(response) {
+                // Reset button state
+                $('#btn-editroom').html('Update');
+                $('#btn-editroom').prop('disabled', false);
+                
+                if (response.status === 'success') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: response.message,
+                        showConfirmButton: false,
+                        timer: 1500
+                    }).then(() => {
+                        $('#editRoomModal').modal('hide');
+                        location.reload();
                     });
-                    
-                    let errorMessage = 'An error occurred while processing your request';
-                    try {
-                        const jsonResponse = JSON.parse(xhr.responseText);
-                        if (jsonResponse.message) {
-                            errorMessage = jsonResponse.message;
-                        }
-                    } catch (e) {
-                        // Not JSON response
-                    }
-                    
+                } else {
                     Swal.fire({
                         icon: 'error',
                         title: 'Error!',
-                        text: errorMessage
+                        text: response.message
                     });
                 }
-            });
+            },
+            error: function(xhr, status, error) {
+                // Reset button state
+                $('#btn-editroom').html('Update');
+                $('#btn-editroom').prop('disabled', false);
+                
+                console.log('XHR Response:', xhr.responseText);
+                console.log('Status:', status);
+                console.log('Error:', error);
+                
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error!',
+                    text: 'An error occurred while processing your request'
+                });
+            }
         });
+    });
 
-        // ==========
-        // READ (EDIT ROOM)
-        // ==========
-        $(document).on('click', '.e_room_id', function() {
-            const id = $(this).data('id');
-            const department = $(this).attr('department');
-            const role = $(this).attr('authrole');
-            const room = $(this).attr('room');
-            const descr = $(this).attr('descr');
-            const pass = $(this).attr('pass');
-
-            // Populate edit form
-            $('#edit_roomid').val(id);
-            $('#eroomdpt').val(department);
-            $('#eroomrole').val(role);
-            $('#eroomname').val(room);
-            $('#eroomdesc').val(descr);
-            $('#eroompass').val(pass);
-            
-            // Reset password visibility
-            const eyeIcon = document.querySelector('#editRoomModal .password-toggle i');
-            if (eyeIcon) {
-                eyeIcon.classList.remove('fa-eye-slash');
-                eyeIcon.classList.add('fa-eye');
-            }
-            $('#eroompass').attr('type', 'password');
-            
-            // Show modal
-            $('#editRoomModal').modal('show');
-        });
-
-        // ==========
-        // UPDATE ROOM - CORRECTED
-        // ==========
-        $('#editRoomForm').submit(function(e) {
-            e.preventDefault();
-            
-            const id = $('#edit_roomid').val();
-            const roomdpt = $('#eroomdpt').val();
-            const roomrole = $('#eroomrole').val();
-            const roomname = $('#eroomname').val().trim();
-            const roomdesc = $('#eroomdesc').val().trim();
-            const roompass = $('#eroompass').val().trim();
-
-            // Validation
-            let isValid = true;
-            if (!roomname) { 
-                $('#eroomname-error').text('Room name is required'); 
-                isValid = false; 
-            } else { 
-                $('#eroomname-error').text(''); 
-            }
-            if (!roomdesc) { 
-                $('#eroomdesc-error').text('Description is required'); 
-                isValid = false; 
-            } else { 
-                $('#eroomdesc-error').text(''); 
-            }
-            if (!roompass) { 
-                $('#eroompass-error').text('Password is required'); 
-                isValid = false; 
-            } else if (roompass.length < 6) { 
-                $('#eroompass-error').text('Password must be at least 6 characters'); 
-                isValid = false; 
-            } else { 
-                $('#eroompass-error').text(''); 
-            }
-            
-            if (!isValid) return;
-
-            // Show loading state
-            const $btn = $('#btn-editroom');
-            $btn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...');
-            $btn.prop('disabled', true);
-
-            $.ajax({
-                type: "POST",
-                url: "transac.php?action=update_room",
-                data: { 
-                    id: id,
-                    roomdpt: roomdpt,
-                    roomrole: roomrole,
-                    roomname: roomname,
-                    roomdesc: roomdesc,
-                    roompass: roompass
-                },
-                dataType: 'json',
-                success: function(response) {
-                    $btn.html('Update');
-                    $btn.prop('disabled', false);
-                    
-                    if (response.status === 'success') {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Success!',
-                            text: response.message,
-                            showConfirmButton: false,
-                            timer: 1500
-                        }).then(() => {
-                            $('#editRoomModal').modal('hide');
-                            location.reload();
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error!',
-                            text: response.message
-                        });
-                    }
-                },
-                error: function(xhr, status, error) {
-                    $btn.html('Update');
-                    $btn.prop('disabled', false);
-                    
-                    console.error('AJAX Error:', {
-                        response: xhr.responseText,
-                        status: status,
-                        error: error
-                    });
-                    
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error!',
-                        text: 'An error occurred while updating the room'
-                    });
-                }
-            });
-        });
-
-        // ==========
-        // DELETE ROOM - CORRECTED VERSION
-        // ==========
-        $(document).on('click', '.d_room_id', function() {
-            const $button = $(this);
-            const id = $button.data('id');
-            
-            // Get room name from the table row for the confirmation message
-            const $row = $button.closest('tr');
-            const roomName = $row.find('td:eq(2)').text().trim(); // 3rd column (Room name)
-            
-            console.log('Delete clicked - ID:', id, 'Room:', roomName);
-            
-            Swal.fire({
-                title: 'Delete Room?',
-                text: `Are you sure you want to delete "${roomName}"? This action cannot be undone.`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Yes, delete it!',
-                cancelButtonText: 'Cancel',
-                reverseButtons: true
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Show loading state
-                    $button.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
-                    $button.prop('disabled', true);
-                    
-                    $.ajax({
-                        type: 'POST',
-                        url: "transac.php?action=delete_room",
-                        data: { id: id },
-                        dataType: 'json',
-                        success: function(response) {
-                            console.log('Delete response:', response);
+    // ==========
+    // DELETE 
+    // ==========
+    $(document).on('click', '.d_room_id', function() {
+        const $button = $(this);
+        const id = $button.data('id');
+        const roomName = $button.attr('room');
+        
+        Swal.fire({
+            title: 'Delete Room?',
+            text: `Are you sure you want to delete "${roomName}"?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Show loading state
+                $button.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
+                $button.prop('disabled', true);
+                
+                $.ajax({
+                    type: 'POST',
+                    url: "transac.php?action=delete_room",
+                    data: { id: id },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            // Remove row from DataTable
+                            dataTable.row($button.closest('tr')).remove().draw();
                             
-                            if (response.status === 'success') {
-                                // Remove row from DataTable
-                                dataTable.row($button.closest('tr')).remove().draw();
-                                
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'Deleted!',
-                                    text: response.message,
-                                    showConfirmButton: false,
-                                    timer: 1500
-                                });
-                            } else {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'Error!',
-                                    text: response.message || 'Failed to delete room'
-                                });
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            console.error('Delete AJAX Error:', {
-                                response: xhr.responseText,
-                                status: status,
-                                error: error
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Deleted!',
+                                text: response.message,
+                                showConfirmButton: false,
+                                timer: 1500
                             });
-                            
+                        } else {
                             Swal.fire({
                                 icon: 'error',
                                 title: 'Error!',
-                                text: 'An error occurred while deleting the room. Please try again.'
+                                text: response.message || 'Failed to delete room'
                             });
-                        },
-                        complete: function() {
-                            // Restore button state
-                            $button.html('<i class="fas fa-trash"></i> Delete');
-                            $button.prop('disabled', false);
                         }
-                    });
-                }
-            });
+                    },
+                    error: function(xhr, status, error) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error!',
+                            text: 'An error occurred while deleting the room'
+                        });
+                    },
+                    complete: function() {
+                        // Restore button state
+                        $button.html('<i class="fas fa-trash"></i> Delete');
+                        $button.prop('disabled', false);
+                    }
+                });
+            }
         });
+    });
 
-        // Reset modal when closed
-        $('#roomModal').on('hidden.bs.modal', function() {
-            resetForm();
+    // Reset modal when closed
+    $('#roomModal').on('hidden.bs.modal', function() {
+        resetForm();
+    });
+    
+    $('#editRoomModal').on('hidden.bs.modal', function() {
+        $('.error-message').text('');
+    });
+});
+   
+
+    // Generate strong password function
+    function generateStrongPassword() {
+        const length = 12;
+        const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
+        let password = "";
+        
+        // Ensure at least one of each required character type
+        password += "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[Math.floor(Math.random() * 26)]; // uppercase
+        password += "abcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random() * 26)]; // lowercase
+        password += "0123456789"[Math.floor(Math.random() * 10)]; // number
+        password += "!@#$%^&*()_+-=[]{}|;:,.<>?"[Math.floor(Math.random() * 23)]; // special char
+        
+        // Fill the rest with random characters
+        for (let i = password.length; i < length; i++) {
+            password += charset[Math.floor(Math.random() * charset.length)];
+        }
+        
+        // Shuffle the password to make it more random
+        password = password.split('').sort(() => 0.5 - Math.random()).join('');
+        
+        return password;
+    }
+
+    // Suggest password function
+    function suggestPassword() {
+        const suggestedPassword = generateStrongPassword();
+        
+        // Set the suggested password in the add room modal
+        $('#roompass').val(suggestedPassword);
+        
+        // Show success message
+        Swal.fire({
+            icon: 'success',
+            title: 'Strong Password Generated!',
+            text: 'A secure password has been suggested. You can use this or create your own.',
+            showConfirmButton: false,
+            timer: 2000
         });
         
-        $('#editRoomModal').on('hidden.bs.modal', function() {
-            $('.error-message').text('');
-        });
-
-        // Generate strong password function
-        function generateStrongPassword() {
-            const length = 12;
-            const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
-            let password = "";
-            
-            // Ensure at least one of each required character type
-            password += "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[Math.floor(Math.random() * 26)]; // uppercase
-            password += "abcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random() * 26)]; // lowercase
-            password += "0123456789"[Math.floor(Math.random() * 10)]; // number
-            password += "!@#$%^&*()_+-=[]{}|;:,.<>?"[Math.floor(Math.random() * 23)]; // special char
-            
-            // Fill the rest with random characters
-            for (let i = password.length; i < length; i++) {
-                password += charset[Math.floor(Math.random() * charset.length)];
-            }
-            
-            // Shuffle the password to make it more random
-            password = password.split('').sort(() => 0.5 - Math.random()).join('');
-            
-            return password;
+        // Ensure password is visible so user can see the suggestion
+        const roompassInput = document.getElementById('roompass');
+        const roompassToggle = document.querySelector('#roomModal .password-toggle i');
+        if (roompassInput.type === 'password') {
+            roompassInput.type = 'text';
+            roompassToggle.classList.remove('fa-eye');
+            roompassToggle.classList.add('fa-eye-slash');
         }
+    }
 
-        // Suggest password function
-        function suggestPassword() {
-            const suggestedPassword = generateStrongPassword();
-            
-            // Set the suggested password in the add room modal
-            $('#roompass').val(suggestedPassword);
-            
-            // Show success message
-            Swal.fire({
-                icon: 'success',
-                title: 'Strong Password Generated!',
-                text: 'A secure password has been suggested. You can use this or create your own.',
-                showConfirmButton: false,
-                timer: 2000
-            });
-            
-            // Ensure password is visible so user can see the suggestion
-            const roompassInput = document.getElementById('roompass');
-            const roompassToggle = document.querySelector('#roomModal .password-toggle i');
-            if (roompassInput && roompassInput.type === 'password') {
-                roompassInput.type = 'text';
-                roompassToggle.classList.remove('fa-eye');
-                roompassToggle.classList.add('fa-eye-slash');
-            }
+    // Enhanced password toggle function for both modals
+    function togglePasswordVisibility(inputId, button) {
+        const input = document.getElementById(inputId);
+        const icon = button.querySelector('i');
+        
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
         }
+    }
 
-        // Enhanced password toggle function for both modals
-        function togglePasswordVisibility(inputId, button) {
-            const input = document.getElementById(inputId);
-            const icon = button.querySelector('i');
+    // Add event listener for password suggestion button (add this to your HTML)
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add suggest password button to the add room modal
+        const roomPassField = document.querySelector('#roomModal .password-field');
+        if (roomPassField) {
+            const suggestButton = document.createElement('button');
+            suggestButton.type = 'button';
+            suggestButton.className = 'btn btn-sm btn-success password-suggest';
+            suggestButton.innerHTML = '<i class="fas fa-magic"></i> Suggest';
+            suggestButton.style.position = 'absolute';
+            suggestButton.style.right = '50px';
+            suggestButton.style.top = '50%';
+            suggestButton.style.transform = 'translateY(-50%)';
+            suggestButton.style.zIndex = '10';
+            suggestButton.onclick = suggestPassword;
             
-            if (input.type === 'password') {
-                input.type = 'text';
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-eye-slash');
-            } else {
-                input.type = 'password';
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            }
-        }
-
-        // Test function - call this in browser console to test delete
-        function testDelete() {
-            // Replace with an actual room ID from your database
-            const testId = 1;
-            
-            $.ajax({
-                url: 'transac.php?action=delete_room',
-                type: 'POST',
-                data: { id: testId },
-                dataType: 'json',
-                success: function(response) {
-                    console.log('Test delete response:', response);
-                },
-                error: function(xhr, status, error) {
-                    console.error('Test delete error:', error, xhr.responseText);
-                }
-            });
+            roomPassField.style.position = 'relative';
+            roomPassField.appendChild(suggestButton);
         }
     });
     </script>
