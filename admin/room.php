@@ -996,70 +996,86 @@ include '../connection.php';
     });
 
     // ==========
-    // DELETE 
-    // ==========
-    $(document).on('click', '.d_room_id', function() {
-        const $button = $(this);
-        const id = $button.data('id');
-        const roomName = $button.attr('room');
-        
-        Swal.fire({
-            title: 'Delete Room?',
-            text: `Are you sure you want to delete "${roomName}"?`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Yes, delete it!',
-            cancelButtonText: 'Cancel'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                // Show loading state
-                $button.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
-                $button.prop('disabled', true);
-                
-                $.ajax({
-                    type: 'POST',
-                    url: "transac.php?action=delete_room",
-                    data: { id: id },
-                    dataType: 'json',
-                    success: function(response) {
-                        if (response.status === 'success') {
-                            // Remove row from DataTable
-                            dataTable.row($button.closest('tr')).remove().draw();
-                            
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Deleted!',
-                                text: response.message,
-                                showConfirmButton: false,
-                                timer: 1500
-                            });
-                        } else {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Error!',
-                                text: response.message || 'Failed to delete room'
-                            });
-                        }
-                    },
-                    error: function(xhr, status, error) {
+// DELETE ROOM (DEBUGGED VERSION)
+// ==========
+$(document).on('click', '.d_room_id', function() {
+    const $button = $(this);
+    const id = $button.data('id');
+    const roomName = $button.attr('room');
+    
+    console.log('Delete button clicked - ID:', id, 'Room:', roomName);
+    
+    Swal.fire({
+        title: 'Delete Room?',
+        text: `Are you sure you want to delete "${roomName}"?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Show loading state
+            $button.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>');
+            $button.prop('disabled', true);
+            
+            console.log('Sending delete request for ID:', id);
+            
+            $.ajax({
+                type: 'POST',
+                url: "transac.php?action=delete_room",
+                data: { 
+                    id: id,
+                    _token: '<?php echo $_SESSION["csrf_token"] ?? ""; ?>' // Add CSRF protection
+                },
+                dataType: 'json',
+                success: function(response) {
+                    console.log('Delete response:', response);
+                    
+                    if (response.status === 'success') {
+                        // Remove row from DataTable
+                        const row = $button.closest('tr');
+                        dataTable.row(row).remove().draw();
+                        
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Deleted!',
+                            text: response.message,
+                            showConfirmButton: false,
+                            timer: 1500
+                        });
+                    } else {
                         Swal.fire({
                             icon: 'error',
                             title: 'Error!',
-                            text: 'An error occurred while deleting the room'
+                            text: response.message || 'Failed to delete room'
                         });
-                    },
-                    complete: function() {
-                        // Restore button state
-                        $button.html('<i class="fas fa-trash"></i> Delete');
-                        $button.prop('disabled', false);
                     }
-                });
-            }
-        });
+                },
+                error: function(xhr, status, error) {
+                    console.log('Delete AJAX error:', {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseText: xhr.responseText,
+                        error: error
+                    });
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'AJAX Error!',
+                        text: 'Failed to connect to server. Check console for details.'
+                    });
+                },
+                complete: function() {
+                    // Restore button state
+                    $button.html('<i class="fas fa-trash"></i> Delete');
+                    $button.prop('disabled', false);
+                }
+            });
+        }
     });
-
+});
     // Reset modal when closed
     $('#roomModal').on('hidden.bs.modal', function() {
         resetForm();

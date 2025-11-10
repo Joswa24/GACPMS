@@ -231,65 +231,84 @@ if ($isAjaxRequest) {
             break;
 
         case 'delete_room':
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                jsonResponse('error', 'Invalid request method');
-            }
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        jsonResponse('error', 'Invalid request method');
+    }
 
-            // Validate required field
-            if (empty($_POST['id'])) {
-                jsonResponse('error', 'Room ID is required');
-            }
+    // Validate required field
+    if (empty($_POST['id'])) {
+        jsonResponse('error', 'Room ID is required');
+    }
 
-            // Sanitize input
-            $id = intval($_POST['id']);
+    // Sanitize input
+    $id = intval($_POST['id']);
+    error_log("Attempting to delete room with ID: " . $id); // Log for debugging
 
-            if ($id <= 0) {
-                jsonResponse('error', 'Invalid room ID');
-            }
+    if ($id <= 0) {
+        jsonResponse('error', 'Invalid room ID: ' . $id);
+    }
 
-            // Check if room exists first
-            $checkRoom = $db->prepare("SELECT id FROM rooms WHERE id = ?");
-            $checkRoom->bind_param("i", $id);
-            $checkRoom->execute();
-            $checkRoom->store_result();
-            
-            if ($checkRoom->num_rows === 0) {
-                $checkRoom->close();
-                jsonResponse('error', 'Room not found');
-            }
+    try {
+        // Check if room exists first
+        $checkRoom = $db->prepare("SELECT id, room FROM rooms WHERE id = ?");
+        if (!$checkRoom) {
+            throw new Exception('Prepare failed: ' . $db->error);
+        }
+        
+        $checkRoom->bind_param("i", $id);
+        $checkRoom->execute();
+        $checkRoom->store_result();
+        
+        if ($checkRoom->num_rows === 0) {
             $checkRoom->close();
+            jsonResponse('error', 'Room not found with ID: ' . $id);
+        }
+        
+        // Get room name for dependency check
+        $checkRoom->bind_result($roomId, $roomName);
+        $checkRoom->fetch();
+        $checkRoom->close();
 
-            // Check for room dependencies (scheduled classes)
-            $checkSchedules = $db->prepare("SELECT COUNT(*) FROM room_schedules WHERE room_name = (SELECT room FROM rooms WHERE id = ?)");
-            $checkSchedules->bind_param("i", $id);
-            $checkSchedules->execute();
-            $checkSchedules->bind_result($scheduleCount);
-            $checkSchedules->fetch();
-            $checkSchedules->close();
+        // Check for room dependencies (scheduled classes)
+        $checkSchedules = $db->prepare("SELECT COUNT(*) as schedule_count FROM room_schedules WHERE room_name = ?");
+        if (!$checkSchedules) {
+            throw new Exception('Prepare failed: ' . $db->error);
+        }
+        
+        $checkSchedules->bind_param("s", $roomName);
+        $checkSchedules->execute();
+        $checkSchedules->bind_result($scheduleCount);
+        $checkSchedules->fetch();
+        $checkSchedules->close();
 
-            if ($scheduleCount > 0) {
-                jsonResponse('error', 'Cannot delete room with scheduled classes');
-            }
+        if ($scheduleCount > 0) {
+            jsonResponse('error', 'Cannot delete room "' . $roomName . '" - it has ' . $scheduleCount . ' scheduled class(es)');
+        }
 
-            // Delete room
-            $stmt = $db->prepare("DELETE FROM rooms WHERE id = ?");
-            if (!$stmt) {
-                jsonResponse('error', 'Database prepare failed: ' . $db->error);
-            }
-            
-            $stmt->bind_param("i", $id);
-            
-            if ($stmt->execute()) {
-                jsonResponse('success', 'Room deleted successfully');
+        // Delete room
+        $stmt = $db->prepare("DELETE FROM rooms WHERE id = ?");
+        if (!$stmt) {
+            throw new Exception('Prepare failed: ' . $db->error);
+        }
+        
+        $stmt->bind_param("i", $id);
+        
+        if ($stmt->execute()) {
+            if ($stmt->affected_rows > 0) {
+                jsonResponse('success', 'Room "' . $roomName . '" deleted successfully');
             } else {
-                jsonResponse('error', 'Failed to delete room: ' . $stmt->error);
+                jsonResponse('error', 'No room was deleted - possibly already removed');
             }
-            $stmt->close();
-            break;
-
-        default:
-            jsonResponse('error', 'Invalid action');
-            break;
+        } else {
+            throw new Exception('Execute failed: ' . $stmt->error);
+        }
+        $stmt->close();
+        
+    } catch (Exception $e) {
+        error_log("Delete room error: " . $e->getMessage());
+        jsonResponse('error', 'Database error: ' . $e->getMessage());
+    }
+    break;
     }
 } else {
     // Handle non-AJAX actions (your existing standalone functions)
