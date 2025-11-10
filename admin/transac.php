@@ -234,21 +234,28 @@ if ($isAjaxRequest) {
             break;
 
         case 'delete_room':
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                jsonResponse('error', 'Invalid request method');
-            }
+    error_log("=== DELETE ROOM STARTED ===");
+    error_log("POST data: " . print_r($_POST, true));
+    
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        error_log("Invalid method");
+        jsonResponse('error', 'Invalid request method');
+    }
 
-            // Validate required field
-            if (empty($_POST['id'])) {
-                jsonResponse('error', 'Room ID is required');
-            }
+    if (empty($_POST['id'])) {
+        error_log("No ID provided");
+        jsonResponse('error', 'Room ID is required');
+    }
 
-            // Sanitize input
-            $id = intval($_POST['id']);
+    $id = intval($_POST['id']);
+    error_log("Attempting to delete room ID: " . $id);
 
-            if ($id <= 0) {
-                jsonResponse('error', 'Invalid room ID');
-            }
+    if ($id <= 0) {
+        error_log("Invalid ID: " . $id);
+        jsonResponse('error', 'Invalid room ID');
+    }
+
+    // Rest of your delete code...
 
             // Check if room exists first
             $checkRoom = $db->prepare("SELECT id FROM rooms WHERE id = ?");
