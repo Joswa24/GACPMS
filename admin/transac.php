@@ -1,4 +1,15 @@
 <?php
+
+// DEBUGGING - Add this at the very top of transac.php
+error_log("=== TRANSAC.PHP CALLED ===");
+error_log("REQUEST METHOD: " . $_SERVER['REQUEST_METHOD']);
+error_log("GET PARAMS: " . print_r($_GET, true));
+error_log("POST PARAMS: " . print_r($_POST, true));
+error_log("REQUEST URI: " . $_SERVER['REQUEST_URI']);
+
+
+
+
 include('../connection.php');
 date_default_timezone_set('Asia/Manila');
 session_start();

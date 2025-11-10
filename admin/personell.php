@@ -1287,8 +1287,7 @@ function getPersonnelPhoto($photo) {
                 }
             });
         });
-
-// Handle delete button click - SIMPLER VERSION
+// Handle delete button click - DEBUG VERSION
 $(document).on('click', '.d_user_id', function() {
     var personnelId = $(this).data('id');
     var personnelName = $(this).attr('user_name');
@@ -1318,10 +1317,13 @@ $(document).on('click', '.d_user_id', function() {
 
             console.log('Sending delete request for ID:', personnelId);
             
-            // Use URL encoded data with proper POST headers
+            // METHOD 1: Direct POST with explicit headers
             $.ajax({
                 url: 'transac.php',
                 type: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 data: {
                     action: 'delete_personnel',
                     id: personnelId
@@ -1350,15 +1352,26 @@ $(document).on('click', '.d_user_id', function() {
                 error: function(xhr, status, error) {
                     console.error('Delete AJAX error:', status, error);
                     console.error('Response text:', xhr.responseText);
+                    console.error('Status:', xhr.status);
                     
-                    const errorMessage = handleAjaxError(xhr, status, error, 'Failed to delete personnel');
+                    // Try to parse the error response
+                    let errorMessage = 'Failed to delete personnel';
+                    try {
+                        const errorResponse = JSON.parse(xhr.responseText);
+                        if (errorResponse.message) {
+                            errorMessage = errorResponse.message;
+                        }
+                    } catch (e) {
+                        errorMessage = xhr.responseText || 'Unknown error occurred';
+                    }
                     
                     Swal.fire({
                         title: 'Error!',
                         html: '<div style="text-align: left;">' + 
                               '<strong>Error Details:</strong><br>' +
-                              errorMessage + 
-                              '<br><br><small>Check browser console for more details.</small>' +
+                              'Status: ' + xhr.status + '<br>' +
+                              'Error: ' + error + '<br>' +
+                              'Message: ' + errorMessage +
                               '</div>',
                         icon: 'error'
                     });
@@ -1366,6 +1379,18 @@ $(document).on('click', '.d_user_id', function() {
             });
         }
     });
+});
+
+// Add this at the bottom of your script to catch any JavaScript errors
+window.addEventListener('error', function(e) {
+    console.error('Global JavaScript Error:', e.error);
+    console.error('Error at:', e.filename, 'line:', e.lineno);
+});
+
+// Test if jQuery is working properly
+$(document).ready(function() {
+    console.log('jQuery is loaded and working');
+    console.log('Delete buttons found:', $('.d_user_id').length);
 });
         // Reset modal when closed
         $('#personnelModal').on('hidden.bs.modal', function () {
