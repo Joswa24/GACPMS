@@ -103,7 +103,9 @@ if ($isAjaxRequest) {
         // ========================
         // ROOM CRUD OPERATIONS - FIXED
         // ========================
-       case 'add_room':
+      case 'add_room':
+    error_log("ADD_ROOM action started");
+    
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         jsonResponse('error', 'Invalid request method');
     }
@@ -116,55 +118,78 @@ if ($isAjaxRequest) {
         }
     }
 
-    // Sanitize inputs
-    $department = sanitizeInput($db, $_POST['roomdpt']);
-    $role = sanitizeInput($db, $_POST['roomrole']);
-    $room = sanitizeInput($db, $_POST['roomname']);
-    $descr = sanitizeInput($db, $_POST['roomdesc']);
-    $password = sanitizeInput($db, $_POST['roompass']);
+    try {
+        // Sanitize inputs
+        $department = sanitizeInput($db, $_POST['roomdpt']);
+        $role = sanitizeInput($db, $_POST['roomrole']);
+        $room = sanitizeInput($db, $_POST['roomname']);
+        $descr = sanitizeInput($db, $_POST['roomdesc']);
+        $password = sanitizeInput($db, $_POST['roompass']);
 
-    // Validate lengths
-    if (strlen($room) > 100) {
-        jsonResponse('error', 'Room name must be less than 100 characters');
-    }
-    if (strlen($descr) > 255) {
-        jsonResponse('error', 'Description must be less than 255 characters');
-    }
-    if (strlen($password) < 6) {
-        jsonResponse('error', 'Password must be at least 6 characters');
-    }
+        // Validate lengths
+        if (strlen($room) > 100) {
+            jsonResponse('error', 'Room name must be less than 100 characters');
+        }
+        if (strlen($descr) > 255) {
+            jsonResponse('error', 'Description must be less than 255 characters');
+        }
+        if (strlen($password) < 6) {
+            jsonResponse('error', 'Password must be at least 6 characters');
+        }
 
-    // Check if room exists in department
-    $check = $db->query("SELECT id FROM rooms WHERE room = '$room' AND department = '$department'");
-    if ($check && $check->num_rows > 0) {
-        jsonResponse('error', 'Room already exists in this department');
-    }
+        // Check if room exists in department
+        $check = $db->prepare("SELECT id FROM rooms WHERE room = ? AND department = ?");
+        $check->bind_param("ss", $room, $department);
+        $check->execute();
+        $check->store_result();
 
-    // SIMPLE INSERT - Let the database handle the ID
-    $sql = "INSERT INTO rooms (room, authorized_personnel, department, password, descr) 
-            VALUES ('$room', '$role', '$department', '$password', '$descr')";
+        if ($check->num_rows > 0) {
+            $check->close();
+            jsonResponse('error', 'Room already exists in this department');
+        }
+        $check->close();
 
-    if ($db->query($sql)) {
-        jsonResponse('success', 'Room added successfully');
-    } else {
-        // If there's still a duplicate key error, use this workaround:
-        if (strpos($db->error, 'Duplicate entry') !== false) {
-            // Find the next available ID manually
-            $result = $db->query("SELECT MAX(id) as max_id FROM rooms");
-            $row = $result->fetch_assoc();
-            $nextId = $row['max_id'] + 1;
+        // FIX: Check if there's a row with ID = 0 and handle it
+        $checkZeroId = $db->query("SELECT id FROM rooms WHERE id = 0");
+        if ($checkZeroId && $checkZeroId->num_rows > 0) {
+            // There's a row with ID = 0, let's update it instead of inserting
+            error_log("Found row with ID = 0, updating it instead");
             
-            $sql2 = "INSERT INTO rooms (id, room, authorized_personnel, department, password, descr) 
-                    VALUES ($nextId, '$room', '$role', '$department', '$password', '$descr')";
+            $stmt = $db->prepare("UPDATE rooms SET room = ?, authorized_personnel = ?, department = ?, password = ?, descr = ? WHERE id = 0");
+            $stmt->bind_param("sssss", $room, $role, $department, $password, $descr);
             
-            if ($db->query($sql2)) {
-                jsonResponse('success', 'Room added successfully');
+            if ($stmt->execute()) {
+                $stmt->close();
+                jsonResponse('success', 'Room added successfully (replaced existing entry)');
             } else {
-                jsonResponse('error', 'Could not add room due to database configuration');
+                throw new Exception('Update failed: ' . $stmt->error);
             }
         } else {
-            jsonResponse('error', 'Database error: ' . $db->error);
+            // Normal insert
+            $stmt = $db->prepare("INSERT INTO rooms (room, authorized_personnel, department, password, descr) VALUES (?, ?, ?, ?, ?)");
+            if (!$stmt) {
+                throw new Exception('Database prepare failed: ' . $db->error);
+            }
+            
+            $stmt->bind_param("sssss", $room, $role, $department, $password, $descr);
+
+            if ($stmt->execute()) {
+                jsonResponse('success', 'Room added successfully');
+            } else {
+                // If insert fails due to duplicate key, try alternative approach
+                if (strpos($stmt->error, 'Duplicate entry') !== false && strpos($stmt->error, 'PRIMARY') !== false) {
+                    error_log("Duplicate key error, trying alternative insert");
+                    jsonResponse('error', 'There seems to be a database issue. Please try again or contact administrator.');
+                } else {
+                    throw new Exception('Execute failed: ' . $stmt->error);
+                }
+            }
+            $stmt->close();
         }
+        
+    } catch (Exception $e) {
+        error_log("ADD_ROOM Exception: " . $e->getMessage());
+        jsonResponse('error', 'Database error: ' . $e->getMessage());
     }
     break;
         case 'update_room':
