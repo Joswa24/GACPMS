@@ -51,7 +51,12 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^admin/([^/]+)$ admin/$1.php [L]
 
-# ======= MODIFIED SECURITY PROTECTION =======
+# ======= PUBLIC FILE EXCEPTIONS =======
+
+# Allow direct access to essential public PHP files
+RewriteRule ^(index|login|logout|forgot_password|register|signup)\.php$ - [L]
+
+# ======= SECURITY PROTECTION =======
 
 # Block common attacks in query string
 RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
@@ -72,19 +77,17 @@ RewriteRule ^(.*)$ - [F,L]
 RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
-# ======= FIXED DIRECT PATH BLOCKING =======
+# ======= MODIFIED DIRECT PATH BLOCKING =======
 
 # Block sensitive directories but allow essential ones
 RewriteRule ^(backups|config|includes|logs|temp)/ - [F,L]
 
-# FIXED: Allow access to login, logout, and index files
-# Only block direct PHP access to admin/instructor files, not public files
+# Block direct access to admin/instructor PHP files (except public ones)
 RewriteCond %{THE_REQUEST} \s/+(admin|instructor)/(.+)\.php[\s?] [NC]
 RewriteCond %{REQUEST_URI} !^/(admin/dashboard|instructor/dashboard) [NC]
+# Allow public files in admin/instructor directories
+RewriteCond %{REQUEST_URI} !^/(admin/index|admin/logout|admin/forgot_password|instructor/index|instructor/logout|instructor/forgot_password) [NC]
 RewriteRule ^ - [F,L]
-
-# FIXED: Allow public PHP files (login, logout, index, etc.)
-# Remove the rule that blocks ALL PHP files
 
 # Modified image hotlinking - only block from external sites
 RewriteCond %{HTTP_REFERER} !^$
