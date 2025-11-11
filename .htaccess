@@ -51,7 +51,7 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^admin/([^/]+)$ admin/$1.php [L]
 
-# ======= SECURITY PROTECTION =======
+# ======= MODIFIED SECURITY PROTECTION =======
 
 # Block common attacks in query string
 RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
@@ -72,31 +72,26 @@ RewriteRule ^(.*)$ - [F,L]
 RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
-# ======= MODIFIED DIRECT PATH BLOCKING (LESS RESTRICTIVE) =======
+# ======= FIXED DIRECT PATH BLOCKING =======
 
-# Only block sensitive directories, not all directories
+# Block sensitive directories but allow essential ones
 RewriteRule ^(backups|config|includes|logs|temp)/ - [F,L]
 
-# Allow access to assets, uploads, and other necessary directories
-# (Remove the blocking rules for these directories)
-
-# Modified: Only block direct PHP access to sensitive files, not all PHP files
+# FIXED: Allow access to login, logout, and index files
+# Only block direct PHP access to admin/instructor files, not public files
 RewriteCond %{THE_REQUEST} \s/+(admin|instructor)/(.+)\.php[\s?] [NC]
 RewriteCond %{REQUEST_URI} !^/(admin/dashboard|instructor/dashboard) [NC]
 RewriteRule ^ - [F,L]
 
-# Modified: Less restrictive image hotlinking - only block from external sites
+# FIXED: Allow public PHP files (login, logout, index, etc.)
+# Remove the rule that blocks ALL PHP files
+
+# Modified image hotlinking - only block from external sites
 RewriteCond %{HTTP_REFERER} !^$
 RewriteCond %{HTTP_REFERER} !^https?://(www\.)?rfid-gpms\.com/ [NC]
 RewriteRule \.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$ - [NC,F,L]
 
-# Modified: Remove overly restrictive file blocking rules
-# (Comment out or remove rules that block instructor_ prefix and uploads paths)
-
 # ======= SECURITY HEADERS =======
-
-# Enable HSTS Header (uncomment if you have a valid SSL certificate)
-# Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
 # Additional Security Headers
 Header always set X-Content-Type-Options "nosniff"
