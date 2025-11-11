@@ -47,6 +47,7 @@ if (!isset($_SESSION['user_agent'])) {
 
 // Now include other files
 include '../connection.php';
+include 'header.php';
 
 // Check database connection
 if (!$db || $db->connect_error) {
@@ -259,6 +260,7 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
