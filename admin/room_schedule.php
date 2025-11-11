@@ -20,9 +20,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
 include '../connection.php';
 
 // --- CREATE TABLE COLUMNS IF NOT EXISTS (optional, for first-time setup) ---
-// $db->query("ALTER TABLE room_schedules 
-//     ADD COLUMN IF NOT EXISTS department VARCHAR(255) NOT NULL AFTER year_level,
-//     ADD COLUMN IF NOT EXISTS instructor VARCHAR(255) NOT NULL AFTER department");
+$db->query("ALTER TABLE room_schedules 
+    ADD COLUMN IF NOT EXISTS department VARCHAR(255) NOT NULL AFTER year_level,
+    ADD COLUMN IF NOT EXISTS instructor VARCHAR(255) NOT NULL AFTER department");
 
 // --- FETCH FOR EDIT ---
  $edit_mode = false;
