@@ -94,21 +94,20 @@ RewriteRule .*instructor_.* - [F,L]
 RewriteRule ^admin/uploads/instructor/.* - [F,L]
 
 # ======= SECURITY PROTECTION =======
-# Block common attacks in query string
-RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
-RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
-RewriteCond %{QUERY_STRING} (javascript:) [NC,OR]
-RewriteCond %{QUERY_STRING} (<script) [NC,OR]
-RewriteCond %{QUERY_STRING} (document\.cookie) [NC]
+# Block common attacks in query string - ONLY FOR GET REQUESTS
+RewriteCond %{REQUEST_METHOD} GET
+RewriteCond %{QUERY_STRING} (eval\(|base64_encode|javascript:|<script|document\.cookie) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
-# Block SQL injections in query string
-RewriteCond %{QUERY_STRING} (union.*select) [NC,OR]
-RewriteCond %{QUERY_STRING} (insert.*into) [NC,OR]
-RewriteCond %{QUERY_STRING} (drop.*table) [NC,OR]
-RewriteCond %{QUERY_STRING} (update.*set) [NC]
+# Block SQL injections in query string - ONLY FOR GET REQUESTS  
+RewriteCond %{REQUEST_METHOD} GET
+RewriteCond %{QUERY_STRING} (union.*select|insert.*into|drop.*table|update.*set) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
+# Block file inclusion attacks - ONLY FOR GET REQUESTS
+RewriteCond %{REQUEST_METHOD} GET
+RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
+RewriteRule ^(.*)$ - [F,L]
 # Block file inclusion attacks in query string
 RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
 RewriteRule ^(.*)$ - [F,L]
