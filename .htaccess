@@ -265,13 +265,6 @@ IndexIgnore *
     RewriteRule ^ - [F,429]
 </IfModule>
 
-# 11. BLOCK HIDDEN FILES AND DIRECTORIES
-RewriteCond %{REQUEST_URI} "/\." [NC]
-RewriteRule ^ - [F,L]
-
-
-# 13. BLOCK SUSPICIOUS PHP FILES
-RewriteRule (phpinfo|test|debug|adminer)\.php$ - [F,L]
 
 # 14. ENHANCED UPLOAD PROTECTION
 <FilesMatch "\.(php|phtml|php3|php4|php5|phar|inc)$">
