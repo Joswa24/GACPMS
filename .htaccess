@@ -8,31 +8,53 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^(.*)$ $1.php [L]
 
-# Security Headers
+# ======= SECURITY HEADERS & PROTECTION =======
+
+# Enable HSTS Header
 Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+# Additional Security Headers
 Header always set X-Content-Type-Options "nosniff"
 Header always set X-Frame-Options "SAMEORIGIN"
 Header always set X-XSS-Protection "1; mode=block"
 Header always set Referrer-Policy "strict-origin-when-cross-origin"
 
 # Block common attacks
-RewriteCond %{QUERY_STRING} (eval\(|base64_encode|javascript:|<script|document\.cookie) [NC]
-RewriteRule ^ - [F,L]
+RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
+RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
+RewriteCond %{QUERY_STRING} (javascript:) [NC,OR]
+RewriteCond %{QUERY_STRING} (<script) [NC,OR]
+RewriteCond %{QUERY_STRING} (document\.cookie) [NC]
+RewriteRule ^(.*)$ - [F,L]
 
 # Block SQL injections
-RewriteCond %{QUERY_STRING} (union.*select|insert.*into|drop.*table|update.*set) [NC]
-RewriteRule ^ - [F,L]
+RewriteCond %{QUERY_STRING} (union.*select) [NC,OR]
+RewriteCond %{QUERY_STRING} (insert.*into) [NC,OR]
+RewriteCond %{QUERY_STRING} (drop.*table) [NC,OR]
+RewriteCond %{QUERY_STRING} (update.*set) [NC]
+RewriteRule ^(.*)$ - [F,L]
 
 # Block file inclusion attacks
 RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
-RewriteRule ^ - [F,L]
+RewriteRule ^(.*)$ - [F,L]
 
-# Protect sensitive files
+# Disable server signature
+ServerSignature Off
+
+# Prevent clickjacking
+Header always set X-Frame-Options "SAMEORIGIN"
+
+# Prevent MIME type sniffing
+Header always set X-Content-Type-Options "nosniff"
+
+# Enable XSS protection
+Header always set X-XSS-Protection "1; mode=block"
+# Block direct access to recaptcha config files
 <Files "recaptcha.php">
     Order Allow,Deny
     Deny from all
 </Files>
-
+# Protect sensitive files
 <FilesMatch "\.(env|log|ini|conf|sql)$">
     Deny from all
 </FilesMatch>
