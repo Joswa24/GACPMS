@@ -2,51 +2,6 @@
 session_start();
 include 'connection.php';
 
-define('RECAPTCHA_SITE_KEY', '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_');
-define('RECAPTCHA_SECRET_KEY', '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-');
-define('RECAPTCHA_VERIFY_URL', 'https://www.google.com/recaptcha/api/siteverify');
-
-function validateRecaptcha($recaptchaResponse) {
-    if (empty($recaptchaResponse)) {
-        return ['success' => false, 'error' => 'reCAPTCHA verification failed'];
-    }
-    
-    $postData = http_build_query([
-        'secret' => RECAPTCHA_SECRET_KEY,
-        'response' => $recaptchaResponse,
-        'remoteip' => $_SERVER['REMOTE_ADDR']
-    ]);
-    
-    $options = [
-        'http' => [
-            'method' => 'POST',
-            'header' => 'Content-Type: application/x-www-form-urlencoded',
-            'content' => $postData
-        ]
-    ];
-    
-    $context = stream_context_create($options);
-    $response = file_get_contents(RECAPTCHA_VERIFY_URL, false, $context);
-    $result = json_decode($response, true);
-    
-    return $result;
-}
-
-// Validate reCAPTCHA for all requests
-$recaptcha_response = $_POST['g-recaptcha-response'] ?? '';
-$recaptchaResult = validateRecaptcha($recaptcha_response);
-
-if (!$recaptchaResult['success']) {
-    echo json_encode(['error' => 'Security verification failed. Please try again.']);
-    exit;
-}
-
-// Optional: Check reCAPTCHA score
-$score = $recaptchaResult['score'] ?? 0;
-if ($score < 0.5) {
-    echo json_encode(['error' => 'Suspicious activity detected. Please try again.']);
-    exit;
-}
 
 // ============================================
 // PHOTO PATH FUNCTIONS
