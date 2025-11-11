@@ -1,4 +1,5 @@
 <?php
+
 // Simple error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -13,6 +14,21 @@ session_start();
 if (ob_get_level() > 0) {
     ob_clean();
 }
+// Add this to your PHP session configuration
+ini_set('session.cookie_httponly', 1);
+ini_set('session.cookie_secure', 1);
+ini_set('session.cookie_samesite', 'Strict');
+ini_set('session.use_strict_mode', 1);
+
+// For manual cookies, always set httponly flag
+setcookie('user_session', $session_id, [
+    'expires' => time() + 86400,
+    'path' => '/',
+    'domain' => 'rfid-gpms.com',
+    'secure' => true,
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
 
 // =====================================================================
 // HELPER FUNCTION - Improved Sanitization

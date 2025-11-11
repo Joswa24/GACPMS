@@ -247,3 +247,45 @@ IndexIgnore *
     php_flag session.cookie_secure on
     php_value session.cookie_samesite Strict
 </IfModule>
+# ======= COOKIE SECURITY FIX =======
+
+# 1. PHP Session Security
+<IfModule mod_php.c>
+    # HttpOnly flag - prevents JavaScript access to cookies
+    php_flag session.cookie_httponly on
+    # Secure flag - only send cookies over HTTPS
+    php_flag session.cookie_secure on
+    # SameSite protection - prevent CSRF attacks
+    php_value session.cookie_samesite Strict
+    # Strict session mode
+    php_value session.use_strict_mode 1
+</IfModule>
+
+# 2. Header-based security for all cookies
+<IfModule mod_headers.c>
+    # Automatically add HttpOnly and Secure flags to ALL cookies
+    Header always edit Set-Cookie "(.*)" "$1; HttpOnly; Secure; SameSite=Strict"
+</IfModule>
+
+# 3. Additional security headers
+<IfModule mod_headers.c>
+    # Prevent MIME sniffing
+    Header always set X-Content-Type-Options "nosniff"
+    # Clickjacking protection
+    Header always set X-Frame-Options "SAMEORIGIN"
+    # XSS protection
+    Header always set X-XSS-Protection "1; mode=block"
+    # Referrer policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+# ======= BOOTSTRAP 3.3.7 VULNERABILITY MITIGATION =======
+
+# 1. BLOCK VULNERABLE BOOTSTRAP FILES
+RewriteRule (bootstrap.*3\.3\.7.*\.js|bootstrap.*3\.3\.7.*\.css) - [F,NC,L]
+RewriteRule \.map$ - [F,NC,L]
+
+# 2. CONTENT SECURITY POLICY (CSP) - Primary Protection
+<IfModule mod_headers.c>
+    # Strict CSP to prevent XSS attacks
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://maxcdn.bootstrapcdn.com https://ajax.googleapis.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://maxcdn.bootstrapcdn.com; img-src 'self' data: https:; font-src 'self' https://cdnjs.cloudflare.com https://maxcdn.bootstrapcdn.com; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'"
+</IfModule>
