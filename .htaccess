@@ -217,7 +217,7 @@ RewriteRule ^admin/?$ - [F,L]
 RewriteRule ^assets/?$ - [F,L]
 RewriteRule ^backups/?$ - [F,L]
 RewriteRule ^instructor/?$ - [F,L]
-RewriteRule ^ridgyms-main/?$ - [F,L]
+RewriteRule ^rfidgms-main/?$ - [F,L]
 RewriteRule ^uploads/?$ - [F,L]
 
 # Block directory listing globally
