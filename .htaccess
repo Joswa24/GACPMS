@@ -51,6 +51,12 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^admin/([^/]+)$ admin/$1.php [L]
 
+# 6. Handle instructor subdirectory clean URLs
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}\.php -f
+RewriteRule ^instructor/([^/]+)$ instructor/$1.php [L]
+
 # ======= SECURITY HEADERS & PROTECTION =======
 
 # Enable HSTS Header (uncomment if you have a valid SSL certificate)
@@ -66,21 +72,15 @@ Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), 
 # Disable server signature
 ServerSignature Off
 
-# ======= BLOCK DIRECT FOLDER ACCESS =======
-# Block direct access to all root directories
-RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
+# ======= MODIFIED DIRECTORY BLOCKING =======
+# Only block sensitive directories, NOT admin and instructor roots
+RewriteRule ^(assets|backups|rfidgpms-main|uploads)/?$ - [F,L]
 
-# Block direct access to ALL images in ANY folder (with referer check)
-RewriteCond %{THE_REQUEST} \s/.*\.(png|jpg|jpeg|gif|webp|bmp|svg)\s [NC]
-RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
-RewriteRule .* - [F,L]
-# ======= BLOCK DIRECT FOLDER ACCESS =======
-# Block direct access to all root directories
-RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
-
-# Block direct access to ALL images in ANY folder
-RewriteCond %{THE_REQUEST} \s/.*\.(png|jpg|jpeg|gif|webp|bmp|svg)\s [NC]
-RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
+# ======= IMAGE HOTLINKING PROTECTION =======
+# Block image hotlinking from external sites only
+RewriteCond %{REQUEST_URI} \.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$ [NC]
+RewriteCond %{HTTP_REFERER} !^$
+RewriteCond %{HTTP_REFERER} !^https?://(www\.)?rfid-gpms\.com/ [NC]
 RewriteRule .* - [F,L]
 
 # ======= BLOCK UPLOADS PATHS =======
@@ -92,6 +92,8 @@ RewriteRule .*instructor_.* - [F,L]
 
 # Block any file in instructor uploads path
 RewriteRule ^admin/uploads/instructor/.* - [F,L]
+
+# ======= SECURITY PROTECTION =======
 # Block common attacks in query string
 RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
 RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
@@ -99,7 +101,6 @@ RewriteCond %{QUERY_STRING} (javascript:) [NC,OR]
 RewriteCond %{QUERY_STRING} (<script) [NC,OR]
 RewriteCond %{QUERY_STRING} (document\.cookie) [NC]
 RewriteRule ^(.*)$ - [F,L]
-
 
 # Block SQL injections in query string
 RewriteCond %{QUERY_STRING} (union.*select) [NC,OR]
@@ -126,23 +127,10 @@ RewriteRule ^(.*)$ - [F,L]
     Deny from all
 </FilesMatch>
 
-# Protect admin directory
-<FilesMatch "\.(php)$">
-    <IfModule mod_authz_core.c>
-        Require all granted
-    </IfModule>
-    <IfModule !mod_authz_core.c>
-        Order allow,deny
-        Allow from all
-    </IfModule>
-</FilesMatch>
 # ======= SERVER HARDENING =======
 
 # Disable directory listing
 Options -Indexes
-
-# Disable server signature
-ServerSignature Off
 
 # Disable ETags to prevent file enumeration
 FileETag None
@@ -193,50 +181,8 @@ RewriteRule ^(\.git|\.svn|\.hg|\.bzr) - [F,L]
     AddOutputFilterByType DEFLATE application/json
 </IfModule>
 
-# Additional security measures
-<IfModule mod_headers.c>
-    # Prevent MIME type sniffing
-    Header always set X-Content-Type-Options "nosniff"
-    
-    # Clickjacking protection
-    Header always set X-Frame-Options "SAMEORIGIN"
-    
-    # XSS protection
-    Header always set X-XSS-Protection "1; mode=block"
-    
-    # Referrer policy
-    Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    
-    # Permissions policy
-    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
-    
-    # Remove X-Powered-By header
-    Header unset X-Powered-By
-    
-    # Remove Server header
-    Header always unset Server
-</IfModule>
-
 # Block access to sensitive directories
 RewriteRule ^(includes|config|logs|temp)/ - [F,L]
-
-# Rate limiting (requires mod_security or similar)
-# This is a basic example - consider using mod_evasive for proper rate limiting
-
-# Password protect sensitive directories (optional)
-#<Files "admin">
-#    AuthType Basic
-#    AuthName "Restricted Area"
-#    AuthUserFile /path/to/.htpasswd
-#    Require valid-user
-#</Files>
-# Specific folder protections
-RewriteRule ^admin/?$ - [F,L]
-RewriteRule ^assets/?$ - [F,L]
-RewriteRule ^backups/?$ - [F,L]
-RewriteRule ^instructor/?$ - [F,L]
-RewriteRule ^rfidgms-main/?$ - [F,L]
-RewriteRule ^uploads/?$ - [F,L]
 
 # Block directory listing globally
 IndexIgnore *
