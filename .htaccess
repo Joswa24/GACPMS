@@ -68,7 +68,7 @@ ServerSignature Off
 
 # ======= BLOCK DIRECT FOLDER ACCESS =======
 # Block direct access to all root directories
-RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
+RewriteRule ^(admin|assets|backups|instructor|rfidgms-main|uploads)/?$ - [F,L]
 
 # Block direct access to specific image (your original requirement)
 RewriteCond %{THE_REQUEST} \s/admin/img/2601828\.png[\s?] [NC]
