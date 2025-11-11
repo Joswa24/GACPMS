@@ -19,41 +19,47 @@ Header always set X-Frame-Options "SAMEORIGIN"
 Header always set X-XSS-Protection "1; mode=block"
 Header always set Referrer-Policy "strict-origin-when-cross-origin"
 
-# Block common attacks
+# ======= CRUD-FRIENDLY SECURITY RULES =======
+# Only apply security rules to GET requests to avoid blocking POST/PUT/DELETE operations
+
+# Block common attacks - GET REQUESTS ONLY
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (javascript:) [NC,OR]
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (<script) [NC,OR]
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (document\.cookie) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
-# Block SQL injections
+# Block SQL injections - GET REQUESTS ONLY
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (union.*select) [NC,OR]
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (insert.*into) [NC,OR]
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (drop.*table) [NC,OR]
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (update.*set) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
-# Block file inclusion attacks
+# Block file inclusion attacks - GET REQUESTS ONLY
+RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
 # Disable server signature
 ServerSignature Off
 
-# Prevent clickjacking
-Header always set X-Frame-Options "SAMEORIGIN"
-
-# Prevent MIME type sniffing
-Header always set X-Content-Type-Options "nosniff"
-
-# Enable XSS protection
-Header always set X-XSS-Protection "1; mode=block"
 # Block direct access to recaptcha config files
 <Files "recaptcha.php">
     Order Allow,Deny
     Deny from all
 </Files>
+
 # Protect sensitive files
 <FilesMatch "\.(env|log|ini|conf|sql)$">
     Deny from all
@@ -62,3 +68,12 @@ Header always set X-XSS-Protection "1; mode=block"
 <FilesMatch "^\.">
     Deny from all
 </FilesMatch>
+
+# ======= ADDITIONAL CRUD PROTECTION =======
+# Ensure these don't interfere with form submissions
+
+# Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
+# No restrictions on request methods
+
+# Disable directory listing for security
+Options -Indexes
