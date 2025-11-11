@@ -212,3 +212,13 @@ RewriteRule ^(includes|config|logs|temp)/ - [F,L]
 #    AuthUserFile /path/to/.htpasswd
 #    Require valid-user
 #</Files>
+# Specific folder protections
+RewriteRule ^admin/?$ - [F,L]
+RewriteRule ^assets/?$ - [F,L]
+RewriteRule ^backups/?$ - [F,L]
+RewriteRule ^instructor/?$ - [F,L]
+RewriteRule ^ridgyms-main/?$ - [F,L]
+RewriteRule ^uploads/?$ - [F,L]
+
+# Block directory listing globally
+IndexIgnore *
