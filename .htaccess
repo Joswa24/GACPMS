@@ -254,39 +254,6 @@ IndexIgnore *
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 </IfModule>
 
-# 5. ADDITIONAL BOOTSTRAP-SPECIFIC PROTECTIONS
-# Block known vulnerable Bootstrap CDN paths
-RewriteCond %{REQUEST_URI} .*bootstrap.*3\.3\.7.* [NC]
-RewriteRule ^ - [F,L]
-
-# Block access to Bootstrap source maps and vulnerable files
-RewriteRule \.map$ - [F,L]
-RewriteRule bootstrap\.min\.js$ - [F,L]
-
-# 6. ENHANCED COOKIE PROTECTION
-<IfModule mod_php.c>
-    # PHP session cookie settings (if using PHP)
-    php_value session.cookie_httponly 1
-    php_value session.cookie_secure 1
-    php_value session.use_strict_mode 1
-    php_value session.cookie_samesite "Strict"
-</IfModule>
-
-# 7. ADDITIONAL SECURITY MEASURES
-
-# Block common vulnerability scanner user agents
-RewriteCond %{HTTP_USER_AGENT} (nikto|wikto|acunetix|nessus|metasploit|sqlmap|w3af|owasp) [NC]
-RewriteRule ^ - [F,L]
-
-# Block suspicious request patterns
-RewriteCond %{QUERY_STRING} (\.\./|\.\.\;|\.\.%2f|\.\.%5c) [NC,OR]
-RewriteCond %{QUERY_STRING} (\.env|config\.|database\.) [NC,OR]
-RewriteCond %{QUERY_STRING} (bootstraps?|jquery|javascript:) [NC]
-RewriteRule ^ - [F,L]
-
-# Block access to development and backup files
-RewriteRule (\.bak|\.backup|\.old|\.orig|_old|_backup)$ - [F,L]
-
 # 8. RATE LIMITING PROTECTION (Basic)
 # Prevent brute force attacks on login
 <IfModule mod_rewrite.c>
@@ -298,34 +265,10 @@ RewriteRule (\.bak|\.backup|\.old|\.orig|_old|_backup)$ - [F,L]
     RewriteRule ^ - [F,429]
 </IfModule>
 
-# 9. ENHANCED FILE TYPE PROTECTION
-<FilesMatch "\.(css|js|json|xml)$">
-    <IfModule mod_headers.c>
-        Header always set X-Content-Type-Options "nosniff"
-    </IfModule>
-</FilesMatch>
-
-# 10. CACHE CONTROL FOR SENSITIVE PAGES
-<IfModule mod_headers.c>
-    # Prevent caching of sensitive pages
-    <FilesMatch "\.(php|html|htm)$">
-        Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
-        Header always set Pragma "no-cache"
-        Header always set Expires "0"
-    </FilesMatch>
-</IfModule>
-
 # 11. BLOCK HIDDEN FILES AND DIRECTORIES
 RewriteCond %{REQUEST_URI} "/\." [NC]
 RewriteRule ^ - [F,L]
 
-# 12. ENHANCED ERROR PAGES
-# Custom error pages to avoid information leakage
-ErrorDocument 400 /error.php
-ErrorDocument 401 /error.php
-ErrorDocument 403 /error.php
-ErrorDocument 404 /error.php
-ErrorDocument 500 /error.php
 
 # 13. BLOCK SUSPICIOUS PHP FILES
 RewriteRule (phpinfo|test|debug|adminer)\.php$ - [F,L]
