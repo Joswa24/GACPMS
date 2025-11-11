@@ -211,72 +211,25 @@ RewriteRule ^uploads/?$ - [F,L]
 
 # Block directory listing globally
 IndexIgnore *
-# ======= MEDIUM RISK VULNERABILITY FIXES =======
 
-# 1. SECURE COOKIE SETTINGS (HttpOnly, Secure flags)
-<IfModule mod_headers.c>
-    # Secure existing cookies by adding HttpOnly and Secure flags via headers
-    Header always edit Set-Cookie "(.*)" "$1; HttpOnly; Secure"
-    
-    # Prevent client-side JavaScript cookie access
-    Header always set Cross-Origin-Opener-Policy "same-origin"
-    Header always set Cross-Origin-Embedder-Policy "require-corp"
-</IfModule>
-# ======= SECURE COOKIE SETTINGS - HTTPONLY FIX =======
+# ======= SECURE COOKIE SETTINGS =======
 
-# 1. PHP Session Cookie Security (if using PHP)
+# 1. PHP Session Cookie Security
 <IfModule mod_php.c>
-    # Enable HttpOnly flag for session cookies
-    php_flag session.cookie_httponly on
-    # Enable Secure flag (HTTPS only)
-    php_flag session.cookie_secure on
-    # SameSite cookie protection
-    php_value session.cookie_samesite Strict
-    # Use strict session mode
-    php_value session.use_strict_mode 1
-</IfModule>
-
-<IfModule mod_php7.c>
     php_flag session.cookie_httponly on
     php_flag session.cookie_secure on
     php_value session.cookie_samesite Strict
 </IfModule>
 
-<IfModule mod_php8.c>
-    php_flag session.cookie_httponly on
-    php_flag session.cookie_secure on
-    php_value session.cookie_samesite Strict
+# 2. Header-based Cookie Security
+<IfModule mod_headers.c>
+    Header always edit Set-Cookie "(.*)" "$1; HttpOnly; Secure"
+    Header always set Cross-Origin-Opener-Policy "same-origin"
 </IfModule>
-; # ======= BOOTSTRAP 3.3.7 VULNERABILITY MITIGATION =======
 
-; # 1. BLOCK KNOWN VULNERABLE FILES
-; RewriteRule (bootstrap(-min)?\.js|bootstrap(-min)?\.css) - [F,NC,L]
-; RewriteRule (bootstrap.*3\.3\.7.*) - [F,NC,L]
-; RewriteRule \.(map|src\.js)$ - [F,NC,L]
+# ======= BOOTSTRAP PROTECTION (SAFE VERSION) =======
 
-; # 2. STRICT CONTENT SECURITY POLICY
-; <IfModule mod_headers.c>
-;     # Comprehensive CSP for Bootstrap 3.3.7
-;     Header always set Content-Security-Policy "default-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://maxcdn.bootstrapcdn.com https://ajax.googleapis.com 'strict-dynamic'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://maxcdn.bootstrapcdn.com; img-src 'self' data: https:; font-src 'self' https://cdnjs.cloudflare.com https://maxcdn.bootstrapcdn.com; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
-    
-;     # Additional security headers
-;     Header always set X-Content-Type-Options "nosniff"
-;     Header always set X-XSS-Protection "1; mode=block"
-;     Header always set X-Frame-Options "DENY"
-;     Header always set Referrer-Policy "strict-origin-when-cross-origin"
-; </IfModule>
-
-; # 3. BLOCK BOOTSTRAP SOURCE MAPS AND VULNERABLE PATHS
-; RewriteCond %{REQUEST_URI} \.(map|src\.js|min\.map)$ [NC]
-; RewriteRule ^ - [F,L]
-
-; # 4. RESTRICT JAVASCRIPT EXECUTION
-; <FilesMatch "\.js$">
-;     <IfModule mod_headers.c>
-;         Header always set X-Content-Type-Options "nosniff"
-;     </IfModule>
-; </FilesMatch>
-
-; # 5. SANITIZE USER INPUT (Prevent XSS)
-; RewriteCond %{QUERY_STRING} (<|%3C|script|alert|document\.cookie) [NC]
-; RewriteRule ^ - [F,L]
+# Content Security Policy Only - Won't break your application
+<IfModule mod_headers.c>
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'"
+</IfModule>
