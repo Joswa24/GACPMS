@@ -63,16 +63,11 @@ Header always set X-XSS-Protection "1; mode=block"
 Header always set Referrer-Policy "strict-origin-when-cross-origin"
 Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
 
+# REMOVED CSP HEADER - Let PHP handle CSP via meta tag
+# Header always set Content-Security-Policy "..."
+
 # Disable server signature
 ServerSignature Off
-
-# ======= BLOCK DIRECT FOLDER ACCESS =======
-# Block direct access to all root directories
-RewriteRule ^(admin|assets|backups|instructor|rfidgms-main|uploads)/?$ - [F,L]
-
-# Block direct access to specific image (your original requirement)
-RewriteCond %{THE_REQUEST} \s/admin/img/2601828\.png[\s?] [NC]
-RewriteRule ^ - [F,L]
 
 # Block common attacks in query string
 RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
@@ -81,7 +76,6 @@ RewriteCond %{QUERY_STRING} (javascript:) [NC,OR]
 RewriteCond %{QUERY_STRING} (<script) [NC,OR]
 RewriteCond %{QUERY_STRING} (document\.cookie) [NC]
 RewriteRule ^(.*)$ - [F,L]
-
 
 # Block SQL injections in query string
 RewriteCond %{QUERY_STRING} (union.*select) [NC,OR]
