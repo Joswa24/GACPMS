@@ -51,10 +51,33 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^admin/([^/]+)$ admin/$1.php [L]
 
-# ======= PUBLIC FILE EXCEPTIONS =======
+# ======= STRICT DIRECT PATH BLOCKING =======
 
-# Allow direct access to essential public PHP files
-RewriteRule ^(index|login|logout|forgot_password|register|signup)\.php$ - [L]
+# Block ALL direct directory access EXCEPT admin and instructor root
+RewriteRule ^(assets|backups|rfidgpms-main|uploads)/?$ - [F,L]
+
+# Block ALL direct PHP file access (force clean URLs)
+RewriteCond %{THE_REQUEST} \s/+(.*?)\.php[\s?] [NC]
+RewriteCond %{REQUEST_URI} !^/index\.php [NC]
+RewriteRule ^ - [F,L]
+
+# Block direct access to files in protected directories (but allow directory access)
+RewriteRule ^(admin|instructor)/(.+)\.(php|html|htm|txt|json|xml)$ - [F,L]
+
+# Block ALL image hotlinking with strict referer checking
+RewriteCond %{REQUEST_URI} \.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$ [NC]
+RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
+RewriteCond %{HTTP_REFERER} !^$
+RewriteRule .* - [F,L]
+
+# Block uploads directory completely
+RewriteRule ^(admin|instructor)/uploads/ - [F,L]
+
+# Block files with instructor_ prefix
+RewriteRule .*instructor_.* - [F,L]
+
+# Block any file in instructor uploads path
+RewriteRule ^admin/uploads/instructor/.* - [F,L]
 
 # ======= SECURITY PROTECTION =======
 
@@ -77,24 +100,10 @@ RewriteRule ^(.*)$ - [F,L]
 RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
-# ======= MODIFIED DIRECT PATH BLOCKING =======
-
-# Block sensitive directories but allow essential ones
-RewriteRule ^(backups|config|includes|logs|temp)/ - [F,L]
-
-# Block direct access to admin/instructor PHP files (except public ones)
-RewriteCond %{THE_REQUEST} \s/+(admin|instructor)/(.+)\.php[\s?] [NC]
-RewriteCond %{REQUEST_URI} !^/(admin/dashboard|instructor/dashboard) [NC]
-# Allow public files in admin/instructor directories
-RewriteCond %{REQUEST_URI} !^/(admin/index|admin/logout|admin/forgot_password|instructor/index|instructor/logout|instructor/forgot_password) [NC]
-RewriteRule ^ - [F,L]
-
-# Modified image hotlinking - only block from external sites
-RewriteCond %{HTTP_REFERER} !^$
-RewriteCond %{HTTP_REFERER} !^https?://(www\.)?rfid-gpms\.com/ [NC]
-RewriteRule \.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$ - [NC,F,L]
-
 # ======= SECURITY HEADERS =======
+
+# Enable HSTS Header (uncomment if you have a valid SSL certificate)
+# Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
 # Additional Security Headers
 Header always set X-Content-Type-Options "nosniff"
@@ -124,6 +133,17 @@ ServerSignature Off
 
 <FilesMatch "^\.">
     Deny from all
+</FilesMatch>
+
+# Protect admin directory
+<FilesMatch "\.(php)$">
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Allow from all
+    </IfModule>
 </FilesMatch>
 
 # ======= SERVER HARDENING =======
@@ -180,5 +200,36 @@ RewriteRule ^(\.git|\.svn|\.hg|\.bzr) - [F,L]
     AddOutputFilterByType DEFLATE application/json
 </IfModule>
 
+# Block access to sensitive directories
+RewriteRule ^(includes|config|logs|temp)/ - [F,L]
+
+# Specific folder protections (EXCLUDING admin and instructor roots)
+RewriteRule ^assets/?$ - [F,L]
+RewriteRule ^backups/?$ - [F,L]
+RewriteRule ^rfidgms-main/?$ - [F,L]
+RewriteRule ^uploads/?$ - [F,L]
+
 # Block directory listing globally
 IndexIgnore *
+
+# ======= SECURE COOKIE SETTINGS =======
+
+# 1. PHP Session Cookie Security
+; <IfModule mod_php.c>
+;     php_flag session.cookie_httponly on
+;     php_flag session.cookie_secure on
+;     php_value session.cookie_samesite Strict
+; </IfModule>
+
+; # 2. Header-based Cookie Security
+; <IfModule mod_headers.c>
+;     Header always edit Set-Cookie "(.*)" "$1; HttpOnly; Secure"
+;     Header always set Cross-Origin-Opener-Policy "same-origin"
+; </IfModule>
+
+; # ======= BOOTSTRAP PROTECTION (SAFE VERSION) =======
+
+; # Content Security Policy Only - Won't break your application
+; <IfModule mod_headers.c>
+;     Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'"
+; </IfModule>
