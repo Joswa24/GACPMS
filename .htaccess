@@ -254,17 +254,6 @@ IndexIgnore *
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 </IfModule>
 
-# 8. RATE LIMITING PROTECTION (Basic)
-# Prevent brute force attacks on login
-<IfModule mod_rewrite.c>
-    # Track requests by IP
-    RewriteCond %{REQUEST_URI} ^/(admin|instructor)/ [NC]
-    RewriteCond %{REQUEST_METHOD} POST
-    RewriteCond %{DOCUMENT_ROOT}/ratelimit/%{REMOTE_ADDR}.txt -f
-    RewriteCond %{DOCUMENT_ROOT}/ratelimit/%{REMOTE_ADDR}.txt -mmin 1
-    RewriteRule ^ - [F,429]
-</IfModule>
-
 
 # 14. ENHANCED UPLOAD PROTECTION
 <FilesMatch "\.(php|phtml|php3|php4|php5|phar|inc)$">
