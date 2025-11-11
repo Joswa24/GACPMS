@@ -74,6 +74,24 @@ RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
 RewriteCond %{THE_REQUEST} \s/.*\.(png|jpg|jpeg|gif|webp|bmp|svg)\s [NC]
 RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
 RewriteRule .* - [F,L]
+# ======= BLOCK DIRECT FOLDER ACCESS =======
+# Block direct access to all root directories
+RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
+
+# Block direct access to ALL images in ANY folder
+RewriteCond %{THE_REQUEST} \s/.*\.(png|jpg|jpeg|gif|webp|bmp|svg)\s [NC]
+RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
+RewriteRule .* - [F,L]
+
+# ======= BLOCK UPLOADS PATHS =======
+# Block all uploads directories
+RewriteRule ^(admin|instructor)/uploads/ - [F,L]
+
+# Block files with instructor_ prefix (like instructor_1760251008)
+RewriteRule .*instructor_.* - [F,L]
+
+# Block any file in instructor uploads path
+RewriteRule ^admin/uploads/instructor/.* - [F,L]
 # Block common attacks in query string
 RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
 RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
