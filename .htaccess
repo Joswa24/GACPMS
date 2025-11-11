@@ -70,10 +70,10 @@ ServerSignature Off
 # Block direct access to all root directories
 RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
 
-# Block direct access to specific image (your original requirement)
-RewriteCond %{THE_REQUEST} \s/admin/img/2601828\.png[\s?] [NC]
-RewriteRule ^ - [F,L]
-
+# Block direct access to ALL images in ANY folder (with referer check)
+RewriteCond %{THE_REQUEST} \s/.*\.(png|jpg|jpeg|gif|webp|bmp|svg)\s [NC]
+RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
+RewriteRule .* - [F,L]
 # Block common attacks in query string
 RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
 RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
