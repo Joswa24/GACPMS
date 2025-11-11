@@ -51,47 +51,36 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^admin/([^/]+)$ admin/$1.php [L]
 
-# ======= SECURITY HEADERS & PROTECTION =======
+# ======= STRICT DIRECT PATH BLOCKING =======
 
-# Enable HSTS Header (uncomment if you have a valid SSL certificate)
-# Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
-
-# Additional Security Headers (non-duplicated)
-Header always set X-Content-Type-Options "nosniff"
-Header always set X-Frame-Options "SAMEORIGIN"
-Header always set X-XSS-Protection "1; mode=block"
-Header always set Referrer-Policy "strict-origin-when-cross-origin"
-Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
-
-# Disable server signature
-ServerSignature Off
-
-# ======= BLOCK DIRECT FOLDER ACCESS =======
-# Block direct access to all root directories
+# Block ALL direct directory access (root level)
 RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
 
-# Block direct access to ALL images in ANY folder (with referer check)
-RewriteCond %{THE_REQUEST} \s/.*\.(png|jpg|jpeg|gif|webp|bmp|svg)\s [NC]
-RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
-RewriteRule .* - [F,L]
-# ======= BLOCK DIRECT FOLDER ACCESS =======
-# Block direct access to all root directories
-RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
+# Block ALL direct PHP file access (force clean URLs)
+RewriteCond %{THE_REQUEST} \s/+(.*?)\.php[\s?] [NC]
+RewriteCond %{REQUEST_URI} !^/index\.php [NC]
+RewriteRule ^ - [F,L]
 
-# Block direct access to ALL images in ANY folder
-RewriteCond %{THE_REQUEST} \s/.*\.(png|jpg|jpeg|gif|webp|bmp|svg)\s [NC]
+# Block direct access to ALL files in protected directories
+RewriteRule ^(admin|instructor)/(.*)\.(php|html|htm|txt|json|xml)$ - [F,L]
+
+# Block ALL image hotlinking with strict referer checking
+RewriteCond %{REQUEST_URI} \.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$ [NC]
 RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
+RewriteCond %{HTTP_REFERER} !^$
 RewriteRule .* - [F,L]
 
-# ======= BLOCK UPLOADS PATHS =======
-# Block all uploads directories
+# Block uploads directory completely
 RewriteRule ^(admin|instructor)/uploads/ - [F,L]
 
-# Block files with instructor_ prefix (like instructor_1760251008)
+# Block files with instructor_ prefix
 RewriteRule .*instructor_.* - [F,L]
 
 # Block any file in instructor uploads path
 RewriteRule ^admin/uploads/instructor/.* - [F,L]
+
+# ======= SECURITY PROTECTION =======
+
 # Block common attacks in query string
 RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
 RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
@@ -99,7 +88,6 @@ RewriteCond %{QUERY_STRING} (javascript:) [NC,OR]
 RewriteCond %{QUERY_STRING} (<script) [NC,OR]
 RewriteCond %{QUERY_STRING} (document\.cookie) [NC]
 RewriteRule ^(.*)$ - [F,L]
-
 
 # Block SQL injections in query string
 RewriteCond %{QUERY_STRING} (union.*select) [NC,OR]
@@ -112,13 +100,34 @@ RewriteRule ^(.*)$ - [F,L]
 RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
+# ======= SECURITY HEADERS =======
+
+# Enable HSTS Header (uncomment if you have a valid SSL certificate)
+# Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+# Additional Security Headers
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-XSS-Protection "1; mode=block"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+
+# Remove server identification headers
+Header unset X-Powered-By
+Header always unset Server
+
+# Disable server signature
+ServerSignature Off
+
+# ======= FILE PROTECTION =======
+
 # Protect sensitive files
 <Files "recaptcha.php">
     Order Allow,Deny
     Deny from all
 </Files>
 
-<FilesMatch "\.(env|log|ini|conf|sql)$">
+<FilesMatch "\.(env|log|ini|conf|sql|bak|config|fla|psd|sh|inc|swp|dist|htaccess)$">
     Deny from all
 </FilesMatch>
 
@@ -136,13 +145,11 @@ RewriteRule ^(.*)$ - [F,L]
         Allow from all
     </IfModule>
 </FilesMatch>
+
 # ======= SERVER HARDENING =======
 
 # Disable directory listing
 Options -Indexes
-
-# Disable server signature
-ServerSignature Off
 
 # Disable ETags to prevent file enumeration
 FileETag None
@@ -193,43 +200,9 @@ RewriteRule ^(\.git|\.svn|\.hg|\.bzr) - [F,L]
     AddOutputFilterByType DEFLATE application/json
 </IfModule>
 
-# Additional security measures
-<IfModule mod_headers.c>
-    # Prevent MIME type sniffing
-    Header always set X-Content-Type-Options "nosniff"
-    
-    # Clickjacking protection
-    Header always set X-Frame-Options "SAMEORIGIN"
-    
-    # XSS protection
-    Header always set X-XSS-Protection "1; mode=block"
-    
-    # Referrer policy
-    Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    
-    # Permissions policy
-    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
-    
-    # Remove X-Powered-By header
-    Header unset X-Powered-By
-    
-    # Remove Server header
-    Header always unset Server
-</IfModule>
-
 # Block access to sensitive directories
 RewriteRule ^(includes|config|logs|temp)/ - [F,L]
 
-# Rate limiting (requires mod_security or similar)
-# This is a basic example - consider using mod_evasive for proper rate limiting
-
-# Password protect sensitive directories (optional)
-#<Files "admin">
-#    AuthType Basic
-#    AuthName "Restricted Area"
-#    AuthUserFile /path/to/.htpasswd
-#    Require valid-user
-#</Files>
 # Specific folder protections
 RewriteRule ^admin/?$ - [F,L]
 RewriteRule ^assets/?$ - [F,L]
