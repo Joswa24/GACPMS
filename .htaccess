@@ -51,17 +51,27 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^admin/([^/]+)$ admin/$1.php [L]
 
+# ======= PUBLIC FILE EXCEPTIONS =======
+
+# Allow essential public PHP files (login, logout, forgot_password)
+RewriteRule ^(index|login|logout|forgot_password)\.php$ - [L]
+RewriteRule ^(admin|instructor)/(login|logout|forgot_password)\.php$ - [L]
+
 # ======= STRICT DIRECT PATH BLOCKING =======
 
 # Block ALL direct directory access EXCEPT admin and instructor root
 RewriteRule ^(assets|backups|rfidgpms-main|uploads)/?$ - [F,L]
 
-# Block ALL direct PHP file access (force clean URLs)
+# Block ALL direct PHP file access (force clean URLs) - WITH EXCEPTIONS
 RewriteCond %{THE_REQUEST} \s/+(.*?)\.php[\s?] [NC]
 RewriteCond %{REQUEST_URI} !^/index\.php [NC]
+# Allow public files
+RewriteCond %{REQUEST_URI} !^/(login|logout|forgot_password)\.php [NC]
+RewriteCond %{REQUEST_URI} !^/(admin|instructor)/(login|logout|forgot_password)\.php [NC]
 RewriteRule ^ - [F,L]
 
-# Block direct access to files in protected directories (but allow directory access)
+# Block direct access to files in protected directories (but allow directory access) - WITH EXCEPTIONS
+RewriteCond %{REQUEST_URI} !^/(admin|instructor)/(login|logout|forgot_password)\.(php|html|htm|txt|json|xml)$ [NC]
 RewriteRule ^(admin|instructor)/(.+)\.(php|html|htm|txt|json|xml)$ - [F,L]
 
 # Block ALL image hotlinking with strict referer checking
