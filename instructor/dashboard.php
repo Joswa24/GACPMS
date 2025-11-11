@@ -47,8 +47,7 @@ if (!isset($_SESSION['user_agent'])) {
 
 // Now include other files
 include '../connection.php';
-include '../header.php';
-
+include 'header.php';
 // Check database connection
 if (!$db || $db->connect_error) {
     die("Database connection failed: " . ($db->connect_error ?? 'Unknown error'));
