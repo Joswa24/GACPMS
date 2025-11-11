@@ -186,3 +186,21 @@ RewriteRule ^(includes|config|logs|temp)/ - [F,L]
 
 # Block directory listing globally
 IndexIgnore *
+# ======= BLOCK DIRECT FOLDER ACCESS =======
+# Block direct access to all root directories
+RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
+
+# Block direct access to ALL images in ANY folder
+RewriteCond %{THE_REQUEST} \s/.*\.(png|jpg|jpeg|gif|webp|bmp|svg)\s [NC]
+RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
+RewriteRule .* - [F,L]
+
+# ======= BLOCK SPECIFIC UPLOADS PATHS =======
+# Block ALL access to admin/uploads/instructor/ path and contents
+RewriteRule ^admin/uploads/instructor/ - [F,L]
+
+# Block files with instructor_ prefix (timestamped files)
+RewriteRule .*instructor_.* - [F,L]
+
+# Additional protection for all upload directories
+RewriteRule ^(admin|instructor)/uploads/ - [F,L]
