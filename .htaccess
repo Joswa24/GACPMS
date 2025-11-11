@@ -215,21 +215,21 @@ IndexIgnore *
 # ======= SECURE COOKIE SETTINGS =======
 
 # 1. PHP Session Cookie Security
-<IfModule mod_php.c>
-    php_flag session.cookie_httponly on
-    php_flag session.cookie_secure on
-    php_value session.cookie_samesite Strict
-</IfModule>
+; <IfModule mod_php.c>
+;     php_flag session.cookie_httponly on
+;     php_flag session.cookie_secure on
+;     php_value session.cookie_samesite Strict
+; </IfModule>
 
-# 2. Header-based Cookie Security
-<IfModule mod_headers.c>
-    Header always edit Set-Cookie "(.*)" "$1; HttpOnly; Secure"
-    Header always set Cross-Origin-Opener-Policy "same-origin"
-</IfModule>
+; # 2. Header-based Cookie Security
+; <IfModule mod_headers.c>
+;     Header always edit Set-Cookie "(.*)" "$1; HttpOnly; Secure"
+;     Header always set Cross-Origin-Opener-Policy "same-origin"
+; </IfModule>
 
-# ======= BOOTSTRAP PROTECTION (SAFE VERSION) =======
+; # ======= BOOTSTRAP PROTECTION (SAFE VERSION) =======
 
-# Content Security Policy Only - Won't break your application
-<IfModule mod_headers.c>
-    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'"
-</IfModule>
+; # Content Security Policy Only - Won't break your application
+; <IfModule mod_headers.c>
+;     Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'"
+; </IfModule>
