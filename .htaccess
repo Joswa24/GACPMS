@@ -53,16 +53,16 @@ RewriteRule ^admin/([^/]+)$ admin/$1.php [L]
 
 # ======= STRICT DIRECT PATH BLOCKING =======
 
-# Block ALL direct directory access (root level)
-RewriteRule ^(admin|assets|backups|instructor|rfidgpms-main|uploads)/?$ - [F,L]
+# Block ALL direct directory access EXCEPT admin and instructor root
+RewriteRule ^(assets|backups|rfidgpms-main|uploads)/?$ - [F,L]
 
 # Block ALL direct PHP file access (force clean URLs)
 RewriteCond %{THE_REQUEST} \s/+(.*?)\.php[\s?] [NC]
 RewriteCond %{REQUEST_URI} !^/index\.php [NC]
 RewriteRule ^ - [F,L]
 
-# Block direct access to ALL files in protected directories
-RewriteRule ^(admin|instructor)/(.*)\.(php|html|htm|txt|json|xml)$ - [F,L]
+# Block direct access to files in protected directories (but allow directory access)
+RewriteRule ^(admin|instructor)/(.+)\.(php|html|htm|txt|json|xml)$ - [F,L]
 
 # Block ALL image hotlinking with strict referer checking
 RewriteCond %{REQUEST_URI} \.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$ [NC]
@@ -203,11 +203,9 @@ RewriteRule ^(\.git|\.svn|\.hg|\.bzr) - [F,L]
 # Block access to sensitive directories
 RewriteRule ^(includes|config|logs|temp)/ - [F,L]
 
-# Specific folder protections
-RewriteRule ^admin/?$ - [F,L]
+# Specific folder protections (EXCLUDING admin and instructor roots)
 RewriteRule ^assets/?$ - [F,L]
 RewriteRule ^backups/?$ - [F,L]
-RewriteRule ^instructor/?$ - [F,L]
 RewriteRule ^rfidgms-main/?$ - [F,L]
 RewriteRule ^uploads/?$ - [F,L]
 
