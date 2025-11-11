@@ -57,16 +57,28 @@ RewriteRule ^admin/([^/]+)$ admin/$1.php [L]
 RewriteRule ^(index|login|logout|forgot_password)\.php$ - [L]
 RewriteRule ^(admin|instructor)/(login|logout|forgot_password)\.php$ - [L]
 
-# ======= MODIFIED SECURITY RULES =======
+# ======= STRICT DIRECT PATH BLOCKING =======
 
-# Block sensitive directories
-RewriteRule ^(backups|config|includes|logs|temp|rfidgpms-main)/ - [F,L]
+# Block ALL direct directory access EXCEPT admin and instructor root
+RewriteRule ^(assets|backups|rfidgpms-main|uploads)/?$ - [F,L]
 
-# REMOVED: The problematic rules that block ALL PHP access
-# REMOVED: The rule that blocks files in protected directories
+# Block ALL direct PHP file access (force clean URLs) - WITH EXCEPTIONS
+RewriteCond %{THE_REQUEST} \s/+(.*?)\.php[\s?] [NC]
+RewriteCond %{REQUEST_URI} !^/index\.php [NC]
+# Allow public files
+RewriteCond %{REQUEST_URI} !^/(login|logout|forgot_password)\.php [NC]
+RewriteCond %{REQUEST_URI} !^/(admin|instructor)/(login|logout|forgot_password)\.php [NC]
+RewriteRule ^ - [F,L]
 
-# Only block direct access to specific sensitive PHP files, not all PHP files
-# Allow the URL rewriting to handle clean URLs instead
+# Block direct access to files in protected directories (but allow directory access) - WITH EXCEPTIONS
+RewriteCond %{REQUEST_URI} !^/(admin|instructor)/(login|logout|forgot_password)\.(php|html|htm|txt|json|xml)$ [NC]
+RewriteRule ^(admin|instructor)/(.+)\.(php|html|htm|txt|json|xml)$ - [F,L]
+
+# Block ALL image hotlinking with strict referer checking
+RewriteCond %{REQUEST_URI} \.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$ [NC]
+RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
+RewriteCond %{HTTP_REFERER} !^$
+RewriteRule .* - [F,L]
 
 # Block uploads directory completely
 RewriteRule ^(admin|instructor)/uploads/ - [F,L]
@@ -76,12 +88,6 @@ RewriteRule .*instructor_.* - [F,L]
 
 # Block any file in instructor uploads path
 RewriteRule ^admin/uploads/instructor/.* - [F,L]
-
-# Block ALL image hotlinking with strict referer checking
-RewriteCond %{REQUEST_URI} \.(png|jpg|jpeg|gif|webp|bmp|svg|ico)$ [NC]
-RewriteCond %{HTTP_REFERER} !^https://rfid-gpms\.com/ [NC]
-RewriteCond %{HTTP_REFERER} !^$
-RewriteRule .* - [F,L]
 
 # ======= SECURITY PROTECTION =======
 
