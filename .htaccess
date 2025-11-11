@@ -222,3 +222,28 @@ IndexIgnore *
     Header always set Cross-Origin-Opener-Policy "same-origin"
     Header always set Cross-Origin-Embedder-Policy "require-corp"
 </IfModule>
+# ======= SECURE COOKIE SETTINGS - HTTPONLY FIX =======
+
+# 1. PHP Session Cookie Security (if using PHP)
+<IfModule mod_php.c>
+    # Enable HttpOnly flag for session cookies
+    php_flag session.cookie_httponly on
+    # Enable Secure flag (HTTPS only)
+    php_flag session.cookie_secure on
+    # SameSite cookie protection
+    php_value session.cookie_samesite Strict
+    # Use strict session mode
+    php_value session.use_strict_mode 1
+</IfModule>
+
+<IfModule mod_php7.c>
+    php_flag session.cookie_httponly on
+    php_flag session.cookie_secure on
+    php_value session.cookie_samesite Strict
+</IfModule>
+
+<IfModule mod_php8.c>
+    php_flag session.cookie_httponly on
+    php_flag session.cookie_secure on
+    php_value session.cookie_samesite Strict
+</IfModule>
