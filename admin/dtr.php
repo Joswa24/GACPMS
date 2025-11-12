@@ -131,162 +131,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
         include 'navbar.php';
         ?>
         <style>
-        /* Modern UI Styles */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fc;
-            color: #333;
+        .instructor-list {
+            list-style-type: none;
+            padding: 0;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .instructor-list li {
+            padding: 8px;
+            cursor: pointer;
+        }
+        .instructor-list li:hover {
+            background-color: #f0f0f0;
         }
         
-        .card {
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-            border: none;
-            margin-bottom: 1.5rem;
-        }
-        
-        .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 10px 10px 0 0;
-            padding: 1rem 1.25rem;
-        }
-        
-        .btn {
-            border-radius: 6px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        }
-        
-        .form-control {
-            border-radius: 8px;
-            border: 1px solid #e3e6f0;
-            padding: 10px 15px;
-            transition: all 0.3s ease;
-        }
-        
-        .form-control:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-        }
-        
-        .table {
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-        }
-        
-        .table th {
-            background-color: #f8f9fc;
-            font-weight: 600;
-            color: #5a5c69;
-            border-top: none;
-        }
-        
-        .table td {
-            vertical-align: middle;
-        }
-        
-        .modal-content {
-            border-radius: 10px;
-            border: none;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-        }
-        
-        .modal-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 10px 10px 0 0;
-            border: none;
-        }
-        
-        .toast {
-            border-radius: 8px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-        }
-        
-        .badge {
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-weight: 500;
-        }
-        
-        /* DTR Specific Styles */
-        .dtr-container {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            padding: 2rem;
-            margin-bottom: 2rem;
-        }
-        
-        .dtr-header {
-            text-align: center;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 2px solid #e3e6f0;
-        }
-        
-        .dtr-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #4e73df;
-            margin-bottom: 0.5rem;
-        }
-        
-        .dtr-subtitle {
-            font-size: 1.1rem;
-            color: #858796;
-            margin-bottom: 0;
-        }
-        
-        .dtr-name {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 1rem;
-        }
-        
-        .dtr-info-table {
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-        }
-        
-        .dtr-table {
-            border: 1px solid #e3e6f0;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        
-        .dtr-table th {
-            background-color: #f8f9fc;
-            font-weight: 600;
-            color: #5a5c69;
-            padding: 12px 8px;
-            font-size: 0.9rem;
-        }
-        
-        .dtr-table td {
-            padding: 12px 8px;
-            vertical-align: middle;
-            font-size: 0.9rem;
-        }
-        
-        .dtr-footer {
-            margin-top: 2rem;
-            padding-top: 1rem;
-            border-top: 1px solid #e3e6f0;
-            font-size: 0.9rem;
-            color: #5a5c69;
-        }
-        
+        /* Holiday/Suspension Styles */
         .holiday-day {
             background-color: #ffcccc !important;
         }
@@ -297,120 +157,263 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
         
         .holiday-badge {
             background-color: #e74a3b;
-            color: white;
         }
         
         .suspension-badge {
             background-color: #f6c23e;
-            color: white;
         }
         
-        /* Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+        /* Toast Styles */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
         }
         
-        .fade-in {
-            animation: fadeIn 0.5s ease-out;
+        .toast {
+            background-color: white;
+            border-radius: 0.35rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            min-width: 300px;
+            animation: slideIn 0.3s ease-out;
         }
         
-        /* Search Suggestions */
-        #suggestions {
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .toast-success {
+            border-left: 4px solid #1cc88a;
+        }
+        
+        .toast-error {
+            border-left: 4px solid #e74a3b;
+        }
+        
+        .toast-warning {
+            border-left: 4px solid #f6c23e;
+        }
+        
+        .toast-icon {
+            margin-right: 10px;
+            font-size: 20px;
+        }
+        
+        .toast-success .toast-icon {
+            color: #1cc88a;
+        }
+        
+        .toast-error .toast-icon {
+            color: #e74a3b;
+        }
+        
+        .toast-warning .toast-icon {
+            color: #f6c23e;
+        }
+        
+        .toast-close {
+            margin-left: auto;
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            color: #858796;
+        }
+        
+        /* Tab Styles */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #e3e6f0;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        
+        .tab:hover {
+            background-color: #f8f9fc;
+        }
+        
+        .tab.active {
+            border-bottom: 2px solid #4e73df;
+            color: #4e73df;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .holiday-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .holiday-item {
+            padding: 10px;
+            border-bottom: 1px solid #e3e6f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .holiday-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+    <style>
+         #suggestions {
             position: absolute;
-            z-index: 9999;
+            z-index: 9999; /* Ensure it appears on top */
             max-height: 200px;
             overflow-y: auto;
             background-color: white;
-            width: 100%;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            border-radius: 8px;
+            width: 200px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-top: 5px;
         }
 
         #suggestions div {
-            padding: 12px 15px;
+            padding: 10px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            background-color: #f9f9f9;
         }
 
         #suggestions div:hover {
-            background-color: #f8f9fc;
+            background-color: #e0e0e0;
         }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .dtr-container {
-                padding: 1rem;
-            }
-            
-            .dtr-table {
-                font-size: 0.8rem;
-            }
-            
-            .dtr-table th, .dtr-table td {
-                padding: 8px 4px;
-            }
-        }
-        </style>
-        <div>
+    </style>
             <div class="container-fluid pt-4 px-4">
                 <div class="col-sm-12 col-xl-12">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">Generate DTR</h6>
-                            <div>
-                                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#holidayModal">
-                                    <i class="fa fa-calendar-times me-2"></i>Add Holiday
+                    <div class="bg-light rounded h-100 p-4">
+                        <div class="row">
+                            <div class="col-9">
+                                <h6 class="mb-4">Generate DTR</h6>
+                            </div>
+                            <div class="col-3 text-right">
+                                <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#holidayModal">
+                                    <i class="fa fa-calendar-times"></i> Add Holiday/Suspension
                                 </button>
-                                <button type="button" class="btn btn-info btn-sm ms-2" data-bs-toggle="modal" data-bs-target="#holidaysListModal">
-                                    <i class="fas fa-list me-2"></i>View Holidays
+                                <li></liv>
+                                <button type="button" class="btn btn-info ms-2" data-bs-toggle="modal" data-bs-target="#holidaysListModal">
+                                    <i class="fas fa-list me-1"></i> View Holidays
                                 </button>
                             </div>
                         </div>
-                        <div class="card-body">
-                            <form id="filterForm" method="POST" action="">
-                            <div class="row mb-4">
-                                <div class="col-lg-4">
-                                    <label class="form-label">Search</label>
-                                    <div class="input-group">
-                                        <input type="text" name="pname" class="form-control" id="searchInput" autocomplete="off">
-                                        <input hidden type="text" id="pername" name="pername" autocomplete="off">
-                                        <input hidden type="text" id="perid" name="perid" autocomplete="off">
-                                        <input hidden type="text" id="persontype" name="persontype" autocomplete="off">
-                                        <div id="suggestions"></div>
-                                    </div>
-                                </div>
-                                <div class="col-lg-3">
-                                    <label class="form-label">Month</label>
-                                    <select class="form-select" id="months" name="month">
-                                        <option value="<?php echo date('F'); ?>" selected><?php echo date('F'); ?></option>
-                                        <option value="January">January</option>
-                                        <option value="February">February</option>
-                                        <option value="March">March</option>
-                                        <option value="April">April</option>
-                                        <option value="May">May</option>
-                                        <option value="June">June</option>
-                                        <option value="July">July</option>
-                                        <option value="August">August</option>
-                                        <option value="September">September</option>
-                                        <option value="October">October</option>
-                                        <option value="November">November</option>
-                                        <option value="December">December</option>
-                                    </select>
-                                </div>
-                                <div class="col-lg-5 d-flex justify-content-end">
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="fa fa-search me-2"></i>Search
-                                    </button>
-                                    <button onclick="printDiv('container')" type="button" class="btn btn-success ms-2">
-                                        <i class="fa fa-print me-2"></i>Print
-                                    </button> 
-                                </div>
+                        <br>
+                        <form id="filterForm" method="POST" action="">
+                        <div class="row">
+                            <div class="col-lg-3">
+                                <label>Search:</label>
+                                <input type="text" name="pname" class="form-control" id="searchInput" autocomplete="off">
+                                <input hidden type="text" id="pername" name="pername" autocomplete="off">
+                                <input hidden type="text" id="perid" name="perid" autocomplete="off">
+                                <input hidden type="text" id="persontype" name="persontype" autocomplete="off">
+                                <div id="suggestions"></div>
                             </div>
-                            </form>
-                            
-                            <div class="table-responsive mt-4">
+                            <div class="col-lg-3">
+                                <label>Month:</label>
+                                <select class="form-control" id="months" name="month">
+                                    <option value="<?php echo date('F'); ?>" selected><?php echo date('F'); ?></option>
+                                    <option value="January">January</option>
+                                    <option value="February">February</option>
+                                    <option value="March">March</option>
+                                    <option value="April">April</option>
+                                    <option value="May">May</option>
+                                    <option value="June">June</option>
+                                    <option value="July">July</option>
+                                    <option value="August">August</option>
+                                    <option value="September">September</option>
+                                    <option value="October">October</option>
+                                    <option value="November">November</option>
+                                    <option value="December">December</option>
+                                </select>
+                            </div>
+                            <div class="col-lg-3 mt-4">
+                                <label></label>
+                                <button type="submit" class="btn btn-primary" id="btn_search"><i class="fa fa-search"></i> Search</button>
+                            </div>
+                            <div class="col-lg-3 mt-4" style="text-align:right;">
+                                <label></label>
+                                <button onclick="printDiv('container')" type="button" class="btn btn-success" id="btn_print"><i class="fa fa-print"> Print</i></button> 
+                            </div>
+                        </form>
+                        </div>
+                        <hr>
+                        <div class="table-responsive">
+                            <style>
+                                .container {
+                                    width: 100%;
+                                    max-width: 800px;
+                                    margin: 0 auto;
+                                    border: 1px solid #000;
+                                    padding: 20px;
+                                    box-sizing: border-box;
+                                }
+                                .header {
+                                    text-align: center;
+                                    margin-bottom: 20px;
+                                }
+                                .header h1 {
+                                    font-size: 20px;
+                                    text-decoration: underline;
+                                }
+                                .header h3 {
+                                    margin: 5px 0;
+                                }
+                                .info-table {
+                                    width: 100%;
+                                    margin-bottom: 10px;
+                                }
+                                .info-table th, .info-table td {
+                                    border: none;
+                                    padding: 5px;
+                                }
+                                .info-table th {
+                                    text-align: left;
+                                }
+                                table {
+                                    width: 100%;
+                                    border-collapse: collapse;
+                                    margin-bottom: 20px;
+                                }
+                                th, td {
+                                    border: 1px solid #000;
+                                    padding: 5px;
+                                    text-align: center;
+                                }
+                                .footer {
+                                    margin-top: 20px;
+                                }
+                                .footer p {
+                                    font-size: 14px;
+                                    text-align: justify;
+                                }
+                                .footer .in-charge {
+                                    text-align: right;
+                                    margin-top: 30px;
+                                }
+                            </style>
                             <?php
 
                             // Check if the form was submitted
@@ -540,230 +543,217 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
 
                             // Process each day's logs with the new logic
                             foreach ($dailyLogs as $day => $logs) {
-                                // Initialize day data
-                                $daysData[$day] = [
-                                    'time_in_am' => '',
-                                    'time_out_am' => '',
-                                    'time_in_pm' => '',
-                                    'time_out_pm' => '',
-                                    'has_in_am' => false,
-                                    'has_out_am' => false,
-                                    'has_in_pm' => false,
-                                    'has_out_pm' => false
-                                ];
+                            // Initialize day data
+                            $daysData[$day] = [
+                                'time_in_am' => '',
+                                'time_out_am' => '',
+                                'time_in_pm' => '',
+                                'time_out_pm' => '',
+                                'has_in_am' => false,
+                                'has_out_am' => false,
+                                'has_in_pm' => false,
+                                'has_out_pm' => false
+                            ];
+                            
+                            // Special logic for both instructors and personnel based on the new rules
+                            if (!empty($logs)) {
+                                // Get the first log entry for the day
+                                $log = $logs[0];
                                 
-                                // Special logic for both instructors and personnel based on the new rules
-                                if (!empty($logs)) {
-                                    // Get the first log entry for the day
-                                    $log = $logs[0];
-                                    
-                                    $time_in = !empty($log['time_in']) && $log['time_in'] != '00:00:00' ? $log['time_in'] : null;
-                                    $time_out = !empty($log['time_out']) && $log['time_out'] != '00:00:00' ? $log['time_out'] : null;
+                                $time_in = !empty($log['time_in']) && $log['time_in'] != '00:00:00' ? $log['time_in'] : null;
+                                $time_out = !empty($log['time_out']) && $log['time_out'] != '00:00:00' ? $log['time_out'] : null;
 
-                                    // Get hour in 24-hour format for easy comparison
-                                    $hour_in = $time_in ? (int)date('H', strtotime($time_in)) : null;
-                                    $hour_out = $time_out ? (int)date('H', strtotime($time_out)) : null;
+                                // Get hour in 24-hour format for easy comparison
+                                $hour_in = $time_in ? (int)date('H', strtotime($time_in)) : null;
+                                $hour_out = $time_out ? (int)date('H', strtotime($time_out)) : null;
 
-                                    // CASE 1: Time in is in the morning (1:00am-11:59am) with NO time out
-                                    if ($time_in && !$time_out && $hour_in < 12) {
-                                        // Set morning record
-                                        $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
-                                        $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12:00 PM departure
-                                        // Keep afternoon blank
-                                        $daysData[$day]['time_in_pm'] = '';
-                                        $daysData[$day]['time_out_pm'] = '';
-                                    }
-                                    // CASE 2: Time in is in the afternoon (12:01pm-11:59pm) with NO time out
-                                    elseif ($time_in && !$time_out && $hour_in >= 12) {
-                                        // Keep morning blank
-                                        $daysData[$day]['time_in_am'] = '';
-                                        $daysData[$day]['time_out_am'] = '';
-                                        // Set afternoon record
-                                        $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in));
-                                        $daysData[$day]['time_out_pm'] = '5:00 PM'; // Automatic 5:00 PM departure
-                                    }
-                                    // CASE 3: Time in and time out are both in the morning (1:00am-11:59am)
-                                    elseif ($time_in && $time_out && $hour_in < 12 && $hour_out < 12) {
-                                        // Set morning record
-                                        $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
-                                        $daysData[$day]['time_out_am'] = date('g:i A', strtotime($time_out)); // Actual time out
-                                        // Keep afternoon blank
-                                        $daysData[$day]['time_in_pm'] = '';
-                                        $daysData[$day]['time_out_pm'] = '';
-                                    }
-                                    // CASE 4: Time in and time out are both in the afternoon (12:01pm-11:59pm)
-                                    elseif ($time_in && $time_out && $hour_in >= 12 && $hour_out >= 12) {
-                                        // Keep morning blank
-                                        $daysData[$day]['time_in_am'] = '';
-                                        $daysData[$day]['time_out_am'] = '';
-                                        // Set afternoon record
-                                        $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in));
-                                        $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out)); // Actual time out
-                                    }
-                                    // CASE 5: Time in is in the morning (1:00am-11:59am) and time out is in the afternoon (1:00pm-11:59pm)
-                                    elseif ($time_in && $time_out && $hour_in < 12 && $hour_out >= 12) {
-                                        // Set morning record
-                                        $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
-                                        $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12:00 PM departure
-                                        // Set afternoon record
-                                        $daysData[$day]['time_in_pm'] = '1:00 PM'; // Automatic 1:00 PM arrival
-                                        $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out)); // Actual time out
-                                    }
+                                // CASE 1: Time in is in the morning (1:00am-11:59am) with NO time out
+                                if ($time_in && !$time_out && $hour_in < 12) {
+                                    // Set morning record
+                                    $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12:00 PM departure
+                                    // Keep afternoon blank
+                                    $daysData[$day]['time_in_pm'] = '';
+                                    $daysData[$day]['time_out_pm'] = '';
+                                }
+                                // CASE 2: Time in is in the afternoon (12:01pm-11:59pm) with NO time out
+                                elseif ($time_in && !$time_out && $hour_in >= 12) {
+                                    // Keep morning blank
+                                    $daysData[$day]['time_in_am'] = '';
+                                    $daysData[$day]['time_out_am'] = '';
+                                    // Set afternoon record
+                                    $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_pm'] = '5:00 PM'; // Automatic 1:00 PM departure
+                                }
+                                // CASE 3: Time in and time out are both in the morning (1:00am-11:59am)
+                                elseif ($time_in && $time_out && $hour_in < 12 && $hour_out < 12) {
+                                    // Set morning record
+                                    $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_am'] = date('g:i A', strtotime($time_out)); // Actual time out
+                                    // Keep afternoon blank
+                                    $daysData[$day]['time_in_pm'] = '';
+                                    $daysData[$day]['time_out_pm'] = '';
+                                }
+                                // CASE 4: Time in and time out are both in the afternoon (12:01pm-11:59pm)
+                                elseif ($time_in && $time_out && $hour_in >= 12 && $hour_out >= 12) {
+                                    // Keep morning blank
+                                    $daysData[$day]['time_in_am'] = '';
+                                    $daysData[$day]['time_out_am'] = '';
+                                    // Set afternoon record
+                                    $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out)); // Actual time out
+                                }
+                                // CASE 5: Time in is in the morning (1:00am-11:59am) and time out is in the afternoon (1:00pm-11:59pm)
+                                elseif ($time_in && $time_out && $hour_in < 12 && $hour_out >= 12) {
+                                    // Set morning record
+                                    $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12:00 PM departure
+                                    // Set afternoon record
+                                    $daysData[$day]['time_in_pm'] = '1:00 PM'; // Automatic 1:00 PM arrival
+                                    $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out)); // Actual time out
                                 }
                             }
+                        }
 
-                            // Close the statement
-                            $stmt->close();
-                            }
+                        // Close the statement
+                        $stmt->close();
+                        }
                             ?>
-                                <div class="dtr-container fade-in" id="container">
-                                    <div class="dtr-header">
-                                        <div class="dtr-title">Civil Service Form No. 48</div>
-                                        <div class="dtr-subtitle">DAILY TIME RECORD</div>
-                                        <?php if (!empty($name)): ?>
-                                            <div class="dtr-name"><?php echo htmlspecialchars($name); ?></div>
+                            <div class="container" id="container">
+                                <div class="header">
+                                    <h5>Civil Service Form No. 48</h5>
+                                    <h4>DAILY TIME RECORD</h4>
+                                    <?php if (!empty($name)): ?>
+                                        <h1><?php echo htmlspecialchars($name); ?></h1>
+                                    <?php else: ?>
+                                        <p>(Name)</p>
+                                    <?php endif; ?>
+                                </div>
+
+                                <table class="info-table">
+                                    <tr>
+                                        <th>For the month of</th>
+                                        <td><?php if (!empty($month)): ?>
+                                            <?php echo htmlspecialchars($month); ?>
                                         <?php else: ?>
-                                            <div class="dtr-name">(Name)</div>
-                                        <?php endif; ?>
-                                    </div>
+                                            <p>(Month)</p>
+                                        <?php endif; ?></td>
+                                        <td><?php echo $currentYear; ?></td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Official hours of arrival and departure:</th>
+                                        <td>Regular Days: <?php echo $regularDays; ?></td>
+                                        <td>Saturdays: <?php echo $saturdays; ?></td>
+                                        <td></td>
+                                    </tr>
+                                </table>
 
-                                    <div class="dtr-info-table">
-                                        <div class="row">
-                                            <div class="col-6">
-                                                <div>For the month of</div>
-                                            </div>
-                                            <div class="col-3">
-                                                <div><?php if (!empty($month)): ?>
-                                                    <?php echo htmlspecialchars($month); ?>
-                                                <?php else: ?>
-                                                    (Month)
-                                                <?php endif; ?></div>
-                                            </div>
-                                            <div class="col-3">
-                                                <div><?php echo $currentYear; ?></div>
-                                            </div>
-                                        </div>
-                                        <div class="row mt-2">
-                                            <div class="col-6">
-                                                <div>Official hours of arrival and departure:</div>
-                                            </div>
-                                            <div class="col-3">
-                                                <div>Regular Days: <?php echo $regularDays; ?></div>
-                                            </div>
-                                            <div class="col-3">
-                                                <div>Saturdays: <?php echo $saturdays; ?></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    </div>
-
-                                    <div class="table-responsive">
-                                        <table class="table dtr-table">
-                                            <thead>
-                                                <tr>
-                                                    <th rowspan="2" class="text-center">Days</th>
-                                                    <th colspan="2" class="text-center">A.M.</th>
-                                                    <th colspan="2" class="text-center">P.M.</th>
-                                                    <th colspan="2" class="text-center">Undertime</th>
-                                                </tr>
-                                                <tr>
-                                                    <th class="text-center">Arrival</th>
-                                                    <th class="text-center">Departure</th>
-                                                    <th class="text-center">Arrival</th>
-                                                    <th class="text-center">Departure</th>
-                                                    <th class="text-center">Hours</th>
-                                                    <th class="text-center">Minutes</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                            <?php
-                                            // Loop through all the days of the month (1 to 31)
-                                            for ($day = 1; $day <= 31; $day++) {
-                                                // Check if time data exists for this day
-                                                $timeData = isset($daysData[$day]) ? $daysData[$day] : [
-                                                    'time_in_am' => '',
-                                                    'time_out_am' => '',
-                                                    'time_in_pm' => '',
-                                                    'time_out_pm' => '',
-                                                    'has_in_am' => false,
-                                                    'has_out_am' => false,
-                                                    'has_in_pm' => false,
-                                                    'has_out_pm' => false
-                                                ];
-                                                
-                                                // Check if this day is a holiday or suspension
-                                                $isHoliday = isset($holidays[$day]) && $holidays[$day]['type'] === 'holiday';
-                                                $isSuspension = isset($holidays[$day]) && $holidays[$day]['type'] === 'suspension';
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th rowspan="2">Days</th>
+                                            <th colspan="2">A.M.</th>
+                                            <th colspan="2">P.M.</th>
+                                            <th colspan="2">Undertime</th>
+                                        </tr>
+                                        <tr>
+                                            <th>Arrival</th>
+                                            <th>Departure</th>
+                                            <th>Arrival</th>
+                                            <th>Departure</th>
+                                            <th>Hours</th>
+                                            <th>Minutes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    <?php
+                                    // Loop through all the days of the month (1 to 31)
+                                    for ($day = 1; $day <= 31; $day++) {
+                                        // Check if time data exists for this day
+                                        $timeData = isset($daysData[$day]) ? $daysData[$day] : [
+                                            'time_in_am' => '',
+                                            'time_out_am' => '',
+                                            'time_in_pm' => '',
+                                            'time_out_pm' => '',
+                                            'has_in_am' => false,
+                                            'has_out_am' => false,
+                                            'has_in_pm' => false,
+                                            'has_out_pm' => false
+                                        ];
+                                        
+                                        // Check if this day is a holiday or suspension
+                                        $isHoliday = isset($holidays[$day]) && $holidays[$day]['type'] === 'holiday';
+                                        $isSuspension = isset($holidays[$day]) && $holidays[$day]['type'] === 'suspension';
+                                    
+                                        // Display the row for each day
+                                        echo "<tr>";
+                                        echo "<td>" . $day . "</td>";
+                                        
+                                        // If it's a holiday or suspension, mark all time fields
+                                        if ($isHoliday || $isSuspension) {
+                                            // Apply holiday/suspension class to each time cell individually
+                                            $cellClass = $isHoliday ? 'holiday-day' : 'suspension-day';
                                             
-                                                // Display the row for each day
-                                                echo "<tr>";
-                                                echo "<td class='text-center fw-bold'>" . $day . "</td>";
-                                                
-                                                // If it's a holiday or suspension, mark all time fields
-                                                if ($isHoliday || $isSuspension) {
-                                                    // Apply holiday/suspension class to each time cell individually
-                                                    $cellClass = $isHoliday ? 'holiday-day' : 'suspension-day';
-                                                    
-                                                    echo "<td colspan='6' class='{$cellClass} text-center' style='padding: 12px;'>";
-                                                    if ($isHoliday) {
-                                                        echo "<span class='badge holiday-badge me-2'>HOLIDAY</span> " . htmlspecialchars($holidays[$day]['description']);
-                                                    } else {
-                                                        echo "<span class='badge suspension-badge me-2'>SUSPENDED</span> " . htmlspecialchars($holidays[$day]['description']);
-                                                    }
-                                                    echo "</td>";
-                                                } else {
-                                                    // AM Arrival
-                                                    if (!empty($timeData['time_in_am'])) {
-                                                        echo "<td>" . htmlspecialchars($timeData['time_in_am']) . "</td>";
-                                                    } else {
-                                                        echo "<td>—</td>";
-                                                    }
-                                                    
-                                                    // AM Departure
-                                                    if (!empty($timeData['time_out_am'])) {
-                                                        echo "<td>" . htmlspecialchars($timeData['time_out_am']) . "</td>";
-                                                    } else {
-                                                        echo "<td>—</td>";
-                                                    }
-                                                    
-                                                    // PM Arrival
-                                                    if (!empty($timeData['time_in_pm'])) {
-                                                        echo "<td>" . htmlspecialchars($timeData['time_in_pm']) . "</td>";
-                                                    } else {
-                                                        echo "<td>—</td>";
-                                                    }
-                                                    
-                                                    // PM Departure
-                                                    if (!empty($timeData['time_out_pm'])) {
-                                                        echo "<td>" . htmlspecialchars($timeData['time_out_pm']) . "</td>";
-                                                    } else {
-                                                        echo "<td>—</td>";
-                                                    }
-                                                    
-                                                    echo "<td></td>"; // Placeholder for undertime
-                                                    echo "<td></td>"; // Placeholder for undertime
-                                                }
-                                                echo "</tr>";
+                                            echo "<td colspan='6' class='{$cellClass}' style='text-align:center;'>";
+                                            if ($isHoliday) {
+                                                echo "<span class='badge holiday-badge me-1'>HOLIDAY</span> " . htmlspecialchars($holidays[$day]['description']);
+                                            } else {
+                                                echo "<span class='badge suspension-badge me-1'>SUSPENDED</span> " . htmlspecialchars($holidays[$day]['description']);
                                             }
-                                            ?>
-                                            </tbody>
-                                            <tfoot>
-                                                <tr>
-                                                    <th class="text-center">Total</th>
-                                                    <td colspan="6"></td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-                                    </div>
+                                            echo "</td>";
+                                        } else {
+                                            // AM Arrival
+                                            if (!empty($timeData['time_in_am'])) {
+                                                echo "<td>" . htmlspecialchars($timeData['time_in_am']) . "</td>";
+                                            } else {
+                                                echo "<td>—</td>";
+                                            }
+                                            
+                                            // AM Departure
+                                            if (!empty($timeData['time_out_am'])) {
+                                                echo "<td>" . htmlspecialchars($timeData['time_out_am']) . "</td>";
+                                            } else {
+                                                echo "<td>—</td>";
+                                            }
+                                            
+                                            // PM Arrival
+                                            if (!empty($timeData['time_in_pm'])) {
+                                                echo "<td>" . htmlspecialchars($timeData['time_in_pm']) . "</td>";
+                                            } else {
+                                                echo "<td>—</td>";
+                                            }
+                                            
+                                            // PM Departure
+                                            if (!empty($timeData['time_out_pm'])) {
+                                                echo "<td>" . htmlspecialchars($timeData['time_out_pm']) . "</td>";
+                                            } else {
+                                                echo "<td>—</td>";
+                                            }
+                                            
+                                            echo "<td></td>"; // Placeholder for undertime
+                                            echo "<td></td>"; // Placeholder for undertime
+                                        }
+                                        echo "</tr>";
+                                    }
+                                    
+                                    ?>
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <th>Total</th>
+                                            <td colspan="6"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
 
-                                    <div class="dtr-footer">
-                                        <p>
-                                            I CERTIFY on my honor that the above is a true and correct report of the hours of work performed, record of which was made daily at the time of arrival and departure from the office.
-                                        </p>
-                                        <div class="text-end mt-4">
-                                            <p>__________________________</p>
-                                            <p>In-Charge</p>
-                                        </div>
+                                <div class="footer">
+                                    <p>
+                                        I CERTIFY on my honor that the above is a true and correct report of the hours of work performed, record of which was made daily at the time of arrival and departure from the office.
+                                    </p>
+                                    <div class="in-charge">
+                                        <p>__________________________</p>
+                                        <p>In-Charge</p>
                                     </div>
                                 </div>
                             </div>
@@ -806,7 +796,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                             <button type="submit" name="add_holiday" class="btn btn-primary">
-                                <i class="fas fa-save me-2"></i>Add
+                                <i class="fas fa-save me-1"></i> Add
                             </button>
                         </div>
                     </form>
@@ -825,35 +815,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <ul class="nav nav-tabs mb-3" id="holidayTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="upcoming-tab" data-bs-toggle="tab" data-bs-target="#upcoming" type="button" role="tab" aria-controls="upcoming" aria-selected="true">Upcoming</button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="past-tab" data-bs-toggle="tab" data-bs-target="#past" type="button" role="tab" aria-controls="past" aria-selected="false">Past</button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="false">All</button>
-                            </li>
-                        </ul>
+                        <div class="tabs">
+                            <div class="tab active" data-tab="upcoming">Upcoming</div>
+                            <div class="tab" data-tab="past">Past</div>
+                            <div class="tab" data-tab="all">All</div>
+                        </div>
                         
-                        <div class="tab-content" id="holidayTabContent">
-                            <div class="tab-pane fade show active" id="upcoming" role="tabpanel" aria-labelledby="upcoming-tab">
-                                <div class="holiday-list" id="upcoming-holidays">
-                                    <!-- Holidays will be loaded here -->
-                                </div>
+                        <div class="tab-content active" id="upcoming">
+                            <div class="holiday-list" id="upcoming-holidays">
+                                <!-- Holidays will be loaded here -->
                             </div>
-                            
-                            <div class="tab-pane fade" id="past" role="tabpanel" aria-labelledby="past-tab">
-                                <div class="holiday-list" id="past-holidays">
-                                    <!-- Holidays will be loaded here -->
-                                </div>
+                        </div>
+                        
+                        <div class="tab-content" id="past">
+                            <div class="holiday-list" id="past-holidays">
+                                <!-- Holidays will be loaded here -->
                             </div>
-                            
-                            <div class="tab-pane fade" id="all" role="tabpanel" aria-labelledby="all-tab">
-                                <div class="holiday-list" id="all-holidays">
-                                    <!-- Holidays will be loaded here -->
-                                </div>
+                        </div>
+                        
+                        <div class="tab-content" id="all">
+                            <div class="holiday-list" id="all-holidays">
+                                <!-- Holidays will be loaded here -->
                             </div>
                         </div>
                     </div>
@@ -974,19 +956,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                 });
                 
                 // Tab functionality for holidays modal
-                $('.nav-link').on('click', function() {
-                    const tabId = $(this).attr('data-bs-target');
+                $('.tab').on('click', function() {
+                    const tabId = $(this).data('tab');
                     
                     // Update active tab
-                    $('.nav-link').removeClass('active');
+                    $('.tab').removeClass('active');
                     $(this).addClass('active');
                     
                     // Update active content
-                    $('.tab-pane').removeClass('show active');
-                    $(tabId).addClass('show active');
+                    $('.tab-content').removeClass('active');
+                    $('#' + tabId).addClass('active');
                     
                     // Load holidays based on tab
-                    loadHolidays(tabId.substring(1)); // Remove the # from the target
+                    loadHolidays(tabId);
                 });
                 
                 // Load holidays when modal opens
@@ -1021,7 +1003,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                                         const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
                                         
                                         html += `
-                                            <div class="holiday-item d-flex justify-content-between align-items-center p-3 mb-2">
+                                            <div class="holiday-item">
                                                 <div>
                                                     <span class="badge ${typeClass} me-2">${typeText}</span>
                                                     <strong>${formattedDate}</strong>
@@ -1101,11 +1083,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                     
                     const toast = `
                         <div class="toast ${toastClass}" id="${toastId}">
-                            <div class="toast-body d-flex align-items-center">
-                                <div class="toast-icon ${iconClass} me-2"></div>
-                                <div class="toast-message">${message}</div>
-                                <button class="btn-close ms-auto" onclick="closeToast('${toastId}')">&times;</button>
-                            </div>
+                            <div class="toast-icon ${iconClass}"></div>
+                            <div class="toast-message">${message}</div>
+                            <button class="toast-close" onclick="closeToast('${toastId}')">&times;</button>
                         </div>
                     `;
                     
