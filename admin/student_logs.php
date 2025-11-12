@@ -7,6 +7,7 @@ include '../connection.php';
 $createTableQuery = "
 CREATE TABLE IF NOT EXISTS instructor_attendance_dedicated (
     id INT PRIMARY KEY AUTO_INCREMENT,
+    instructor_id INT(55) NOT NULL,
     instructor_name VARCHAR(255) NOT NULL,
     subject_name VARCHAR(255),
     year_level VARCHAR(50),
