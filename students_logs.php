@@ -344,7 +344,7 @@ if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
         $stats = getAttendanceStats($db, $first_student_year ?? 'N/A', $first_student_section ?? 'N/A');
         
         // 1. Save to instructor_attendance_summary (UPDATED WITH ROOM)
-        $summary_sql = "INSERT INTO instructor_attendance_dedicated 
+        $summary_sql = "INSERT INTO instructor_attendance_admin 
             (instructor_id, instructor_name, subject_name, year_level, section, room,
             total_students, present_count, absent_count, attendance_rate, 
             session_date, time_in, time_out) 

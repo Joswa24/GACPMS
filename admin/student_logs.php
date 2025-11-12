@@ -5,7 +5,7 @@ include '../connection.php';
 
 // Create the dedicated table if it doesn't exist
 $createTableQuery = "
-CREATE TABLE IF NOT EXISTS instructor_attendance_dedicated (
+CREATE TABLE IF NOT EXISTS instructor_attendance_admin (
     id INT PRIMARY KEY AUTO_INCREMENT,
     instructor_id INT(55) NOT NULL,
     instructor_name VARCHAR(255) NOT NULL,
@@ -108,7 +108,7 @@ if (isset($_GET['refresh_data'])) {
 }
 
 // Build the query to fetch data from the DEDICATED table
-$query = "SELECT * FROM instructor_attendance_dedicated WHERE session_date = ?";
+$query = "SELECT * FROM instructor_attendance_admin WHERE session_date = ?";
 $params = [$selected_date];
 $types = "s";
 
