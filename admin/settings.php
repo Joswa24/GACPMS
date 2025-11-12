@@ -321,41 +321,22 @@ try {
             box-shadow: var(--box-shadow);
             background: white;
             position: relative;
+            width: 100%;
         }
 
         .table-responsive {
             border-radius: var(--border-radius);
-            overflow-x: auto;
+            overflow-x: hidden; /* Remove horizontal scrolling */
             -webkit-overflow-scrolling: touch;
             scrollbar-width: thin;
             scrollbar-color: var(--icon-color) #f1f1f1;
-        }
-
-        /* Custom scrollbar for webkit browsers */
-        .table-responsive::-webkit-scrollbar {
-            height: 8px;
-            width: 8px;
-        }
-
-        .table-responsive::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-
-        .table-responsive::-webkit-scrollbar-thumb {
-            background: var(--icon-color);
-            border-radius: 10px;
-        }
-
-        .table-responsive::-webkit-scrollbar-thumb:hover {
-            background: var(--secondary-color);
         }
 
         .modern-table {
             border-collapse: separate;
             border-spacing: 0;
             width: 100%;
-            min-width: 1200px; /* Ensure minimum width for all columns */
+            table-layout: fixed; /* Fixed layout to control column widths */
         }
 
         .modern-table thead th {
@@ -363,12 +344,15 @@ try {
             color: white;
             font-weight: 600;
             border: none;
-            padding: 18px 15px;
+            padding: 12px 8px; /* Reduced padding */
             text-align: left;
             position: sticky;
             top: 0;
             z-index: 10;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.85rem; /* Smaller font size */
         }
 
         .modern-table thead th:first-child {
@@ -399,27 +383,30 @@ try {
         }
 
         .modern-table td {
-            padding: 15px;
+            padding: 10px 8px; /* Reduced padding */
             border: none;
             vertical-align: middle;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.85rem; /* Smaller font size */
         }
 
-        /* Fixed column widths */
-        .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 50px; }
-        .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 150px; }
-        .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 180px; }
-        .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 180px; }
-        .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 130px; }
-        .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 200px; }
-        .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 120px; }
-        .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 100px; }
-        .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 120px; }
+        /* Optimized column widths to fit all columns */
+        .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 5%; } /* ID */
+        .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 12%; } /* Username */
+        .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 15%; } /* Login Time */
+        .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 15%; } /* Logout Time */
+        .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 10%; } /* IP Address */
+        .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 15%; } /* Location */
+        .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; } /* Activity */
+        .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 8%; } /* Status */
+        .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 10%; } /* Duration */
 
         .badge {
-            font-size: 0.85em;
+            font-size: 0.75em; /* Smaller badge */
             border-radius: 8px;
-            padding: 0.5em 0.8em;
+            padding: 0.4em 0.6em; /* Smaller padding */
             font-weight: 500;
         }
 
@@ -429,7 +416,7 @@ try {
             font-weight: 500;
             transition: var(--transition);
             border: none;
-            padding: 10px 20px;
+            padding: 8px 15px; /* Smaller padding */
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -437,6 +424,7 @@ try {
             position: relative;
             overflow: hidden;
             z-index: 1;
+            font-size: 0.85rem; /* Smaller font */
         }
 
         .btn::before {
@@ -456,7 +444,7 @@ try {
         }
 
         .btn i {
-            font-size: 0.9rem;
+            font-size: 0.8rem; /* Smaller icon */
         }
 
         /* Clear Button */
@@ -509,9 +497,10 @@ try {
         .form-control, .form-select {
             border-radius: 8px;
             border: 1.5px solid #e3e6f0;
-            padding: 12px 16px;
+            padding: 10px 12px; /* Smaller padding */
             transition: var(--transition);
             background-color: var(--light-bg);
+            font-size: 0.85rem; /* Smaller font */
         }
 
         .form-control:focus, .form-select:focus {
@@ -523,7 +512,8 @@ try {
         .form-label {
             font-weight: 600;
             color: var(--dark-text);
-            margin-bottom: 8px;
+            margin-bottom: 6px; /* Smaller margin */
+            font-size: 0.85rem; /* Smaller font */
         }
 
         /* Card Header */
@@ -532,7 +522,7 @@ try {
             color: white;
             border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
             border: none;
-            padding: 20px 25px;
+            padding: 15px 20px; /* Smaller padding */
         }
 
         /* Back to Top Button */
@@ -609,27 +599,23 @@ try {
             }
             
             .btn {
-                padding: 8px 15px;
-                font-size: 0.875rem;
+                padding: 6px 10px;
+                font-size: 0.75rem;
             }
             
-            /* Show scroll indicator on mobile */
-            .table-responsive::after {
-                content: '→';
-                position: absolute;
-                bottom: 10px;
-                right: 10px;
-                background: var(--icon-color);
-                color: white;
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 16px;
-                z-index: 5;
-                animation: pulse 2s infinite;
+            .form-control, .form-select {
+                padding: 8px 10px;
+                font-size: 0.75rem;
+            }
+            
+            .modern-table th, .modern-table td {
+                padding: 8px 5px;
+                font-size: 0.75rem;
+            }
+            
+            .badge {
+                font-size: 0.65em;
+                padding: 0.3em 0.5em;
             }
         }
         
@@ -645,22 +631,9 @@ try {
             color: white;
         }
         
-        /* Table scroll indicator animation */
-        @keyframes pulse {
-            0% {
-                box-shadow: 0 0 0 0 rgba(92, 149, 233, 0.7);
-            }
-            70% {
-                box-shadow: 0 0 0 10px rgba(92, 149, 233, 0);
-            }
-            100% {
-                box-shadow: 0 0 0 0 rgba(92, 149, 233, 0);
-            }
-        }
-        
         /* Table cell truncation for long text */
         .table-cell-truncate {
-            max-width: 200px;
+            max-width: 100%;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -669,9 +642,9 @@ try {
         /* IP address badge styling */
         .ip-badge {
             font-family: 'Courier New', monospace;
-            font-size: 0.85em;
+            font-size: 0.75em; /* Smaller font */
             background: linear-gradient(135deg, #6c757d, #5a6268);
-            padding: 0.4em 0.7em;
+            padding: 0.3em 0.5em; /* Smaller padding */
         }
         
         /* Location button styling */
@@ -679,9 +652,9 @@ try {
             background: linear-gradient(135deg, var(--info-color), #2c9faf);
             color: white;
             border: none;
-            border-radius: 8px;
-            padding: 0.4em 0.8em;
-            font-size: 0.85em;
+            border-radius: 6px; /* Smaller border radius */
+            padding: 0.3em 0.6em; /* Smaller padding */
+            font-size: 0.75em; /* Smaller font */
             transition: var(--transition);
         }
         
@@ -730,7 +703,7 @@ try {
         /* Table container fix */
         .table-wrapper {
             width: 100%;
-            overflow-x: auto;
+            overflow: hidden; /* Changed from overflow-x: auto */
             margin-bottom: 1rem;
         }
         
@@ -765,10 +738,155 @@ try {
             font-weight: 600;
             width: 120px;
             color: var(--dark-text);
+            font-size: 0.85rem; /* Smaller font */
         }
         
         .location-detail-value {
             flex: 1;
+            font-size: 0.85rem; /* Smaller font */
+        }
+        
+        /* Modern card design with glassmorphism effect */
+        .modern-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+            border-radius: var(--border-radius);
+            transition: var(--transition);
+        }
+        
+        .modern-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(31, 38, 135, 0.2);
+        }
+        
+        /* Enhanced table design */
+        .enhanced-table {
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: var(--box-shadow);
+            background: white;
+            position: relative;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .enhanced-table::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--icon-color), var(--secondary-color));
+            z-index: 1;
+        }
+        
+        /* Compact table design */
+        .compact-table {
+            font-size: 0.8rem;
+        }
+        
+        .compact-table th {
+            padding: 8px 6px;
+            font-size: 0.8rem;
+        }
+        
+        .compact-table td {
+            padding: 8px 6px;
+            font-size: 0.8rem;
+        }
+        
+        /* Responsive table adjustments */
+        @media (max-width: 1200px) {
+            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 5%; }
+            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 12%; }
+            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 14%; }
+            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 14%; }
+            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 10%; }
+            .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 15%; }
+            .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
+            .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 10%; }
+            .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 10%; }
+        }
+        
+        @media (max-width: 992px) {
+            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 5%; }
+            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 12%; }
+            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 13%; }
+            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 13%; }
+            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 10%; }
+            .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; }
+            .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
+            .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 10%; }
+            .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 10%; }
+        }
+        
+        @media (max-width: 768px) {
+            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 5%; }
+            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 12%; }
+            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; }
+            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; }
+            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 10%; }
+            .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; }
+            .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
+            .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 11%; }
+            .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 11%; }
+        }
+        
+        /* Table container with gradient border */
+        .gradient-border-table {
+            position: relative;
+            border-radius: var(--border-radius);
+            background: white;
+            padding: 2px;
+            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color));
+        }
+        
+        .gradient-border-table-inner {
+            background: white;
+            border-radius: calc(var(--border-radius) - 2px);
+            overflow: hidden;
+        }
+        
+        /* Enhanced hover effect for table rows */
+        .modern-table tbody tr {
+            position: relative;
+        }
+        
+        .modern-table tbody tr::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--icon-color), var(--secondary-color));
+            transition: width 0.3s ease;
+        }
+        
+        .modern-table tbody tr:hover::after {
+            width: 100%;
+        }
+        
+        /* Modern scrollbar */
+        .modern-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        
+        .modern-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        .modern-scrollbar::-webkit-scrollbar-thumb {
+            background: var(--icon-color);
+            border-radius: 10px;
+        }
+        
+        .modern-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: var(--secondary-color);
         }
     </style>
 </head>
@@ -785,7 +903,7 @@ try {
 
             <div class="container-fluid pt-4 px-4">
                 <div class="col-sm-12 col-xl-12">
-                    <div class="bg-light rounded h-100 p-4">
+                    <div class="bg-light rounded h-100 p-4 modern-card">
                         <div class="row">
                             <div class="col-9">
                                 <h6 class="mb-4">Admin Access Log</h6>
@@ -892,95 +1010,97 @@ try {
                         </div>
 
                         <!-- Modern Logs Table -->
-                        <div class="modern-table-container">
-                            <div class="table-wrapper">
-                                <div class="table-responsive">
-                                    <table class="modern-table" id="accessLogsTable">
-                                        <thead>
-                                            <tr>
-                                                <th scope="col">#</th>
-                                                <th scope="col">Username</th>
-                                                <th scope="col">Login Time</th>
-                                                <th scope="col">Logout Time</th>
-                                                <th scope="col">IP Address</th>
-                                                <th scope="col">Location</th>
-                                                <th scope="col">Activity</th>
-                                                <th scope="col">Status</th>
-                                                <th scope="col">Duration</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php if (empty($logs)): ?>
+                        <div class="gradient-border-table">
+                            <div class="gradient-border-table-inner">
+                                <div class="table-wrapper modern-scrollbar">
+                                    <div class="table-responsive">
+                                        <table class="modern-table compact-table" id="accessLogsTable">
+                                            <thead>
                                                 <tr>
-                                                    <td colspan="9" class="text-center py-4">
-                                                        <div class="d-flex flex-column align-items-center">
-                                                            <i class="fas fa-clipboard-list text-muted mb-2" style="font-size: 2rem;"></i>
-                                                            <p class="text-muted">No access logs found</p>
-                                                        </div>
-                                                    </td>
+                                                    <th scope="col">#</th>
+                                                    <th scope="col">Username</th>
+                                                    <th scope="col">Login Time</th>
+                                                    <th scope="col">Logout Time</th>
+                                                    <th scope="col">IP Address</th>
+                                                    <th scope="col">Location</th>
+                                                    <th scope="col">Activity</th>
+                                                    <th scope="col">Status</th>
+                                                    <th scope="col">Duration</th>
                                                 </tr>
-                                            <?php else: ?>
-                                                <?php foreach ($logs as $index => $log): ?>
-                                                    <tr class="table-<?php echo $log['id'];?>" data-date="<?php echo date('Y-m-d', strtotime($log['login_time'])); ?>" data-username="<?php echo strtolower(htmlspecialchars($log['username'] ?? '')); ?>" data-status="<?php echo $log['status']; ?>" data-activity="<?php echo strtolower(htmlspecialchars($log['activity'] ?? '')); ?>">
-                                                        <td><?php echo $index + 1; ?></td>
-                                                        <td>
-                                                            <strong><?php echo htmlspecialchars($log['username'] ?? 'N/A'); ?></strong>
-                                                        </td>
-                                                        <td>
-                                                            <?php echo date('M j, Y g:i A', strtotime($log['login_time'])); ?>
-                                                        </td>
-                                                        <td>
-                                                            <?php echo $log['logout_time'] ? date('M j, Y g:i A', strtotime($log['logout_time'])) : 'Still Active'; ?>
-                                                        </td>
-                                                        <td>
-                                                            <span class="badge ip-badge"><?php echo htmlspecialchars($log['ip_address']); ?></span>
-                                                        </td>
-                                                        <td>
-                                                            <?php 
-                                                            $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
-                                                            $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
-
-                                                            // Check if location details are available and valid
-                                                            $locationData = json_decode($log['location_details'], true);
-                                                            if ($locationData && isset($locationData['source']) && $locationData['source'] === 'GPS') {
-                                                                echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
-                                                                echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
-                                                                echo '<i class="fas fa-map-marked-alt"></i> View';
-                                                                echo '</button>';
-                                                                echo '<div class="mt-1"><small class="text-success"><i class="fas fa-satellite-dish"></i> GPS Location</small></div>';
-                                                            } else {
-                                                                echo '<div class="table-cell-truncate">' . $summaryLocation . '</div>';
-                                                                if ($locationData && isset($locationData['source'])) {
-                                                                    echo '<div class="mt-1"><small class="text-muted"><i class="fas fa-wifi"></i> IP Location</small></div>';
-                                                                }
-                                                            }
-                                                            ?>
-                                                        </td>
-                                                        <td>
-                                                            <span class="badge bg-info"><?php echo htmlspecialchars($log['activity'] ?? 'Login'); ?></span>
-                                                        </td>
-                                                        <td>
-                                                            <span class="badge <?php echo $log['status'] === 'success' ? 'badge-success' : 'badge-danger'; ?>">
-                                                                <?php echo ucfirst($log['status']); ?>
-                                                            </span>
-                                                        </td>
-                                                        <td>
-                                                            <?php 
-                                                            if ($log['logout_time']) {
-                                                                $login = new DateTime($log['login_time']);
-                                                                $logout = new DateTime($log['logout_time']);
-                                                                $interval = $login->diff($logout);
-                                                                echo '<span class="badge bg-secondary">' . $interval->format('%hh %im %ss') . '</span>';
-                                                            } else {
-                                                                echo '<span class="badge badge-warning">Active</span>';
-                                                            }
-                                                            ?>
+                                            </thead>
+                                            <tbody>
+                                                <?php if (empty($logs)): ?>
+                                                    <tr>
+                                                        <td colspan="9" class="text-center py-4">
+                                                            <div class="d-flex flex-column align-items-center">
+                                                                <i class="fas fa-clipboard-list text-muted mb-2" style="font-size: 2rem;"></i>
+                                                                <p class="text-muted">No access logs found</p>
+                                                            </div>
                                                         </td>
                                                     </tr>
-                                                <?php endforeach; ?>
-                                            <?php endif; ?>
-                                        </tbody>
-                                    </table>
+                                                <?php else: ?>
+                                                    <?php foreach ($logs as $index => $log): ?>
+                                                        <tr class="table-<?php echo $log['id'];?>" data-date="<?php echo date('Y-m-d', strtotime($log['login_time'])); ?>" data-username="<?php echo strtolower(htmlspecialchars($log['username'] ?? '')); ?>" data-status="<?php echo $log['status']; ?>" data-activity="<?php echo strtolower(htmlspecialchars($log['activity'] ?? '')); ?>">
+                                                            <td><?php echo $index + 1; ?></td>
+                                                            <td>
+                                                                <strong><?php echo htmlspecialchars($log['username'] ?? 'N/A'); ?></strong>
+                                                            </td>
+                                                            <td>
+                                                                <?php echo date('M j, Y g:i A', strtotime($log['login_time'])); ?>
+                                                            </td>
+                                                            <td>
+                                                                <?php echo $log['logout_time'] ? date('M j, Y g:i A', strtotime($log['logout_time'])) : 'Still Active'; ?>
+                                                            </td>
+                                                            <td>
+                                                                <span class="badge ip-badge"><?php echo htmlspecialchars($log['ip_address']); ?></span>
+                                                            </td>
+                                                            <td>
+                                                                <?php 
+                                                                $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
+                                                                $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
+
+                                                                // Check if location details are available and valid
+                                                                $locationData = json_decode($log['location_details'], true);
+                                                                if ($locationData && isset($locationData['source']) && $locationData['source'] === 'GPS') {
+                                                                    echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
+                                                                    echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
+                                                                    echo '<i class="fas fa-map-marked-alt"></i> View';
+                                                                    echo '</button>';
+                                                                    echo '<div class="mt-1"><small class="text-success"><i class="fas fa-satellite-dish"></i> GPS</small></div>';
+                                                                } else {
+                                                                    echo '<div class="table-cell-truncate">' . $summaryLocation . '</div>';
+                                                                    if ($locationData && isset($locationData['source'])) {
+                                                                        echo '<div class="mt-1"><small class="text-muted"><i class="fas fa-wifi"></i> IP</small></div>';
+                                                                    }
+                                                                }
+                                                                ?>
+                                                            </td>
+                                                            <td>
+                                                                <span class="badge bg-info"><?php echo htmlspecialchars($log['activity'] ?? 'Login'); ?></span>
+                                                            </td>
+                                                            <td>
+                                                                <span class="badge <?php echo $log['status'] === 'success' ? 'badge-success' : 'badge-danger'; ?>">
+                                                                    <?php echo ucfirst($log['status']); ?>
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <?php 
+                                                                if ($log['logout_time']) {
+                                                                    $login = new DateTime($log['login_time']);
+                                                                    $logout = new DateTime($log['logout_time']);
+                                                                    $interval = $login->diff($logout);
+                                                                    echo '<span class="badge bg-secondary">' . $interval->format('%hh %im %ss') . '</span>';
+                                                                } else {
+                                                                    echo '<span class="badge badge-warning">Active</span>';
+                                                                }
+                                                                ?>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1012,10 +1132,6 @@ try {
                                     <div class="location-detail-label">Source:</div>
                                     <div class="location-detail-value" id="modalSource">-</div>
                                 </div>
-                                <!-- <div class="location-detail-item">
-                                    <div class="location-detail-label">IP Address:</div>
-                                    <div class="location-detail-value" id="modalIp">-</div>
-                                </div> -->
                                 <div class="location-detail-item">
                                     <div class="location-detail-label">Coordinates:</div>
                                     <div class="location-detail-value" id="modalCoords">-</div>
@@ -1036,14 +1152,6 @@ try {
                                     <div class="location-detail-label">Municipality:</div>
                                     <div class="location-detail-value" id="modalCity">-</div>
                                 </div>
-                                <!-- <div class="location-detail-item">
-                                    <div class="location-detail-label">Town/Barangay:</div>
-                                    <div class="location-detail-value" id="modalTown">-</div>
-                                </div> -->
-                                <!-- <div class="location-detail-item">
-                                    <div class="location-detail-label">Timezone:</div>
-                                    <div class="location-detail-value" id="modalTimezone">-</div>
-                                </div> -->
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -1206,7 +1314,6 @@ try {
 
                 // Populate the modal with data
                 document.getElementById('modalSource').textContent = data.source || 'Unknown';
-                //document.getElementById('modalIp').textContent = data.ip || data.query || 'N/A';
                 
                 if (data.lat && data.lon) {
                     document.getElementById('modalCoords').textContent = `${data.lat}, ${data.lon}`;
@@ -1258,14 +1365,10 @@ try {
                     document.getElementById('modalCountry').textContent = addr.country || 'N/A';
                     document.getElementById('modalRegion').textContent = addr.state || addr.province || 'N/A';
                     document.getElementById('modalCity').textContent = addr.city || addr.town || 'N/A';
-                    //document.getElementById('modalTown').textContent = addr.suburb || addr.village || addr.town || 'N/A';
-                    //document.getElementById('modalTimezone').textContent = data.timezone || 'N/A';
                 } else {
                     document.getElementById('modalCountry').textContent = 'N/A';
                     document.getElementById('modalRegion').textContent = 'N/A';
                     document.getElementById('modalCity').textContent = 'N/A';
-                    //document.getElementById('modalTown').textContent = 'N/A';
-                    //document.getElementById('modalTimezone').textContent = 'N/A';
                 }
 
                 // Show the modal
