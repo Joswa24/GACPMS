@@ -1206,7 +1206,7 @@ try {
 
                 // Populate the modal with data
                 document.getElementById('modalSource').textContent = data.source || 'Unknown';
-                document.getElementById('modalIp').textContent = data.ip || data.query || 'N/A';
+                //document.getElementById('modalIp').textContent = data.ip || data.query || 'N/A';
                 
                 if (data.lat && data.lon) {
                     document.getElementById('modalCoords').textContent = `${data.lat}, ${data.lon}`;
@@ -1258,14 +1258,14 @@ try {
                     document.getElementById('modalCountry').textContent = addr.country || 'N/A';
                     document.getElementById('modalRegion').textContent = addr.state || addr.province || 'N/A';
                     document.getElementById('modalCity').textContent = addr.city || addr.town || 'N/A';
-                    document.getElementById('modalTown').textContent = addr.suburb || addr.village || addr.town || 'N/A';
-                    document.getElementById('modalTimezone').textContent = data.timezone || 'N/A';
+                    //document.getElementById('modalTown').textContent = addr.suburb || addr.village || addr.town || 'N/A';
+                    //document.getElementById('modalTimezone').textContent = data.timezone || 'N/A';
                 } else {
                     document.getElementById('modalCountry').textContent = 'N/A';
                     document.getElementById('modalRegion').textContent = 'N/A';
                     document.getElementById('modalCity').textContent = 'N/A';
-                    document.getElementById('modalTown').textContent = 'N/A';
-                    document.getElementById('modalTimezone').textContent = 'N/A';
+                    //document.getElementById('modalTown').textContent = 'N/A';
+                    //document.getElementById('modalTimezone').textContent = 'N/A';
                 }
 
                 // Show the modal
