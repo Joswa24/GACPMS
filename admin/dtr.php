@@ -7,7 +7,7 @@ if (isset($_SESSION['reload_flag'])) {
     unset($_SESSION['id']);
 } 
 
-$id = 0;
+ $id = 0;
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
     unset($_SESSION['success_message']);
@@ -540,7 +540,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                                 $dailyLogs[$day][] = $row;
                             }
 
-                            // Process each day's logs according to the new logic
+                            // Process each day's logs with the new logic
                             foreach ($dailyLogs as $day => $logs) {
                                 // Initialize day data
                                 $daysData[$day] = [
@@ -554,71 +554,92 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                                     'has_out_pm' => false
                                 ];
                                 
-                                // Process AM records first
-                                foreach ($logs as $log) {
+                                // Special logic for both instructors and personnel based on the new rules
+                                if (!empty($logs)) {
+                                    // Get the first log entry for the day
+                                    $log = $logs[0];
+                                    
                                     $time_in = !empty($log['time_in']) && $log['time_in'] != '00:00:00' ? $log['time_in'] : null;
                                     $time_out = !empty($log['time_out']) && $log['time_out'] != '00:00:00' ? $log['time_out'] : null;
-                                    $period = strtoupper($log['period'] ?? '');
-                                    $action = strtoupper($log['action'] ?? '');
-                                    
-                                    // Convert to 12-hour format
-                                    if ($time_in) {
-                                        $time_in_12h = date('g:i A', strtotime($time_in));
-                                    }
-                                    if ($time_out) {
-                                        $time_out_12h = date('g:i A', strtotime($time_out));
-                                    }
-                                    
-                                    // CONDITION 1: If Time in (AM) exists, automatically set Time out (AM) to 12:00 PM
-                                    if ($time_in && $period === 'AM' && $action === 'IN') {
-                                        $daysData[$day]['time_in_am'] = $time_in_12h;
-                                        $daysData[$day]['has_in_am'] = true;
+
+                                    // Get hour in 24-hour format for easy comparison
+                                    $hour_in = $time_in ? (int)date('H', strtotime($time_in)) : null;
+                                    $hour_out = $time_out ? (int)date('H', strtotime($time_out)) : null;
+
+                                    // LOGIC 1: Afternoon class only (Kung time-in sa hapon)
+                                    if ($hour_in !== null && $hour_in >= 12) {
+                                        // Walay record sa aga
+                                        $daysData[$day]['time_in_am'] = '';
+                                        $daysData[$day]['time_out_am'] = '';
                                         
-                                        // Automatically set AM departure to 12:00 PM
-                                        $daysData[$day]['time_out_am'] = '12:00 AM';
-                                        $daysData[$day]['has_out_am'] = true;
+                                        // May record sa hapon
+                                        $daysData[$day]['time_in_pm'] = '1:00 PM'; // Automatic 1 PM login
+                                        if ($time_out) {
+                                            $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out));
+                                        } else {
+                                            $daysData[$day]['time_out_pm'] = '5:00 PM'; // Automatic 5 PM departure if no time out
+                                        }
                                     }
-                                    
-                                    // CONDITION 2: If Time out (PM) exists, automatically set Time in (PM) to 1:00 PM
-                                    if ($time_out && $period === 'PM' && $action === 'OUT') {
-                                        $daysData[$day]['time_out_pm'] = $time_out_12h;
-                                        $daysData[$day]['has_out_pm'] = true;
+                                    // LOGIC 2: Morning class only (Kung time-out sa aga)
+                                    elseif ($hour_out !== null && $hour_out < 12) {
+                                        // May record sa aga
+                                        if ($time_in) {
+                                            $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+                                        } else {
+                                            $daysData[$day]['time_in_am'] = '';
+                                        }
+                                        $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12 PM departure
                                         
-                                        // Automatically set PM arrival to 1:00 PM
-                                        $daysData[$day]['time_in_pm'] = '1:00 PM';
-                                        $daysData[$day]['has_in_pm'] = true;
+                                        // Walay record sa hapon
+                                        $daysData[$day]['time_in_pm'] = '';
+                                        $daysData[$day]['time_out_pm'] = '';
                                     }
-                                    
-                                    // Handle direct PM time in records (without automatic time out)
-                                    if ($time_in && $period === 'PM' && $action === 'IN') {
-                                        $daysData[$day]['time_in_pm'] = $time_in_12h;
-                                        $daysData[$day]['has_in_pm'] = true;
+                                    // LOGIC 3: Both morning and afternoon class (Kung time-in sa aga ug time-out sa hapon)
+                                    elseif ($hour_in !== null && $hour_out !== null && $hour_in < 12 && $hour_out >= 12) {
+                                        // May record sa aga
+                                        $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+                                        $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12 PM departure
+                                        
+                                        // May record sa hapon
+                                        $daysData[$day]['time_in_pm'] = '1:00 PM'; // Automatic 1 PM login
+                                        $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out));
                                     }
-                                    
-                                    // Handle direct AM time out records (less common)
-                                    if ($time_out && $period === 'AM' && $action === 'OUT') {
-                                        $daysData[$day]['time_out_am'] = $time_out_12h;
-                                        $daysData[$day]['has_out_am'] = true;
+                                    // EDGE CASE: Only time-in exists, no time-out.
+                                    elseif ($time_in && !$time_out) {
+                                        if ($hour_in < 12) { // Time-in is in the morning (1:00 AM - 11:59 AM)
+                                            // May record sa aga
+                                            $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+                                            $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12:00 PM departure
+                                            
+                                            // Walay record sa hapon
+                                            $daysData[$day]['time_in_pm'] = '';
+                                            $daysData[$day]['time_out_pm'] = '';
+                                        } else { // Time-in is in the afternoon (12:00 PM - 11:59 PM)
+                                            // Walay record sa aga
+                                            $daysData[$day]['time_in_am'] = '';
+                                            $daysData[$day]['time_out_am'] = '';
+                                            
+                                            // May record sa hapon
+                                            $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in)); // Actual time-in is the PM arrival
+                                            $daysData[$day]['time_out_pm'] = '5:00 PM'; // Automatic 5:00 PM departure
+                                        }
                                     }
-                                }
-                                
-                                // Final validation: Ensure consistency
-                                // If we have AM time in but no AM time out, set to 12:00 PM
-                                if ($daysData[$day]['has_in_am'] && !$daysData[$day]['has_out_am']) {
-                                    $daysData[$day]['time_out_am'] = '12:00 PM';
-                                    $daysData[$day]['has_out_am'] = true;
-                                }
-                                
-                                // If we have PM time out but no PM time in, set to 1:00 PM
-                                if ($daysData[$day]['has_out_pm'] && !$daysData[$day]['has_in_pm']) {
-                                    $daysData[$day]['time_in_pm'] = '1:00 PM';
-                                    $daysData[$day]['has_in_pm'] = true;
-                                }
-                                
-                                // If we have PM time in but no PM time out, set to 5:00 PM (standard office hours)
-                                if ($daysData[$day]['has_in_pm'] && !$daysData[$day]['has_out_pm']) {
-                                    $daysData[$day]['time_out_pm'] = '5:00 PM';
-                                    $daysData[$day]['has_out_pm'] = true;
+                                    // Edge Case: Only time-out exists, no time-in.
+                                    elseif (!$time_in && $time_out) {
+                                        if ($hour_out < 12) {
+                                            // Morning class only
+                                            $daysData[$day]['time_in_am'] = '';
+                                            $daysData[$day]['time_out_am'] = date('g:i A', strtotime($time_out));
+                                            $daysData[$day]['time_in_pm'] = '';
+                                            $daysData[$day]['time_out_pm'] = '';
+                                        } else {
+                                            // Afternoon class only
+                                            $daysData[$day]['time_in_am'] = '';
+                                            $daysData[$day]['time_out_am'] = '';
+                                            $daysData[$day]['time_in_pm'] = '1:00 PM';
+                                            $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out));
+                                        }
+                                    }
                                 }
                             }
 
@@ -711,28 +732,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                                             echo "</td>";
                                         } else {
                                             // AM Arrival
-                                            if ($timeData['time_in_am']) {
+                                            if (!empty($timeData['time_in_am'])) {
                                                 echo "<td>" . htmlspecialchars($timeData['time_in_am']) . "</td>";
                                             } else {
                                                 echo "<td>—</td>";
                                             }
                                             
                                             // AM Departure
-                                            if ($timeData['time_out_am']) {
+                                            if (!empty($timeData['time_out_am'])) {
                                                 echo "<td>" . htmlspecialchars($timeData['time_out_am']) . "</td>";
                                             } else {
                                                 echo "<td>—</td>";
                                             }
                                             
                                             // PM Arrival
-                                            if ($timeData['time_in_pm']) {
+                                            if (!empty($timeData['time_in_pm'])) {
                                                 echo "<td>" . htmlspecialchars($timeData['time_in_pm']) . "</td>";
                                             } else {
                                                 echo "<td>—</td>";
                                             }
                                             
                                             // PM Departure
-                                            if ($timeData['time_out_pm']) {
+                                            if (!empty($timeData['time_out_pm'])) {
                                                 echo "<td>" . htmlspecialchars($timeData['time_out_pm']) . "</td>";
                                             } else {
                                                 echo "<td>—</td>";
