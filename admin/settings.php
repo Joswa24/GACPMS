@@ -1,3 +1,213 @@
+<?php
+// Include connection
+include '../connection.php';
+session_start();
+// Add this at the top of settings.php for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+if (isset($_SESSION['success_message'])) {
+    echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
+    unset($_SESSION['success_message']);
+}
+if (isset($_SESSION['error_message'])) {
+    echo '<div class="alert alert-danger">' . $_SESSION['error_message'] . '</div>';
+    unset($_SESSION['error_message']);
+}
+
+// Check if user is logged in and 2FA verified
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
+    !isset($_SESSION['2fa_verified']) || $_SESSION['2fa_verified'] !== true) {
+    header('Location: index.php');
+    exit();
+}
+
+
+// Function to get geolocation data from IP address
+function getGeolocation($ip) {
+    // Use ip-api.com for geolocation (free tier)
+    $url = "http://ip-api.com/json/{$ip}?fields=status,message,country,regionName,city,zip,lat,lon,timezone,query";
+    
+    // Initialize cURL session
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode !== 200) {
+        return null;
+    }
+    
+    $data = json_decode($response, true);
+    
+    if ($data['status'] === 'success') {
+        return [
+            'country' => $data['country'],
+            'region' => $data['regionName'],
+            'city' => $data['city'],
+            'zip' => $data['zip'],
+            'lat' => $data['lat'],
+            'lon' => $data['lon'],
+            'timezone' => $data['timezone'],
+            'ip' => $data['query']
+        ];
+    }
+    
+    return null;
+}
+
+// Function to log admin access with geolocation
+function logAdminAccess($db, $adminId, $username, $status = 'success', $activity = 'Login') {
+    $ipAddress = $_SERVER['REMOTE_ADDR'];
+    $userAgent = $_SERVER['HTTP_USER_AGENT'];
+    
+    // Get geolocation data
+    $geoData = getGeolocation($ipAddress);
+    $location = 'Unknown';
+    
+    if ($geoData) {
+        $location = $geoData['city'] . ', ' . $geoData['region'] . ', ' . $geoData['country'];
+        
+        // Store detailed geolocation in database
+        $locationJson = json_encode($geoData);
+    } else {
+        $locationJson = json_encode(['error' => 'Unable to fetch location']);
+    }
+    
+    $loginTime = date('Y-m-d H:i:s');
+    
+    try {
+        $stmt = $db->prepare("INSERT INTO admin_access_logs 
+            (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        
+        $stmt->bind_param("issssssss", 
+            $adminId, 
+            $username, 
+            $loginTime, 
+            $ipAddress, 
+            $userAgent, 
+            $location, 
+            $locationJson,
+            $activity, 
+            $status
+        );
+        
+        $stmt->execute();
+        return $db->insert_id;
+    } catch (Exception $e) {
+        error_log("Failed to log admin access: " . $e->getMessage());
+        return false;
+    }
+}
+
+// Check if user is logged in
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
+    header('Location: index.php');
+    exit();
+}
+
+// Generate CSRF token if not exists
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Create the admin_access_logs table if it doesn't exist
+try {
+    $createTableSQL = "
+    CREATE TABLE IF NOT EXISTS admin_access_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        admin_id INT,
+        username VARCHAR(255),
+        login_time DATETIME,
+        logout_time DATETIME,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        location VARCHAR(255),
+        location_details JSON,
+        activity TEXT,
+        status ENUM('success', 'failed') DEFAULT 'success'
+    )";
+    $db->query($createTableSQL);
+    
+    // Add location_details column if it doesn't exist
+    $checkColumn = $db->query("SHOW COLUMNS FROM admin_access_logs LIKE 'location_details'");
+    if ($checkColumn->num_rows == 0) {
+        $db->query("ALTER TABLE admin_access_logs ADD COLUMN location_details JSON AFTER location");
+    }
+} catch (Exception $e) {
+    error_log("Failed to create admin_access_logs table: " . $e->getMessage());
+}
+
+// Log current access if not already logged for this session
+if (!isset($_SESSION['access_logged'])) {
+    logAdminAccess($db, $_SESSION['user_id'], $_SESSION['username'], 'success', 'Dashboard Access');
+    $_SESSION['access_logged'] = true;
+}
+
+// Handle clear old logs request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'clear_old_logs') {
+    // Verify CSRF token
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $response = ['status' => 'error', 'message' => 'Invalid request. Please try again.'];
+        echo json_encode($response);
+        exit();
+    }
+    
+    $days = isset($_POST['days']) ? (int)$_POST['days'] : 30;
+    
+    try {
+        $stmt = $db->prepare("DELETE FROM admin_access_logs WHERE login_time < DATE_SUB(NOW(), INTERVAL ? DAY)");
+        $stmt->bind_param("i", $days);
+        $stmt->execute();
+        
+        $deletedRows = $stmt->affected_rows;
+        
+        $response = [
+            'status' => 'success', 
+            'message' => "Successfully deleted {$deletedRows} log entries older than {$days} days."
+        ];
+        echo json_encode($response);
+        exit();
+    } catch (Exception $e) {
+        $response = ['status' => 'error', 'message' => 'Failed to clear old logs: ' . $e->getMessage()];
+        echo json_encode($response);
+        exit();
+    }
+}
+
+// Fetch admin access logs
+ $logs = [];
+try {
+    $sql = "SELECT al.*, u.username 
+            FROM admin_access_logs al 
+            LEFT JOIN user u ON al.admin_id = u.id 
+            ORDER BY al.login_time DESC 
+            LIMIT 100";
+    $result = $db->query($sql);
+    
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            // Parse location details if available
+            if (!empty($row['location_details'])) {
+                $locationDetails = json_decode($row['location_details'], true);
+                if (isset($locationDetails['lat']) && isset($locationDetails['lon'])) {
+                    $row['map_link'] = "https://www.google.com/maps?q={$locationDetails['lat']},{$locationDetails['lon']}";
+                }
+            }
+            $logs[] = $row;
+        }
+    }
+} catch (Exception $e) {
+    error_log("Failed to fetch admin access logs: " . $e->getMessage());
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <?php include 'header.php'; ?>
