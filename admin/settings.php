@@ -264,13 +264,15 @@ try {
             box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
         }
 
-        /* Modern Table Styles */
+        /* Modern Table Styles - FIXED */
         .modern-table-container {
             border-radius: var(--border-radius);
             overflow: hidden;
             box-shadow: var(--box-shadow);
             background: white;
             position: relative;
+            width: 100%;
+            clear: both;
         }
 
         .table-responsive {
@@ -279,6 +281,7 @@ try {
             -webkit-overflow-scrolling: touch;
             scrollbar-width: thin;
             scrollbar-color: var(--icon-color) #f1f1f1;
+            width: 100%;
         }
 
         /* Custom scrollbar for webkit browsers */
@@ -306,6 +309,7 @@ try {
             border-spacing: 0;
             width: 100%;
             min-width: 1200px; /* Ensure minimum width for all columns */
+            table-layout: fixed;
         }
 
         .modern-table thead th {
@@ -319,6 +323,7 @@ try {
             top: 0;
             z-index: 10;
             white-space: nowrap;
+            display: table-cell; /* Ensure headers are displayed */
         }
 
         .modern-table thead th:first-child {
@@ -353,7 +358,20 @@ try {
             border: none;
             vertical-align: middle;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
+
+        /* Fixed column widths */
+        .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 50px; }
+        .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 150px; }
+        .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 180px; }
+        .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 180px; }
+        .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 130px; }
+        .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 200px; }
+        .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 120px; }
+        .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 100px; }
+        .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 120px; }
 
         .badge {
             font-size: 0.85em;
@@ -665,6 +683,23 @@ try {
                 opacity: 0;
             }
         }
+        
+        /* Table container fix */
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 1rem;
+        }
+        
+        /* Ensure table headers are always visible */
+        .modern-table thead {
+            display: table-header-group;
+        }
+        
+        .modern-table thead th {
+            visibility: visible !important;
+            display: table-cell !important;
+        }
     </style>
 </head>
 
@@ -786,91 +821,93 @@ try {
                             </div>
                         </div>
 
-                        <!-- Modern Logs Table -->
+                        <!-- Modern Logs Table - FIXED -->
                         <div class="modern-table-container">
-                            <div class="table-responsive">
-                                <table class="modern-table" id="accessLogsTable">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">#</th>
-                                            <th scope="col">Username</th>
-                                            <th scope="col">Login Time</th>
-                                            <th scope="col">Logout Time</th>
-                                            <th scope="col">IP Address</th>
-                                            <th scope="col">Location</th>
-                                            <th scope="col">Activity</th>
-                                            <th scope="col">Status</th>
-                                            <th scope="col">Duration</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php if (empty($logs)): ?>
+                            <div class="table-wrapper">
+                                <div class="table-responsive">
+                                    <table class="modern-table" id="accessLogsTable">
+                                        <thead>
                                             <tr>
-                                                <td colspan="9" class="text-center py-4">
-                                                    <div class="d-flex flex-column align-items-center">
-                                                        <i class="fas fa-clipboard-list text-muted mb-2" style="font-size: 2rem;"></i>
-                                                        <p class="text-muted">No access logs found</p>
-                                                    </div>
-                                                </td>
+                                                <th scope="col">#</th>
+                                                <th scope="col">Username</th>
+                                                <th scope="col">Login Time</th>
+                                                <th scope="col">Logout Time</th>
+                                                <th scope="col">IP Address</th>
+                                                <th scope="col">Location</th>
+                                                <th scope="col">Activity</th>
+                                                <th scope="col">Status</th>
+                                                <th scope="col">Duration</th>
                                             </tr>
-                                        <?php else: ?>
-                                            <?php foreach ($logs as $index => $log): ?>
-                                                <tr class="table-<?php echo $log['id'];?>" data-date="<?php echo date('Y-m-d', strtotime($log['login_time'])); ?>" data-username="<?php echo strtolower(htmlspecialchars($log['username'] ?? '')); ?>" data-status="<?php echo $log['status']; ?>" data-activity="<?php echo strtolower(htmlspecialchars($log['activity'] ?? '')); ?>">
-                                                    <td><?php echo $index + 1; ?></td>
-                                                    <td>
-                                                        <strong><?php echo htmlspecialchars($log['username'] ?? 'N/A'); ?></strong>
-                                                    </td>
-                                                    <td>
-                                                        <?php echo date('M j, Y g:i A', strtotime($log['login_time'])); ?>
-                                                    </td>
-                                                    <td>
-                                                        <?php echo $log['logout_time'] ? date('M j, Y g:i A', strtotime($log['logout_time'])) : 'Still Active'; ?>
-                                                    </td>
-                                                    <td>
-                                                        <span class="badge ip-badge"><?php echo htmlspecialchars($log['ip_address']); ?></span>
-                                                    </td>
-                                                    <td>
-                                                        <?php 
-                                                        $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
-                                                        $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
-
-                                                        // Check if location details are available and valid
-                                                        $locationData = json_decode($log['location_details'], true);
-                                                        if ($locationData && isset($locationData['status']) && $locationData['status'] === 'success') {
-                                                            echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
-                                                            echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
-                                                            echo '<i class="fas fa-map-marked-alt"></i> View';
-                                                            echo '</button>';
-                                                        } else {
-                                                            echo '<div class="table-cell-truncate">' . $summaryLocation . '</div>';
-                                                        }
-                                                        ?>
-                                                    </td>
-                                                    <td>
-                                                        <span class="badge bg-info"><?php echo htmlspecialchars($log['activity'] ?? 'Login'); ?></span>
-                                                    </td>
-                                                    <td>
-                                                        <span class="badge <?php echo $log['status'] === 'success' ? 'badge-success' : 'badge-danger'; ?>">
-                                                            <?php echo ucfirst($log['status']); ?>
-                                                        </span>
-                                                    </td>
-                                                    <td>
-                                                        <?php 
-                                                        if ($log['logout_time']) {
-                                                            $login = new DateTime($log['login_time']);
-                                                            $logout = new DateTime($log['logout_time']);
-                                                            $interval = $login->diff($logout);
-                                                            echo '<span class="badge bg-secondary">' . $interval->format('%hh %im %ss') . '</span>';
-                                                        } else {
-                                                            echo '<span class="badge badge-warning">Active</span>';
-                                                        }
-                                                        ?>
+                                        </thead>
+                                        <tbody>
+                                            <?php if (empty($logs)): ?>
+                                                <tr>
+                                                    <td colspan="9" class="text-center py-4">
+                                                        <div class="d-flex flex-column align-items-center">
+                                                            <i class="fas fa-clipboard-list text-muted mb-2" style="font-size: 2rem;"></i>
+                                                            <p class="text-muted">No access logs found</p>
+                                                        </div>
                                                     </td>
                                                 </tr>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
-                                    </tbody>
-                                </table>
+                                            <?php else: ?>
+                                                <?php foreach ($logs as $index => $log): ?>
+                                                    <tr class="table-<?php echo $log['id'];?>" data-date="<?php echo date('Y-m-d', strtotime($log['login_time'])); ?>" data-username="<?php echo strtolower(htmlspecialchars($log['username'] ?? '')); ?>" data-status="<?php echo $log['status']; ?>" data-activity="<?php echo strtolower(htmlspecialchars($log['activity'] ?? '')); ?>">
+                                                        <td><?php echo $index + 1; ?></td>
+                                                        <td>
+                                                            <strong><?php echo htmlspecialchars($log['username'] ?? 'N/A'); ?></strong>
+                                                        </td>
+                                                        <td>
+                                                            <?php echo date('M j, Y g:i A', strtotime($log['login_time'])); ?>
+                                                        </td>
+                                                        <td>
+                                                            <?php echo $log['logout_time'] ? date('M j, Y g:i A', strtotime($log['logout_time'])) : 'Still Active'; ?>
+                                                        </td>
+                                                        <td>
+                                                            <span class="badge ip-badge"><?php echo htmlspecialchars($log['ip_address']); ?></span>
+                                                        </td>
+                                                        <td>
+                                                            <?php 
+                                                            $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
+                                                            $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
+
+                                                            // Check if location details are available and valid
+                                                            $locationData = json_decode($log['location_details'], true);
+                                                            if ($locationData && isset($locationData['status']) && $locationData['status'] === 'success') {
+                                                                echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
+                                                                echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
+                                                                echo '<i class="fas fa-map-marked-alt"></i> View';
+                                                                echo '</button>';
+                                                            } else {
+                                                                echo '<div class="table-cell-truncate">' . $summaryLocation . '</div>';
+                                                            }
+                                                            ?>
+                                                        </td>
+                                                        <td>
+                                                            <span class="badge bg-info"><?php echo htmlspecialchars($log['activity'] ?? 'Login'); ?></span>
+                                                        </td>
+                                                        <td>
+                                                            <span class="badge <?php echo $log['status'] === 'success' ? 'badge-success' : 'badge-danger'; ?>">
+                                                                <?php echo ucfirst($log['status']); ?>
+                                                            </span>
+                                                        </td>
+                                                        <td>
+                                                            <?php 
+                                                            if ($log['logout_time']) {
+                                                                $login = new DateTime($log['login_time']);
+                                                                $logout = new DateTime($log['logout_time']);
+                                                                $interval = $login->diff($logout);
+                                                                echo '<span class="badge bg-secondary">' . $interval->format('%hh %im %ss') . '</span>';
+                                                            } else {
+                                                                echo '<span class="badge badge-warning">Active</span>';
+                                                            }
+                                                            ?>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -963,6 +1000,10 @@ try {
     <script src="js/main.js"></script>
     <script>
     $(document).ready(function() {
+        // Fix for table headers visibility
+        $('.modern-table thead').show();
+        $('.modern-table th').css('visibility', 'visible');
+        
         // Filter logs function
         window.filterLogs = function() {
             const dateFilter = document.getElementById('dateFilter').value;
