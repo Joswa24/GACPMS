@@ -7,7 +7,7 @@ if (isset($_SESSION['reload_flag'])) {
     unset($_SESSION['id']);
 } 
 
-$id = 0;
+ $id = 0;
 if (isset($_SESSION['success_message'])) {
     echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
     unset($_SESSION['success_message']);
@@ -101,221 +101,472 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_holiday'])) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<?php include 'header.php'; ?>
-
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTR System | Modern</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <style>
         :root {
             --primary-color: #4361ee;
             --secondary-color: #3f37c9;
-            --success-color: #4cc9f0;
+            --accent-color: #4895ef;
             --light-color: #f8f9fa;
             --dark-color: #212529;
-            --border-radius: 8px;
-            --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --success-color: #4cc9f0;
+            --warning-color: #f72585;
+            --danger-color: #e63946;
+            --border-radius: 12px;
+            --box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
             --transition: all 0.3s ease;
         }
-
+        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', sans-serif;
             background-color: #f5f7fb;
             color: #333;
+            line-height: 1.6;
         }
-
+        
         .card-modern {
             background: white;
             border-radius: var(--border-radius);
             box-shadow: var(--box-shadow);
             border: none;
             transition: var(--transition);
+            overflow: hidden;
         }
-
+        
         .card-modern:hover {
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
         }
-
+        
+        .card-header-modern {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
+            padding: 1.5rem;
+            border: none;
+        }
+        
         .btn-modern {
-            border-radius: var(--border-radius);
-            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
             font-weight: 500;
             transition: var(--transition);
         }
-
-        .btn-primary-modern {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
-        }
-
-        .btn-primary-modern:hover {
-            background-color: var(--secondary-color);
-            border-color: var(--secondary-color);
+        
+        .btn-modern:hover {
             transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(67, 97, 238, 0.3);
+            color: white;
         }
-
+        
+        .btn-warning-modern {
+            background: linear-gradient(135deg, #ff9e00, #ff6b00);
+            color: white;
+        }
+        
+        .btn-success-modern {
+            background: linear-gradient(135deg, #06d6a0, #04a777);
+            color: white;
+        }
+        
         .form-control-modern {
-            border-radius: var(--border-radius);
-            border: 1px solid #e1e5eb;
-            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            padding: 0.75rem 1rem;
             transition: var(--transition);
         }
-
+        
         .form-control-modern:focus {
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 0.2rem rgba(67, 97, 238, 0.25);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
         }
-
+        
         .table-modern {
             border-radius: var(--border-radius);
             overflow: hidden;
-            box-shadow: var(--box-shadow);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
         }
-
-        .table-modern th {
-            background-color: var(--primary-color);
+        
+        .table-modern thead {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             color: white;
-            font-weight: 500;
+        }
+        
+        .table-modern th {
             border: none;
-            padding: 12px 15px;
+            padding: 1rem;
+            font-weight: 600;
         }
-
+        
         .table-modern td {
-            padding: 12px 15px;
-            border-color: #e1e5eb;
+            padding: 0.75rem 1rem;
+            border-color: #f0f0f0;
         }
-
+        
+        .table-modern tbody tr {
+            transition: var(--transition);
+        }
+        
         .table-modern tbody tr:hover {
             background-color: rgba(67, 97, 238, 0.05);
         }
-
-        .modal-content {
-            border-radius: var(--border-radius);
-            border: none;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        }
-
-        .modal-header {
-            background-color: var(--primary-color);
-            color: white;
-            border-radius: var(--border-radius) var(--border-radius) 0 0;
-        }
-
-        .modal-header .btn-close {
-            filter: invert(1);
-        }
-
+        
         .holiday-day {
-            background-color: #ffebee !important;
-            color: #c62828;
+            background-color: rgba(255, 107, 0, 0.1) !important;
+            color: #ff6b00;
             font-weight: 500;
         }
-
+        
         .suspension-day {
-            background-color: #fff8e1 !important;
-            color: #f57c00;
+            background-color: rgba(230, 57, 70, 0.1) !important;
+            color: #e63946;
             font-weight: 500;
         }
-
-        #suggestions {
-            position: absolute;
-            z-index: 9999;
-            max-height: 200px;
-            overflow-y: auto;
-            background-color: white;
-            width: 100%;
-            box-shadow: var(--box-shadow);
-            border-radius: 0 0 var(--border-radius) var(--border-radius);
-            margin-top: -1px;
-            border: 1px solid #e1e5eb;
-        }
-
-        #suggestions div {
-            padding: 10px 15px;
-            cursor: pointer;
-            transition: var(--transition);
-        }
-
-        #suggestions div:hover {
-            background-color: rgba(67, 97, 238, 0.1);
-        }
-
+        
         .search-container {
             position: relative;
         }
-
-        .page-title {
-            color: var(--primary-color);
-            font-weight: 600;
-            margin-bottom: 1.5rem;
+        
+        #suggestions {
+            position: absolute;
+            z-index: 1000;
+            width: 100%;
+            max-height: 200px;
+            overflow-y: auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            margin-top: 5px;
         }
-
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--dark-color);
-            margin-bottom: 1rem;
+        
+        #suggestions div {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: var(--transition);
         }
-
-        .print-container {
+        
+        #suggestions div:hover {
+            background-color: rgba(67, 97, 238, 0.1);
+        }
+        
+        .modal-modern .modal-content {
+            border-radius: var(--border-radius);
+            border: none;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+        }
+        
+        .modal-modern .modal-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border-radius: var(--border-radius) var(--border-radius) 0 0;
+            border: none;
+        }
+        
+        .modal-modern .modal-footer {
+            border-top: 1px solid #f0f0f0;
+            padding: 1.5rem;
+        }
+        
+        .dtr-container {
             background: white;
             border-radius: var(--border-radius);
             box-shadow: var(--box-shadow);
             padding: 2rem;
-            margin-top: 1.5rem;
+            margin-top: 2rem;
         }
-
-        .action-buttons {
+        
+        .dtr-header {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .dtr-header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--primary-color);
+        }
+        
+        .dtr-header h4 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        
+        .dtr-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2rem;
+        }
+        
+        .dtr-table th, .dtr-table td {
+            border: 1px solid #e0e0e0;
+            padding: 0.75rem;
+            text-align: center;
+        }
+        
+        .dtr-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .dtr-footer {
+            margin-top: 2rem;
+        }
+        
+        .dtr-footer p {
+            font-size: 0.9rem;
+            text-align: justify;
+            margin-bottom: 1.5rem;
+        }
+        
+        .dtr-signature {
+            text-align: right;
+            margin-top: 3rem;
+        }
+        
+        .stats-card {
+            text-align: center;
+            padding: 1.5rem;
+        }
+        
+        .stats-card .number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .stats-card .label {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        
+        .nav-tabs-modern {
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .nav-tabs-modern .nav-link {
+            border: none;
+            color: #6c757d;
+            font-weight: 500;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px 8px 0 0;
+            transition: var(--transition);
+        }
+        
+        .nav-tabs-modern .nav-link.active {
+            color: var(--primary-color);
+            background-color: white;
+            border-bottom: 3px solid var(--primary-color);
+        }
+        
+        .nav-tabs-modern .nav-link:hover {
+            color: var(--primary-color);
+            background-color: rgba(67, 97, 238, 0.05);
+        }
+        
+        .holiday-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .holiday-item {
             display: flex;
-            gap: 10px;
-            justify-content: flex-end;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #f0f0f0;
+            transition: var(--transition);
         }
-
+        
+        .holiday-item:hover {
+            background-color: rgba(67, 97, 238, 0.05);
+        }
+        
+        .holiday-date {
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+        
+        .holiday-type {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .holiday-type.holiday {
+            background-color: rgba(255, 107, 0, 0.1);
+            color: #ff6b00;
+        }
+        
+        .holiday-type.suspension {
+            background-color: rgba(230, 57, 70, 0.1);
+            color: #e63946;
+        }
+        
+        .holiday-actions button {
+            background: none;
+            border: none;
+            color: #6c757d;
+            transition: var(--transition);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+        
+        .holiday-actions button:hover {
+            background-color: rgba(67, 97, 238, 0.1);
+            color: var(--primary-color);
+        }
+        
         @media print {
             .no-print {
                 display: none !important;
             }
-            .print-container {
+            
+            .dtr-container {
                 box-shadow: none;
                 padding: 0;
             }
         }
     </style>
 </head>
-
 <body>
-    <div class="container-fluid position-relative bg-white d-flex p-0">
-        <?php include 'sidebar.php'; ?>
-        
-        <div class="content">
-            <?php include 'navbar.php'; ?>
-            
-            <div class="container-fluid pt-4 px-4">
-                <div class="col-sm-12 col-xl-12">
-                    <div class="card-modern h-100 p-4">
-                        <div class="row mb-4">
-                            <div class="col-8">
-                                <h2 class="page-title">Generate DTR</h2>
-                            </div>
-                            <div class="col-4 text-end">
-                                <button type="button" class="btn btn-warning btn-modern" data-bs-toggle="modal" data-bs-target="#holidayModal">
-                                    <i class="fa fa-calendar-plus me-2"></i> Add Holiday/Suspension
-                                </button>
-                            </div>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="#">
+                <i class="fas fa-clock me-2"></i>DTR System
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#"><i class="fas fa-home me-1"></i> Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#"><i class="fas fa-users me-1"></i> Employees</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#"><i class="fas fa-cog me-1"></i> Settings</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#"><i class="fas fa-sign-out-alt me-1"></i> Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-lg-2 mb-4 no-print">
+                <div class="card-modern">
+                    <div class="card-body p-0">
+                        <div class="list-group list-group-flush">
+                            <a href="#" class="list-group-item list-group-item-action active">
+                                <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action">
+                                <i class="fas fa-user-clock me-2"></i> Time Records
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action">
+                                <i class="fas fa-users me-2"></i> Employees
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action">
+                                <i class="fas fa-calendar-alt me-2"></i> Schedule
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action">
+                                <i class="fas fa-chart-bar me-2"></i> Reports
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action">
+                                <i class="fas fa-cog me-2"></i> Settings
+                            </a>
                         </div>
-                        
+                    </div>
+                </div>
+                
+                <!-- Stats Cards -->
+                <div class="card-modern mt-4">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">Monthly Overview</h6>
+                        <div class="stats-card">
+                            <div class="number">24</div>
+                            <div class="label">Working Days</div>
+                        </div>
+                        <div class="stats-card">
+                            <div class="number">3</div>
+                            <div class="label">Holidays</div>
+                        </div>
+                        <div class="stats-card">
+                            <div class="number">98%</div>
+                            <div class="label">Attendance Rate</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-lg-10">
+                <!-- Page Header -->
+                <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+                    <div>
+                        <h2 class="h4 fw-bold mb-0">Daily Time Record</h2>
+                        <p class="text-muted mb-0">Generate and manage employee time records</p>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-warning-modern me-2" data-bs-toggle="modal" data-bs-target="#holidayModal">
+                            <i class="fas fa-calendar-plus me-1"></i> Manage Holidays
+                        </button>
+                        <button onclick="printDiv('dtr-container')" type="button" class="btn btn-success-modern">
+                            <i class="fas fa-print me-1"></i> Print DTR
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search and Filter Card -->
+                <div class="card-modern mb-4 no-print">
+                    <div class="card-header-modern">
+                        <h5 class="mb-0"><i class="fas fa-search me-2"></i> Search Employee</h5>
+                    </div>
+                    <div class="card-body">
                         <form id="filterForm" method="POST" action="">
-                            <div class="row g-3 align-items-end">
+                            <div class="row g-3">
                                 <div class="col-lg-4">
-                                    <label class="form-label fw-medium">Search Employee</label>
+                                    <label class="form-label fw-semibold">Employee Name</label>
                                     <div class="search-container">
-                                        <input type="text" name="pname" class="form-control form-control-modern" id="searchInput" autocomplete="off" placeholder="Type to search...">
-                                        <input type="hidden" id="pername" name="pername" autocomplete="off">
-                                        <input type="hidden" id="perid" name="perid" autocomplete="off">
-                                        <input type="hidden" id="persontype" name="persontype" autocomplete="off">
+                                        <input type="text" name="pname" class="form-control form-control-modern" id="searchInput" autocomplete="off" placeholder="Search by name...">
+                                        <input hidden type="text" id="pername" name="pername" autocomplete="off">
+                                        <input hidden type="text" id="perid" name="perid" autocomplete="off">
+                                        <input hidden type="text" id="persontype" name="persontype" autocomplete="off">
                                         <div id="suggestions"></div>
                                     </div>
                                 </div>
                                 <div class="col-lg-3">
-                                    <label class="form-label fw-medium">Month</label>
+                                    <label class="form-label fw-semibold">Month</label>
                                     <select class="form-control form-control-modern" id="months" name="month">
                                         <option value="<?php echo date('F'); ?>" selected><?php echo date('F'); ?></option>
                                         <option value="January">January</option>
@@ -332,160 +583,267 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_holiday'])) {
                                         <option value="December">December</option>
                                     </select>
                                 </div>
-                                <div class="col-lg-2">
-                                    <button type="submit" class="btn btn-primary-modern btn-modern w-100" id="btn_search">
-                                        <i class="fa fa-search me-2"></i> Search
+                                <div class="col-lg-3 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-modern w-100" id="btn_search">
+                                        <i class="fas fa-search me-1"></i> Generate DTR
                                     </button>
-                                </div>
-                                <div class="col-lg-3">
-                                    <div class="action-buttons">
-                                        <button onclick="printDiv('container')" type="button" class="btn btn-success btn-modern no-print" id="btn_print">
-                                            <i class="fa fa-print me-2"></i> Print
-                                        </button> 
-                                    </div>
                                 </div>
                             </div>
                         </form>
-                        
-                        <hr class="my-4">
-                        
-                        <div class="table-responsive">
-                            <div class="print-container" id="container">
-                                <div class="header text-center mb-4">
-                                    <h5 class="mb-1">Civil Service Form No. 48</h5>
-                                    <h4 class="mb-3">DAILY TIME RECORD</h4>
-                                    <?php if (!empty($name)): ?>
-                                        <h2 class="mb-4" style="border-bottom: 2px solid #333; padding-bottom: 10px; display: inline-block;"><?php echo htmlspecialchars($name); ?></h2>
-                                    <?php else: ?>
-                                        <p class="mb-4" style="border-bottom: 2px solid #333; padding-bottom: 10px; display: inline-block;">(Name)</p>
-                                    <?php endif; ?>
-                                </div>
+                    </div>
+                </div>
 
-                                <table class="table table-borderless mb-3">
-                                    <tr>
-                                        <th width="30%">For the month of</th>
-                                        <td width="25%">
-                                            <?php if (!empty($month)): ?>
-                                                <?php echo htmlspecialchars($month); ?>
-                                            <?php else: ?>
-                                                (Month)
-                                            <?php endif; ?>
-                                        </td>
-                                        <td width="25%"><?php echo $currentYear; ?></td>
-                                        <td width="20%"></td>
-                                    </tr>
-                                    <tr>
-                                        <th>Official hours of arrival and departure:</th>
-                                        <td>Regular Days: <?php echo $regularDays; ?></td>
-                                        <td>Saturdays: <?php echo $saturdays; ?></td>
-                                        <td></td>
-                                    </tr>
-                                </table>
+                <!-- DTR Display -->
+                <div class="dtr-container" id="dtr-container">
+                    <div class="dtr-header">
+                        <h5>Civil Service Form No. 48</h5>
+                        <h4>DAILY TIME RECORD</h4>
+                        <?php if (!empty($name)): ?>
+                            <h1><?php echo htmlspecialchars($name); ?></h1>
+                        <?php else: ?>
+                            <h1 class="text-muted">(Employee Name)</h1>
+                        <?php endif; ?>
+                    </div>
 
-                                <table class="table table-modern table-bordered">
-                                    <thead>
-                                        <tr>
-                                            <th rowspan="2" class="align-middle">Days</th>
-                                            <th colspan="2" class="text-center">A.M.</th>
-                                            <th colspan="2" class="text-center">P.M.</th>
-                                            <th colspan="2" class="text-center">Undertime</th>
-                                        </tr>
-                                        <tr>
-                                            <th>Arrival</th>
-                                            <th>Departure</th>
-                                            <th>Arrival</th>
-                                            <th>Departure</th>
-                                            <th>Hours</th>
-                                            <th>Minutes</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                    <?php
-                                    // Loop through all the days of the month (1 to 31)
-                                    for ($day = 1; $day <= 31; $day++) {
-                                        // Check if time data exists for this day
-                                        $timeData = isset($daysData[$day]) ? $daysData[$day] : [
-                                            'time_in_am' => '',
-                                            'time_out_am' => '',
-                                            'time_in_pm' => '',
-                                            'time_out_pm' => '',
-                                            'has_in_am' => false,
-                                            'has_out_am' => false,
-                                            'has_in_pm' => false,
-                                            'has_out_pm' => false
-                                        ];
-                                        
-                                        // Check if this day is a holiday or suspension
-                                        $isHoliday = isset($holidays[$day]) && $holidays[$day]['type'] === 'holiday';
-                                        $isSuspension = isset($holidays[$day]) && $holidays[$day]['type'] === 'suspension';
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="d-flex justify-content-between border-bottom pb-2">
+                                <span class="fw-semibold">For the month of:</span>
+                                <span><?php if (!empty($month)): ?>
+                                    <?php echo htmlspecialchars($month); ?>
+                                <?php else: ?>
+                                    <span class="text-muted">(Month)</span>
+                                <?php endif; ?></span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex justify-content-between border-bottom pb-2">
+                                <span class="fw-semibold">Year:</span>
+                                <span><?php echo $currentYear; ?></span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex justify-content-between border-bottom pb-2">
+                                <span class="fw-semibold">Regular Days:</span>
+                                <span><?php echo $regularDays; ?></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="dtr-table">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2">Days</th>
+                                    <th colspan="2">A.M.</th>
+                                    <th colspan="2">P.M.</th>
+                                    <th colspan="2">Undertime</th>
+                                </tr>
+                                <tr>
+                                    <th>Arrival</th>
+                                    <th>Departure</th>
+                                    <th>Arrival</th>
+                                    <th>Departure</th>
+                                    <th>Hours</th>
+                                    <th>Minutes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php
+                            // Loop through all the days of the month (1 to 31)
+                            for ($day = 1; $day <= 31; $day++) {
+                                // Check if time data exists for this day
+                                $timeData = isset($daysData[$day]) ? $daysData[$day] : [
+                                    'time_in_am' => '',
+                                    'time_out_am' => '',
+                                    'time_in_pm' => '',
+                                    'time_out_pm' => '',
+                                    'has_in_am' => false,
+                                    'has_out_am' => false,
+                                    'has_in_pm' => false,
+                                    'has_out_pm' => false
+                                ];
+                                
+                                // Check if this day is a holiday or suspension
+                                $isHoliday = isset($holidays[$day]) && $holidays[$day]['type'] === 'holiday';
+                                $isSuspension = isset($holidays[$day]) && $holidays[$day]['type'] === 'suspension';
+                            
+                                // Display the row for each day
+                                echo "<tr>";
+                                echo "<td>" . $day . "</td>";
+                                
+                                // If it's a holiday or suspension, mark all time fields
+                                if ($isHoliday || $isSuspension) {
+                                    // Apply holiday/suspension class to each time cell individually
+                                    $cellClass = $isHoliday ? 'holiday-day' : 'suspension-day';
                                     
-                                        // Display the row for each day
-                                        echo "<tr>";
-                                        echo "<td class='fw-medium'>" . $day . "</td>";
-                                        
-                                        // If it's a holiday or suspension, mark all time fields
-                                        if ($isHoliday || $isSuspension) {
-                                            // Apply holiday/suspension class to each time cell individually
-                                            $cellClass = $isHoliday ? 'holiday-day' : 'suspension-day';
-                                            
-                                            echo "<td colspan='6' class='{$cellClass}' style='text-align:center;'>";
-                                            if ($isHoliday) {
-                                                echo "<i class='fa fa-flag me-2'></i> HOLIDAY: " . htmlspecialchars($holidays[$day]['description']);
-                                            } else {
-                                                echo "<i class='fa fa-ban me-2'></i> SUSPENDED: " . htmlspecialchars($holidays[$day]['description']);
-                                            }
-                                            echo "</td>";
-                                        } else {
-                                            // AM Arrival
-                                            if ($timeData['time_in_am']) {
-                                                echo "<td>" . htmlspecialchars($timeData['time_in_am']) . "</td>";
-                                            } else {
-                                                echo "<td>—</td>";
-                                            }
-                                            
-                                            // AM Departure
-                                            if ($timeData['time_out_am']) {
-                                                echo "<td>" . htmlspecialchars($timeData['time_out_am']) . "</td>";
-                                            } else {
-                                                echo "<td>—</td>";
-                                            }
-                                            
-                                            // PM Arrival
-                                            if ($timeData['time_in_pm']) {
-                                                echo "<td>" . htmlspecialchars($timeData['time_in_pm']) . "</td>";
-                                            } else {
-                                                echo "<td>—</td>";
-                                            }
-                                            
-                                            // PM Departure
-                                            if ($timeData['time_out_pm']) {
-                                                echo "<td>" . htmlspecialchars($timeData['time_out_pm']) . "</td>";
-                                            } else {
-                                                echo "<td>—</td>";
-                                            }
-                                            
-                                            echo "<td></td>"; // Placeholder for undertime
-                                            echo "<td></td>"; // Placeholder for undertime
-                                        }
-                                        echo "</tr>";
+                                    echo "<td colspan='6' class='{$cellClass}' style='text-align:center;'>";
+                                    if ($isHoliday) {
+                                        echo "<i class='fas fa-flag me-1'></i> HOLIDAY: " . htmlspecialchars($holidays[$day]['description']);
+                                    } else {
+                                        echo "<i class='fas fa-ban me-1'></i> SUSPENDED: " . htmlspecialchars($holidays[$day]['description']);
+                                    }
+                                    echo "</td>";
+                                } else {
+                                    // AM Arrival
+                                    if ($timeData['time_in_am']) {
+                                        echo "<td>" . htmlspecialchars($timeData['time_in_am']) . "</td>";
+                                    } else {
+                                        echo "<td>—</td>";
                                     }
                                     
-                                    ?>
-                                    </tbody>
-                                    <tfoot>
-                                        <tr>
-                                            <th>Total</th>
-                                            <td colspan="6"></td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
+                                    // AM Departure
+                                    if ($timeData['time_out_am']) {
+                                        echo "<td>" . htmlspecialchars($timeData['time_out_am']) . "</td>";
+                                    } else {
+                                        echo "<td>—</td>";
+                                    }
+                                    
+                                    // PM Arrival
+                                    if ($timeData['time_in_pm']) {
+                                        echo "<td>" . htmlspecialchars($timeData['time_in_pm']) . "</td>";
+                                    } else {
+                                        echo "<td>—</td>";
+                                    }
+                                    
+                                    // PM Departure
+                                    if ($timeData['time_out_pm']) {
+                                        echo "<td>" . htmlspecialchars($timeData['time_out_pm']) . "</td>";
+                                    } else {
+                                        echo "<td>—</td>";
+                                    }
+                                    
+                                    echo "<td></td>"; // Placeholder for undertime
+                                    echo "<td></td>"; // Placeholder for undertime
+                                }
+                                echo "</tr>";
+                            }
+                            
+                            ?>
+                            </tbody>
+                        </table>
+                    </div>
 
-                                <div class="footer mt-4">
-                                    <p class="mb-4">
-                                        I CERTIFY on my honor that the above is a true and correct report of the hours of work performed, record of which was made daily at the time of arrival and departure from the office.
-                                    </p>
-                                    <div class="in-charge text-end">
-                                        <p class="mb-1" style="border-top: 1px solid #333; padding-top: 40px; width: 200px; display: inline-block;">In-Charge</p>
+                    <div class="dtr-footer">
+                        <p>
+                            I CERTIFY on my honor that the above is a true and correct report of the hours of work performed, record of which was made daily at the time of arrival and departure from the office.
+                        </p>
+                        <div class="dtr-signature">
+                            <p>__________________________</p>
+                            <p class="fw-semibold">In-Charge</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Holiday/Suspension Modal -->
+    <div class="modal fade modal-modern" id="holidayModal" tabindex="-1" aria-labelledby="holidayModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="holidayModalLabel"><i class="fas fa-calendar-alt me-2"></i> Manage Holidays & Suspensions</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <ul class="nav nav-tabs nav-tabs-modern px-3 pt-3" id="holidayTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="add-tab" data-bs-toggle="tab" data-bs-target="#add" type="button" role="tab">
+                                <i class="fas fa-plus-circle me-1"></i> Add New
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="list-tab" data-bs-toggle="tab" data-bs-target="#list" type="button" role="tab">
+                                <i class="fas fa-list me-1"></i> Current List
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content p-3" id="holidayTabsContent">
+                        <!-- Add Holiday Tab -->
+                        <div class="tab-pane fade show active" id="add" role="tabpanel">
+                            <form method="POST" action="">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="holiday_date" class="form-label fw-semibold">Date</label>
+                                        <input type="date" class="form-control form-control-modern" id="holiday_date" name="holiday_date" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="holiday_type" class="form-label fw-semibold">Type</label>
+                                        <select class="form-select form-control-modern" id="holiday_type" name="holiday_type" required>
+                                            <option value="">Select Type</option>
+                                            <option value="holiday">Holiday</option>
+                                            <option value="suspension">Suspension</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12">
+                                        <label for="holiday_description" class="form-label fw-semibold">Description</label>
+                                        <textarea class="form-control form-control-modern" id="holiday_description" name="holiday_description" rows="3" placeholder="Enter description..." required></textarea>
+                                    </div>
+                                </div>
+                                <div class="modal-footer px-0 pb-0">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" name="add_holiday" class="btn btn-modern">Add Holiday/Suspension</button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <!-- List Holidays Tab -->
+                        <div class="tab-pane fade" id="list" role="tabpanel">
+                            <div class="holiday-list">
+                                <!-- Sample holiday items - in a real app, these would be dynamically generated -->
+                                <div class="holiday-item">
+                                    <div>
+                                        <div class="holiday-date">January 1, 2023</div>
+                                        <div class="text-muted small">New Year's Day</div>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <span class="holiday-type holiday me-3">Holiday</span>
+                                        <div class="holiday-actions">
+                                            <button type="button" class="me-1" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="holiday-item">
+                                    <div>
+                                        <div class="holiday-date">April 9, 2023</div>
+                                        <div class="text-muted small">Araw ng Kagitingan</div>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <span class="holiday-type holiday me-3">Holiday</span>
+                                        <div class="holiday-actions">
+                                            <button type="button" class="me-1" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="holiday-item">
+                                    <div>
+                                        <div class="holiday-date">May 15, 2023</div>
+                                        <div class="text-muted small">System Maintenance</div>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <span class="holiday-type suspension me-3">Suspension</span>
+                                        <div class="holiday-actions">
+                                            <button type="button" class="me-1" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -493,159 +851,79 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_holiday'])) {
                     </div>
                 </div>
             </div>
-            <?php include 'footer.php'; ?>
         </div>
+    </div>
 
-        <!-- Holiday/Suspension Modal -->
-        <div class="modal fade" id="holidayModal" tabindex="-1" aria-labelledby="holidayModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="holidayModalLabel">Add Holiday/Suspension</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <form id="holidayForm" method="POST" action="">
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label for="holiday_date" class="form-label">Date</label>
-                                <input type="date" class="form-control form-control-modern" id="holiday_date" name="holiday_date" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="holiday_type" class="form-label">Type</label>
-                                <select class="form-select form-control-modern" id="holiday_type" name="holiday_type" required>
-                                    <option value="">Select Type</option>
-                                    <option value="holiday">Holiday</option>
-                                    <option value="suspension">Suspension</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="holiday_description" class="form-label">Description</label>
-                                <textarea class="form-control form-control-modern" id="holiday_description" name="holiday_description" rows="3" required></textarea>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary btn-modern" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" name="add_holiday" class="btn btn-primary-modern btn-modern">Add</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
+    <!-- Bootstrap & jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 
-        <script>
-            // AJAX for holiday form submission
-            document.getElementById('holidayForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                const formData = new FormData(this);
-                
-                fetch('', {
-                    method: 'POST',
-                    body: formData
-                })
+    <script>
+        // Search functionality
+        const searchInput = document.getElementById('searchInput');
+        const suggestionsDiv = document.getElementById('suggestions');
+
+        // Event listener for input field
+        searchInput.addEventListener('input', function() {
+            const query = searchInput.value.trim();
+            
+            // Clear suggestions if input is empty
+            if (query.length === 0) {
+                suggestionsDiv.innerHTML = '';
+                return;
+            }
+
+            // Send request to the PHP script
+            fetch(`search_personnel.php?query=${encodeURIComponent(query)}`)
                 .then(response => {
-                    if (response.ok) {
-                        // Close modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('holidayModal'));
-                        modal.hide();
-                        
-                        // Show success message
-                        alert('Holiday/Suspension added successfully!');
-                        
-                        // Reset form
-                        document.getElementById('holidayForm').reset();
-                        
-                        // Reload page to reflect changes
-                        location.reload();
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    suggestionsDiv.innerHTML = '';
+                    if (data.error) {
+                        suggestionsDiv.innerHTML = '<div>Error fetching data</div>';
+                        console.error(data.error);
+                    } else if (data.length > 0) {
+                        data.forEach(person => {
+                            const div = document.createElement('div');
+                            div.textContent = person.fullname;
+                            div.addEventListener('click', () => {
+                                searchInput.value = person.fullname;
+                                suggestionsDiv.innerHTML = '';
+                                document.getElementById('pername').value = person.fullname;
+                                document.getElementById('perid').value = person.id;
+                                document.getElementById('persontype').value = person.type;
+                            });
+                            suggestionsDiv.appendChild(div);
+                        });
                     } else {
-                        alert('Error adding holiday/suspension. Please try again.');
+                        suggestionsDiv.innerHTML = '<div>No matches found</div>';
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error adding holiday/suspension. Please try again.');
+                    console.error('Error fetching data:', error);
                 });
-            });
+        });
 
-            // Search functionality
-            const searchInput = document.getElementById('searchInput');
-            const suggestionsDiv = document.getElementById('suggestions');
+        // Print function
+        function printDiv(divId) {
+            const printContents = document.getElementById(divId).innerHTML;
+            const originalContents = document.body.innerHTML;
 
-            // Event listener for input field
-            searchInput.addEventListener('input', function() {
-                const query = searchInput.value.trim();
-                
-                // Clear suggestions if input is empty
-                if (query.length === 0) {
-                    suggestionsDiv.innerHTML = '';
-                    return;
-                }
+            document.body.innerHTML = printContents;
+            window.print();
+            document.body.innerHTML = originalContents;
+            location.reload();
+        }
 
-                // Send request to the PHP script
-                fetch(`search_personnel.php?query=${encodeURIComponent(query)}`)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        suggestionsDiv.innerHTML = '';
-                        if (data.error) {
-                            suggestionsDiv.innerHTML = '<div>Error fetching data</div>';
-                            console.error(data.error);
-                        } else if (data.length > 0) {
-                            data.forEach(person => {
-                                const div = document.createElement('div');
-                                div.textContent = person.fullname;
-                                div.addEventListener('click', () => {
-                                    searchInput.value = person.fullname;
-                                    suggestionsDiv.innerHTML = '';
-                                    document.getElementById('pername').value = person.fullname;
-                                    document.getElementById('perid').value = person.id;
-                                    document.getElementById('persontype').value = person.type;
-                                });
-                                suggestionsDiv.appendChild(div);
-                            });
-                        } else {
-                            suggestionsDiv.innerHTML = '<div>No matches found</div>';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching data:', error);
-                    });
-            });
-
-            // Print function
-            function printDiv(divId) {
-                const printContents = document.getElementById(divId).innerHTML;
-                const originalContents = document.body.innerHTML;
-
-                document.body.innerHTML = printContents;
-                window.print();
-                document.body.innerHTML = originalContents;
-                location.reload();
-            }
-
-            // Close suggestions when clicking outside
-            document.addEventListener('click', function(e) {
-                if (!searchInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-                    suggestionsDiv.innerHTML = '';
-                }
-            });
-        </script>
-
-        <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="bi bi-arrow-up"></i></a>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="lib/chart/chart.min.js"></script>
-    <script src="lib/easing/easing.min.js"></script>
-    <script src="lib/waypoints/waypoints.min.js"></script>
-    <script src="lib/owlcarousel/owl.carousel.min.js"></script>
-    <script src="lib/tempusdominus/js/moment.min.js"></script>
-    <script src="lib/tempusdominus/js/moment-timezone.min.js"></script>
-    <script src="lib/tempusdominus/js/tempusdominus-bootstrap-4.min.js"></script>
-    <!-- Template Javascript -->
-    <script src="js/main.js"></script>
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        });
+    </script>
 </body>
 </html>
