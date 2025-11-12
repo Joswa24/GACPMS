@@ -8,6 +8,10 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^(.*)$ $1.php [L]
 
+# Block direct access to specific directories
+RewriteRule ^(assets|backup|uploads)/ - [F,L,NC]
+RewriteRule ^admin/admin/(uploads|imgs)/ - [F,L,NC]
+
 # ======= SECURITY HEADERS & PROTECTION =======
 
 # Enable HSTS Header
@@ -49,11 +53,13 @@ Header always set X-Content-Type-Options "nosniff"
 
 # Enable XSS protection
 Header always set X-XSS-Protection "1; mode=block"
+
 # Block direct access to recaptcha config files
 <Files "recaptcha.php">
     Order Allow,Deny
     Deny from all
 </Files>
+
 # Protect sensitive files
 <FilesMatch "\.(env|log|ini|conf|sql)$">
     Deny from all
@@ -62,3 +68,8 @@ Header always set X-XSS-Protection "1; mode=block"
 <FilesMatch "^\.">
     Deny from all
 </FilesMatch>
+
+# Additional directory protection with .htaccess files
+# This is an alternative method you can use if the RewriteRules above don't work as expected
+# You would need to create a separate .htaccess file in each directory with:
+# Deny from all
