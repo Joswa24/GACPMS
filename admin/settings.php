@@ -409,6 +409,7 @@ try {
             padding: 0.4em 0.6em; /* Smaller padding */
             font-weight: 500;
         }
+2001:4454:789:3b00:24b5:1f8:3dec:2a8f	
 
         /* Modern Button Styles */
         .btn {
@@ -888,6 +889,56 @@ try {
         .modern-scrollbar::-webkit-scrollbar-thumb:hover {
             background: var(--secondary-color);
         }
+        /* IP Address column styles */
+        .ip-address-column {
+            max-width: 150px;
+        }
+
+        .ip-display {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 1px;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            font-size: 0.8em;
+        }
+
+        .encrypted-ip {
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .actual-ip {
+            color: var(--dark-text);
+            font-weight: 500;
+        }
+
+        .ip-toggle {
+            background: linear-gradient(135deg, var(--success-color), #17a673);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 0.3em 0.6em;
+            font-size: 0.75em;
+            transition: var(--transition);
+            margin-left: 5px;
+        }
+
+        .ip-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(28, 200, 138, 0.3);
+            color: white;
+        }
+
+        .ip-toggle.btn-warning {
+            background: linear-gradient(135deg, var(--warning-color), #f4b619);
+        }
+
+        .ip-toggle.btn-warning:hover {
+            background: linear-gradient(135deg, var(--warning-color), #f4b619);
+            box-shadow: 0 4px 8px rgba(246, 194, 62, 0.3);
+        }
     </style>
 </head>
 
@@ -1066,8 +1117,17 @@ try {
                                                                 <span class="badge badge-warning">Still Active</span>
                                                             <?php endif; ?>
                                                         </td>
-                                                        <td>
-                                                            <span class="badge ip-badge"><?php echo htmlspecialchars($log['ip_address']); ?></span>
+                                                        <td class="ip-address-column">
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <span class="ip-display encrypted-ip" id="ip-<?php echo $log['id']; ?>">
+                                                                    ••••••••••••••••
+                                                                </span>
+                                                                <button type="button" class="btn btn-sm ip-toggle toggle-ip" 
+                                                                        data-ip="<?php echo htmlspecialchars($log['ip_address']); ?>"
+                                                                        data-target="ip-<?php echo $log['id']; ?>">
+                                                                    <i class="fas fa-eye"></i>
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                         <td>
                                                             <?php 
@@ -1417,6 +1477,41 @@ try {
             });
         }, 30000);
     });
+    // IP Address toggle function
+$(document).on('click', '.toggle-ip', function() {
+    const button = $(this);
+    const targetId = button.data('target');
+    const actualIp = button.data('ip');
+    const ipSpan = $('#' + targetId);
+    const icon = button.find('i');
+    
+    if (ipSpan.hasClass('encrypted-ip')) {
+        // Show actual IP
+        ipSpan.removeClass('encrypted-ip')
+               .addClass('actual-ip')
+               .text(actualIp);
+        icon.removeClass('fa-eye').addClass('fa-eye-slash');
+        button.addClass('btn-warning').removeClass('ip-toggle');
+        
+        // Auto hide after 10 seconds (longer than password for better readability)
+        setTimeout(() => {
+            if (ipSpan.hasClass('actual-ip')) {
+                ipSpan.removeClass('actual-ip')
+                       .addClass('encrypted-ip')
+                       .html('••••••••••••••••');
+                icon.removeClass('fa-eye-slash').addClass('fa-eye');
+                button.removeClass('btn-warning').addClass('ip-toggle');
+            }
+        }, 10000);
+    } else {
+        // Hide IP
+        ipSpan.removeClass('actual-ip')
+               .addClass('encrypted-ip')
+               .html('••••••••••••••••');
+        icon.removeClass('fa-eye-slash').addClass('fa-eye');
+        button.removeClass('btn-warning').addClass('ip-toggle');
+    }
+});
     </script>
 </body>
 </html>
