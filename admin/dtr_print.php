@@ -162,18 +162,24 @@ foreach ($dailyLogs as $day => $logs) {
             $daysData[$day]['time_in_pm'] = '1:00 PM'; // Automatic 1 PM login
             $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out));
         }
-        // Edge Case: Only time-in exists, no time-out. Assume morning class.
+        // EDGE CASE: Only time-in exists, no time-out.
         elseif ($time_in && !$time_out) {
-            if ($hour_in < 12) {
+            if ($hour_in < 12) { // Time-in is in the morning (1:00 AM - 11:59 AM)
+                // May record sa aga
                 $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
-                $daysData[$day]['time_out_am'] = '12:00 PM';
+                $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12:00 PM departure
+                
+                // Walay record sa hapon
                 $daysData[$day]['time_in_pm'] = '';
                 $daysData[$day]['time_out_pm'] = '';
-            } else {
+            } else { // Time-in is in the afternoon (12:00 PM - 11:59 PM)
+                // Walay record sa aga
                 $daysData[$day]['time_in_am'] = '';
                 $daysData[$day]['time_out_am'] = '';
-                $daysData[$day]['time_in_pm'] = '1:00 PM';
-                $daysData[$day]['time_out_pm'] = '';
+                
+                // May record sa hapon
+                $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in)); // Actual time-in is the PM arrival
+                $daysData[$day]['time_out_pm'] = '5:00 PM'; // Automatic 5:00 PM departure
             }
         }
         // Edge Case: Only time-out exists, no time-in.
