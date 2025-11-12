@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_holiday'])) {
     $_SESSION['message'] = "Holiday/Suspension added successfully!";
     
     // Redirect to prevent form resubmission
-    header("Location: " . $_SERVER['PHP_SELF']);
+    header("Location: dtr.php" );
     exit;
 }
 ?>
