@@ -24,6 +24,7 @@ header("Expires: 0");
  $error = '';
  $success = '';
  $twoFactorRequired = false;
+ $locationPermissionDenied = false;
 
 // Initialize session variables
 if (!isset($_SESSION['login_attempts'])) {
@@ -211,10 +212,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     
     // Validate CSRF token
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $error = "Security token invalid. Please refresh the page.";
+        $error = "Security token invalid. Please refresh page.";
     } else {
         // Check if location permission was granted
-        if (!isset($_POST['location_granted']) || $_POST['location_granted'] !== 'true') {
+        if (isset($_POST['location_permission']) && $_POST['location_permission'] === 'denied') {
+            $locationPermissionDenied = true;
+        } elseif (!isset($_POST['location_granted']) || $_POST['location_granted'] !== 'true') {
             $error = "Location permission is required for secure login. Please allow location access and try again.";
         } else {
             // Check lockout
@@ -980,19 +983,6 @@ function send2FACodeEmail($email, $verificationCode) {
             display: block;
         }
         
-        .location-permission-box {
-            background-color: #e8f4fd;
-            border: 1px solid #b6d7ff;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .location-permission-box i {
-            color: var(--accent-color);
-            margin-right: 8px;
-        }
-        
         .location-status {
             display: flex;
             align-items: center;
@@ -1096,6 +1086,15 @@ function send2FACodeEmail($email, $verificationCode) {
                 </div>
             </div>
 
+            <!-- Location Permission Denied Alert -->
+            <?php if ($locationPermissionDenied): ?>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Location Access Required</strong>
+                    <div>Location permission is required for secure login. Please refresh the page and allow location access to continue.</div>
+                </div>
+            <?php endif; ?>
+
             <form method="POST" id="loginForm" autocomplete="on">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                 <input type="hidden" name="login" value="1">
@@ -1111,7 +1110,7 @@ function send2FACodeEmail($email, $verificationCode) {
                         <input type="text" class="form-control" id="username" name="username" 
                             placeholder="Enter your username" required autocomplete="username"
                             value="<?php echo isset($_POST['username']) ? htmlspecialchars($_POST['username']) : ''; ?>"
-                            <?php echo $isLockedOut ? 'disabled' : ''; ?>>
+                            <?php echo $isLockedOut || $locationPermissionDenied ? 'disabled' : ''; ?>>
                     </div>
                 </div>
 
@@ -1122,26 +1121,10 @@ function send2FACodeEmail($email, $verificationCode) {
                         <input type="password" class="form-control" id="password" name="password" 
                             placeholder="Enter your password" required
                             autocomplete="current-password"
-                            <?php echo $isLockedOut ? 'disabled' : ''; ?>>
+                            <?php echo $isLockedOut || $locationPermissionDenied ? 'disabled' : ''; ?>>
                         <span class="password-toggle" onclick="togglePassword()">
                             <i class="fas fa-eye"></i>
                         </span>
-                    </div>
-                </div>
-
-                <!-- Location Permission Section -->
-                <div class="location-permission-box">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="allowLocation" checked>
-                        <label class="form-check-label" for="allowLocation">
-                            <i class="fas fa-map-marker-alt"></i> Allow location access for enhanced security
-                        </label>
-                    </div>
-                    <small class="text-muted">Your location helps us verify your identity and detect suspicious login attempts.</small>
-                    <div class="location-status" id="locationStatus">
-                        <i class="fas fa-info-circle"></i>
-                        <span id="locationStatusText">Location permission will be requested when you click Sign In</span>
-                        <div class="spinner-border spinner-border-sm location-spinner" id="locationSpinner" role="status"></div>
                     </div>
                 </div>
 
@@ -1153,9 +1136,9 @@ function send2FACodeEmail($email, $verificationCode) {
                     </small>
                 </div>
 
-                <button type="submit" class="btn btn-login mb-3" id="loginBtn" <?php echo $isLockedOut ? 'disabled' : ''; ?>>
+                <button type="submit" class="btn btn-login mb-3" id="loginBtn" <?php echo $isLockedOut || $locationPermissionDenied ? 'disabled' : ''; ?>>
                     <i class="fas fa-sign-in-alt me-2"></i>
-                    <span id="loginText"><?php echo $isLockedOut ? 'Account Locked' : 'Sign In'; ?></span>
+                    <span id="loginText"><?php echo $isLockedOut ? 'Account Locked' : ($locationPermissionDenied ? 'Location Required' : 'Sign In'); ?></span>
                     <span id="loginSpinner" class="spinner-border spinner-border-sm d-none ms-2" role="status"></span>
                 </button>
             </form>
@@ -1264,70 +1247,36 @@ function send2FACodeEmail($email, $verificationCode) {
             }
         }
 
-        // Get location and login
-        function getLocationAndLogin(form) {
-            const allowLocation = document.getElementById('allowLocation').checked;
-            
-            if (!allowLocation) {
-                Swal.fire({
-                    title: 'Location Required',
-                    text: 'Location permission is required for secure login. Please enable location access and try again.',
-                    icon: 'warning',
-                    confirmButtonColor: '#4e73df',
-                    confirmButtonText: 'OK'
-                });
-                return;
-            }
-            
+        // Request location on page load
+        function requestLocationOnLoad() {
             // Show loading state
             const loginBtn = document.getElementById('loginBtn');
             const loginText = document.getElementById('loginText');
             const loginSpinner = document.getElementById('loginSpinner');
-            const locationStatus = document.getElementById('locationStatus');
-            const locationStatusText = document.getElementById('locationStatusText');
-            const locationSpinner = document.getElementById('locationSpinner');
             
             loginText.textContent = 'Getting location...';
             loginSpinner.classList.remove('d-none');
             loginBtn.disabled = true;
-            
-            locationStatus.classList.remove('success', 'error');
-            locationStatus.classList.add('info');
-            locationStatusText.textContent = 'Requesting location access...';
-            locationSpinner.style.display = 'inline-block';
             
             if ("geolocation" in navigator) {
                 // Request high-accuracy location
                 navigator.geolocation.getCurrentPosition(
                     // SUCCESS: Location was retrieved
                     function(position) {
-                        // Set the location values
+                        // Set location values
                         document.getElementById('user_lat').value = position.coords.latitude;
                         document.getElementById('user_lon').value = position.coords.longitude;
                         document.getElementById('user_accuracy').value = position.coords.accuracy;
                         document.getElementById('location_granted').value = 'true';
                         
-                        // Update UI
-                        locationStatus.classList.remove('info');
-                        locationStatus.classList.add('success');
-                        locationStatusText.textContent = `Location obtained (accuracy: ±${Math.round(position.coords.accuracy)}m)`;
-                        locationSpinner.style.display = 'none';
-                        
                         // Update button text
-                        loginText.textContent = 'Authenticating...';
-                        
-                        // Submit the form
-                        form.submit();
+                        loginText.textContent = 'Sign In';
+                        loginSpinner.classList.add('d-none');
+                        loginBtn.disabled = false;
                     },
                     // ERROR: User denied permission or location failed
                     function(error) {
                         console.warn("Geolocation error (" + error.code + "): " + error.message);
-                        
-                        // Update UI
-                        locationStatus.classList.remove('info');
-                        locationStatus.classList.add('error');
-                        locationStatusText.textContent = 'Location access denied. Login cannot proceed.';
-                        locationSpinner.style.display = 'none';
                         
                         // Reset button state
                         loginText.textContent = 'Sign In';
@@ -1337,10 +1286,21 @@ function send2FACodeEmail($email, $verificationCode) {
                         // Show error message
                         Swal.fire({
                             title: 'Location Access Denied',
-                            text: 'Location permission is required for secure login. Please allow location access in your browser settings and try again.',
+                            text: 'Location permission is required for secure login. Please allow location access in your browser settings and refresh the page.',
                             icon: 'error',
                             confirmButtonColor: '#e74a3b',
-                            confirmButtonText: 'OK'
+                            confirmButtonText: 'OK',
+                            allowOutsideClick: false
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                // Submit form with location denied flag
+                                const locationDeniedInput = document.createElement('input');
+                                locationDeniedInput.type = 'hidden';
+                                locationDeniedInput.name = 'location_permission';
+                                locationDeniedInput.value = 'denied';
+                                document.getElementById('loginForm').appendChild(locationDeniedInput);
+                                document.getElementById('loginForm').submit();
+                            }
                         });
                     },
                     // OPTIONS: Request high accuracy
@@ -1352,12 +1312,6 @@ function send2FACodeEmail($email, $verificationCode) {
                 );
             } else {
                 // Geolocation is not supported
-                locationStatus.classList.remove('info');
-                locationStatus.classList.add('error');
-                locationStatusText.textContent = 'Geolocation is not supported by your browser.';
-                locationSpinner.style.display = 'none';
-                
-                // Reset button state
                 loginText.textContent = 'Sign In';
                 loginSpinner.classList.add('d-none');
                 loginBtn.disabled = false;
@@ -1368,7 +1322,8 @@ function send2FACodeEmail($email, $verificationCode) {
                     text: 'Your browser does not support geolocation. Please use a modern browser to login.',
                     icon: 'error',
                     confirmButtonColor: '#e74a3b',
-                    confirmButtonText: 'OK'
+                    confirmButtonText: 'OK',
+                    allowOutsideClick: false
                 });
             }
         }
@@ -1385,8 +1340,8 @@ function send2FACodeEmail($email, $verificationCode) {
             // Prevent default form submission
             e.preventDefault();
             
-            // Get location and then submit
-            getLocationAndLogin(this);
+            // Submit the form
+            this.submit();
         });
 
         // Enhanced 2FA verification handling
@@ -1503,7 +1458,7 @@ function send2FACodeEmail($email, $verificationCode) {
             // Hide any existing alerts
             hideModalAlerts();
             
-            // Get the complete verification code
+            // Get complete verification code
             const verificationCode = Array.from(codeInputs).map(input => input.value).join('');
             
             // Validate it's a 6-digit number
@@ -1515,84 +1470,8 @@ function send2FACodeEmail($email, $verificationCode) {
                 return;
             }
             
-            // Submit the form via AJAX to handle response better
-            submit2FAViaAJAX(verificationCode);
-        }
-
-        /**
-         * Submit 2FA via AJAX for better user experience
-         */
-        function submit2FAViaAJAX(verificationCode) {
-            const formData = new FormData();
-            formData.append('verify_2fa', '1');
-            formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
-            
-            // Add individual code fields
-            for (let i = 0; i < 6; i++) {
-                formData.append(`code_${i + 1}`, verificationCode[i]);
-            }
-            
-            fetch('', {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(response => response.text())
-            .then(data => {
-                // Check if response contains success indicators
-                if (data.includes('dashboard.php') || data.includes('login_success')) {
-                    // Success - redirect to dashboard
-                    showModalSuccess('Verification successful! Redirecting to dashboard...');
-                    
-                    setTimeout(() => {
-                        window.location.href = 'dashboard.php';
-                    }, 1500);
-                } else if (data.includes('Invalid verification code') || data.includes('error')) {
-                    // Failed verification
-                    showModalError('Invalid verification code. Please try again.');
-                    reset2FAForm();
-                } else {
-                    // Generic error
-                    showModalError('Verification failed. Please try again.');
-                    reset2FAForm();
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showModalError('Network error. Please try again.');
-                reset2FAForm();
-            });
-        }
-
-        /**
-         * Reset 2FA form state
-         */
-        function reset2FAForm() {
-            const verifyBtn = document.getElementById('verifyBtn');
-            const verifyText = document.getElementById('verifyText');
-            const verifySpinner = document.getElementById('verifySpinner');
-            const codeInputs = document.querySelectorAll('.verification-code-input');
-            
-            // Reset button state
-            verifyText.textContent = 'Verify Code';
-            verifySpinner.classList.add('d-none');
-            verifyBtn.disabled = false;
-            
-            // Clear and focus on first input
-            codeInputs.forEach(input => {
-                input.value = '';
-                input.classList.add('error');
-            });
-            
-            // Focus on first input
-            document.getElementById('code_1').focus();
-            
-            // Remove error class after a delay
-            setTimeout(() => {
-                codeInputs.forEach(input => input.classList.remove('error'));
-            }, 2000);
+            // Submit the form
+            twoFactorForm.submit();
         }
 
         /**
@@ -1736,6 +1615,11 @@ function send2FACodeEmail($email, $verificationCode) {
             <?php if ($isLockedOut): ?>
                 const remainingTime = <?php echo $remainingLockoutTime; ?>;
                 startCountdown(remainingTime);
+            <?php endif; ?>
+
+            // Request location on page load
+            <?php if (!$isLockedOut && !$locationPermissionDenied): ?>
+                requestLocationOnLoad();
             <?php endif; ?>
 
             // Show 2FA modal if required
