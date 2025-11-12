@@ -672,11 +672,22 @@ try {
                                                 </td>
                                                 <td>
                                                     <?php 
-                                                    $location = htmlspecialchars($log['location'] ?? 'Unknown');
-                                                    if (!empty($log['map_link'])) {
-                                                        echo '<a href="' . $log['map_link'] . '" target="_blank" class="location-link">' . $location . ' <i class="fas fa-map-marker-alt"></i></a>';
+                                                    $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
+                                                    $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
+
+                                                    // Check if location details are available and valid
+                                                    $locationData = json_decode($log['location_details'], true);
+                                                    if ($locationData && isset($locationData['source']) && $locationData['source'] === 'GPS') {
+                                                        echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
+                                                        echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
+                                                        echo '<i class="fas fa-map-marked-alt"></i> View';
+                                                        echo '</button>';
+                                                        echo '<div class="mt-1"><small class="text-success"><i class="fas fa-satellite-dish"></i> GPS Location</small></div>';
                                                     } else {
-                                                        echo $location;
+                                                        echo '<div class="table-cell-truncate">' . $summaryLocation . '</div>';
+                                                        if ($locationData && isset($locationData['source'])) {
+                                                            echo '<div class="mt-1"><small class="text-muted"><i class="fas fa-wifi"></i> IP Location</small></div>';
+                                                        }
                                                     }
                                                     ?>
                                                 </td>

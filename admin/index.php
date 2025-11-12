@@ -9,7 +9,7 @@ header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
 header("X-XSS-Protection: 1; mode=block");
 header("Referrer-Policy: strict-origin-when-cross-origin");
-header("Permissions-Policy: geolocation=(), microphone=(), camera=()");
+header("Permissions-Policy: geolocation=(self), microphone=(), camera=()");
 header("X-Permitted-Cross-Domain-Policies: none");
 header("Cross-Origin-Embedder-Policy: require-corp");
 header("Cross-Origin-Opener-Policy: same-origin");
@@ -19,11 +19,11 @@ header("Pragma: no-cache");
 header("Expires: 0");
 
 // Initialize variables
-$maxAttempts = 3;
-$lockoutTime = 30;
-$error = '';
-$success = '';
-$twoFactorRequired = false;
+ $maxAttempts = 3;
+ $lockoutTime = 30;
+ $error = '';
+ $success = '';
+ $twoFactorRequired = false;
 
 // Initialize session variables
 if (!isset($_SESSION['login_attempts'])) {
@@ -36,13 +36,72 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+// Check and create location_details column if it doesn't exist
+try {
+    $checkColumn = $db->query("SHOW COLUMNS FROM admin_access_logs LIKE 'location_details'");
+    if ($checkColumn->num_rows == 0) {
+        $db->query("ALTER TABLE admin_access_logs ADD COLUMN location_details JSON AFTER location");
+        error_log("Added location_details column to admin_access_logs table");
+    }
+} catch (Exception $e) {
+    error_log("Failed to check/add location_details column: " . $e->getMessage());
+}
+
 // Redirect if already logged in
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && isset($_SESSION['2fa_verified']) && $_SESSION['2fa_verified'] === true) {
     header('Location: dashboard.php');
     exit();
 }
 
-// Handle 2FA verification
+// Function to reverse geocode coordinates to get specific location
+function reverseGeocode($lat, $lon) {
+    // Using OpenStreetMap's Nominatim API (free, no API key required)
+    $url = "https://nominatim.openstreetmap.org/reverse?format=json&lat={$lat}&lon={$lon}&zoom=16&addressdetails=1";
+    
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'MyAdminAccessLog/1.0'); // Nominatim requires a user agent
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode !== 200) {
+        return null;
+    }
+    
+    $data = json_decode($response, true);
+    
+    if (isset($data['address'])) {
+        $address = $data['address'];
+        
+        // Try to build a specific location string
+        $parts = [];
+        if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
+            $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
+        }
+        if (isset($address['city']) || isset($address['city_district'])) {
+            $parts[] = $address['city'] ?? $address['city_district'];
+        }
+        if (isset($address['state']) || isset($address['province'])) {
+            $parts[] = $address['state'] ?? $address['province'];
+        }
+        if (isset($address['country'])) {
+            $parts[] = $address['country'];
+        }
+        
+        return [
+            'display_name' => $data['display_name'],
+            'address' => $address,
+            'specific_location' => implode(', ', $parts)
+        ];
+    }
+    
+    return null;
+}
+
 // Handle 2FA verification
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_2fa'])) {
     // Combine the 6 input fields into one code
@@ -55,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_2fa'])) {
     error_log("2FA Verification Attempt - Code: " . str_repeat('*', strlen($verificationCode)));
     
     if (empty($verificationCode) || strlen($verificationCode) !== 6) {
-        $error = "Please enter the complete 6-digit verification code.";
+        $error = "Please enter complete 6-digit verification code.";
         $twoFactorRequired = true;
     } elseif (!ctype_digit($verificationCode)) {
         $error = "Invalid verification code format. Please enter only numbers.";
@@ -154,61 +213,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         $error = "Security token invalid. Please refresh the page.";
     } else {
-        // Check lockout
-        if ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime) {
-            $remainingTime = $lockoutTime - (time() - $_SESSION['lockout_time']);
-            $error = "Too many failed attempts. Please wait " . $remainingTime . " seconds before trying again.";
+        // Check if location permission was granted
+        if (!isset($_POST['location_granted']) || $_POST['location_granted'] !== 'true') {
+            $error = "Location permission is required for secure login. Please allow location access and try again.";
         } else {
-            // Reset attempts if lockout expired
-            if ((time() - $_SESSION['lockout_time']) >= $lockoutTime && $_SESSION['login_attempts'] >= $maxAttempts) {
-                $_SESSION['login_attempts'] = 0;
-                $_SESSION['lockout_time'] = 0;
-            }
-
-            $username = trim($_POST['username']);
-            $password = trim($_POST['password']);
-            
-            // Input validation
-            if (empty($username) || empty($password)) {
-                $error = "Please enter both username and password.";
-            } elseif (strlen($username) > 50 || strlen($password) > 255) {
-                $error = "Invalid input length.";
+            // Check lockout
+            if ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime) {
+                $remainingTime = $lockoutTime - (time() - $_SESSION['lockout_time']);
+                $error = "Too many failed attempts. Please wait " . $remainingTime . " seconds before trying again.";
             } else {
-                try {
-                    $stmt = $db->prepare("SELECT * FROM user WHERE username = ?");
-                    if (!$stmt) {
-                        throw new Exception("Database error");
-                    }
-                    
-                    $stmt->bind_param("s", $username);
-                    $stmt->execute();
-                    $result = $stmt->get_result();
-                    
-                    if ($result->num_rows > 0) {
-                        $user = $result->fetch_assoc();
+                // Reset attempts if lockout expired
+                if ((time() - $_SESSION['lockout_time']) >= $lockoutTime && $_SESSION['login_attempts'] >= $maxAttempts) {
+                    $_SESSION['login_attempts'] = 0;
+                    $_SESSION['lockout_time'] = 0;
+                }
+
+                $username = trim($_POST['username']);
+                $password = trim($_POST['password']);
+                
+                // Input validation
+                if (empty($username) || empty($password)) {
+                    $error = "Please enter both username and password.";
+                } elseif (strlen($username) > 50 || strlen($password) > 255) {
+                    $error = "Invalid input length.";
+                } else {
+                    try {
+                        $stmt = $db->prepare("SELECT * FROM user WHERE username = ?");
+                        if (!$stmt) {
+                            throw new Exception("Database error");
+                        }
                         
-                        if (password_verify($password, $user['password'])) {
-                            // Log successful login
-                            logAccessAttempt($user['id'], $user['username'], 'Login', 'success');
+                        $stmt->bind_param("s", $username);
+                        $stmt->execute();
+                        $result = $stmt->get_result();
+                        
+                        if ($result->num_rows > 0) {
+                            $user = $result->fetch_assoc();
                             
-                            // Reset login attempts
-                            $_SESSION['login_attempts'] = 0;
-                            $_SESSION['lockout_time'] = 0;
-                            
-                            // Store user info in session for 2FA verification
-                            $_SESSION['temp_user_id'] = $user['id'];
-                            $_SESSION['temp_username'] = $user['username'];
-                            $_SESSION['temp_email'] = $user['email'];
-                            $_SESSION['password_verified'] = true;
-                            
-                            // Generate and send 2FA code
-                            $verificationCode = generate2FACode($user['id'], $user['email']);
-                            
-                            if ($verificationCode) {
-                                $twoFactorRequired = true;
-                                $success = "Verification code sent to your email.";
+                            if (password_verify($password, $user['password'])) {
+                                // Log successful login
+                                logAccessAttempt($user['id'], $user['username'], 'Login', 'success');
+                                
+                                // Reset login attempts
+                                $_SESSION['login_attempts'] = 0;
+                                $_SESSION['lockout_time'] = 0;
+                                
+                                // Store user info in session for 2FA verification
+                                $_SESSION['temp_user_id'] = $user['id'];
+                                $_SESSION['temp_username'] = $user['username'];
+                                $_SESSION['temp_email'] = $user['email'];
+                                $_SESSION['password_verified'] = true;
+                                
+                                // Generate and send 2FA code
+                                $verificationCode = generate2FACode($user['id'], $user['email']);
+                                
+                                if ($verificationCode) {
+                                    $twoFactorRequired = true;
+                                    $success = "Verification code sent to your email.";
+                                } else {
+                                    $error = "Failed to send verification code. Please try again.";
+                                }
                             } else {
-                                $error = "Failed to send verification code. Please try again.";
+                                // Log failed login attempt
+                                logAccessAttempt(0, $username, 'Failed Login', 'failed');
+                                
+                                $_SESSION['login_attempts']++;
+                                $attemptsLeft = $maxAttempts - $_SESSION['login_attempts'];
+                                if ($attemptsLeft > 0) {
+                                    $error = "Invalid username or password. Attempts remaining: " . $attemptsLeft;
+                                } else {
+                                    $_SESSION['lockout_time'] = time();
+                                    $error = "Too many failed attempts. Please wait 30 seconds before trying again.";
+                                }
                             }
                         } else {
                             // Log failed login attempt
@@ -223,22 +299,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                                 $error = "Too many failed attempts. Please wait 30 seconds before trying again.";
                             }
                         }
-                    } else {
-                        // Log failed login attempt
-                        logAccessAttempt(0, $username, 'Failed Login', 'failed');
-                        
-                        $_SESSION['login_attempts']++;
-                        $attemptsLeft = $maxAttempts - $_SESSION['login_attempts'];
-                        if ($attemptsLeft > 0) {
-                            $error = "Invalid username or password. Attempts remaining: " . $attemptsLeft;
-                        } else {
-                            $_SESSION['lockout_time'] = time();
-                            $error = "Too many failed attempts. Please wait 30 seconds before trying again.";
-                        }
+                    } catch (Exception $e) {
+                        error_log("Login error: " . $e->getMessage());
+                        $error = "Database error. Please try again.";
                     }
-                } catch (Exception $e) {
-                    error_log("Login error: " . $e->getMessage());
-                    $error = "Database error. Please try again.";
                 }
             }
         }
@@ -289,7 +353,7 @@ function completeLoginProcess($userId, $username, $email) {
     exit();
 }
 
-// Function to log access attempts
+// Function to log access attempts - UPDATED TO HANDLE LOCATION DATA
 function logAccessAttempt($userId, $username, $activity, $status) {
     global $db;
     
@@ -297,28 +361,58 @@ function logAccessAttempt($userId, $username, $activity, $status) {
         $ipAddress = $_SERVER['REMOTE_ADDR'];
         $userAgent = $_SERVER['HTTP_USER_AGENT'];
         $location = 'Unknown';
-        
-        // Get location information
-        if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
-            $context = stream_context_create([
-                'http' => [
-                    'timeout' => 3,
-                    'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                ]
-            ]);
+        $locationJson = null;
+        $locationSource = 'IP'; // Track the source of the location data
+
+        // Check for client-side location data
+        if (!empty($_POST['user_lat']) && !empty($_POST['user_lon'])) {
+            $lat = floatval($_POST['user_lat']);
+            $lon = floatval($_POST['user_lon']);
+            $accuracy = isset($_POST['user_accuracy']) ? floatval($_POST['user_accuracy']) : null;
+
+            // Get specific address from coordinates
+            $geoData = reverseGeocode($lat, $lon);
             
-            $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
-            if ($ipData) {
-                $ipInfo = json_decode($ipData);
-                if ($ipInfo && $ipInfo->status === 'success') {
-                    $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
+            if ($geoData) {
+                $location = $geoData['specific_location']; // e.g., "Poblacion, Santa Fe, Cebu, Philippines"
+                $locationSource = 'GPS';
+                $locationJson = json_encode([
+                    'source' => 'GPS',
+                    'lat' => $lat,
+                    'lon' => $lon,
+                    'accuracy_meters' => $accuracy,
+                    'address' => $geoData['address'],
+                    'display_name' => $geoData['display_name']
+                ]);
+            } else {
+                // Fallback if reverse geocoding fails
+                $location = "Lat: {$lat}, Lon: {$lon}";
+                $locationJson = json_encode(['error' => 'Reverse geocoding failed', 'lat' => $lat, 'lon' => $lon]);
+            }
+        } else {
+            // Fallback to IP-based geolocation
+            if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
+                $context = stream_context_create([
+                    'http' => [
+                        'timeout' => 3,
+                        'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    ]
+                ]);
+                
+                $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
+                if ($ipData) {
+                    $ipInfo = json_decode($ipData);
+                    if ($ipInfo && $ipInfo->status === 'success') {
+                        $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
+                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
+                    }
                 }
             }
         }
         
-        $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?)");
+        $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
         if ($stmt) {
-            $stmt->bind_param("issssss", $userId, $username, $ipAddress, $userAgent, $location, $activity, $status);
+            $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
             $stmt->execute();
         }
     } catch (Exception $e) {
@@ -359,7 +453,6 @@ function generate2FACode($userId, $email) {
     }
 }
 
-// UPDATED Function to send 2FA code via email
 // UPDATED Function to send 2FA code via email
 function send2FACodeEmail($email, $verificationCode) {
     try {
@@ -461,8 +554,8 @@ function send2FACodeEmail($email, $verificationCode) {
 }
 
 // Check if user is currently locked out
-$isLockedOut = ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime);
-$remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lockout_time'])) : 0;
+ $isLockedOut = ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime);
+ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lockout_time'])) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -472,7 +565,7 @@ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lock
     <title>Admin Login - RFID System</title>
     
     <!-- Security Meta Tags -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://nominatim.openstreetmap.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
     <meta http-equiv="X-Frame-Options" content="DENY">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -887,6 +980,39 @@ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lock
             display: block;
         }
         
+        .location-permission-box {
+            background-color: #e8f4fd;
+            border: 1px solid #b6d7ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .location-permission-box i {
+            color: var(--accent-color);
+            margin-right: 8px;
+        }
+        
+        .location-status {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+        
+        .location-status.success {
+            color: #28a745;
+        }
+        
+        .location-status.error {
+            color: #dc3545;
+        }
+        
+        .location-spinner {
+            margin-left: 8px;
+            display: none;
+        }
+        
         @media (max-width: 576px) {
             .login-container {
                 max-width: 100%;
@@ -973,6 +1099,10 @@ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lock
             <form method="POST" id="loginForm" autocomplete="on">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                 <input type="hidden" name="login" value="1">
+                <input type="hidden" name="location_granted" id="location_granted" value="false">
+                <input type="hidden" name="user_lat" id="user_lat" value="">
+                <input type="hidden" name="user_lon" id="user_lon" value="">
+                <input type="hidden" name="user_accuracy" id="user_accuracy" value="">
 
                 <div class="form-group">
                     <label for="username" class="form-label"><i class="fas fa-user"></i>Username</label>
@@ -996,6 +1126,22 @@ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lock
                         <span class="password-toggle" onclick="togglePassword()">
                             <i class="fas fa-eye"></i>
                         </span>
+                    </div>
+                </div>
+
+                <!-- Location Permission Section -->
+                <div class="location-permission-box">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="allowLocation" checked>
+                        <label class="form-check-label" for="allowLocation">
+                            <i class="fas fa-map-marker-alt"></i> Allow location access for enhanced security
+                        </label>
+                    </div>
+                    <small class="text-muted">Your location helps us verify your identity and detect suspicious login attempts.</small>
+                    <div class="location-status" id="locationStatus">
+                        <i class="fas fa-info-circle"></i>
+                        <span id="locationStatusText">Location permission will be requested when you click Sign In</span>
+                        <div class="spinner-border spinner-border-sm location-spinner" id="locationSpinner" role="status"></div>
                     </div>
                 </div>
 
@@ -1118,6 +1264,115 @@ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lock
             }
         }
 
+        // Get location and login
+        function getLocationAndLogin(form) {
+            const allowLocation = document.getElementById('allowLocation').checked;
+            
+            if (!allowLocation) {
+                Swal.fire({
+                    title: 'Location Required',
+                    text: 'Location permission is required for secure login. Please enable location access and try again.',
+                    icon: 'warning',
+                    confirmButtonColor: '#4e73df',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+            
+            // Show loading state
+            const loginBtn = document.getElementById('loginBtn');
+            const loginText = document.getElementById('loginText');
+            const loginSpinner = document.getElementById('loginSpinner');
+            const locationStatus = document.getElementById('locationStatus');
+            const locationStatusText = document.getElementById('locationStatusText');
+            const locationSpinner = document.getElementById('locationSpinner');
+            
+            loginText.textContent = 'Getting location...';
+            loginSpinner.classList.remove('d-none');
+            loginBtn.disabled = true;
+            
+            locationStatus.classList.remove('success', 'error');
+            locationStatus.classList.add('info');
+            locationStatusText.textContent = 'Requesting location access...';
+            locationSpinner.style.display = 'inline-block';
+            
+            if ("geolocation" in navigator) {
+                // Request high-accuracy location
+                navigator.geolocation.getCurrentPosition(
+                    // SUCCESS: Location was retrieved
+                    function(position) {
+                        // Set the location values
+                        document.getElementById('user_lat').value = position.coords.latitude;
+                        document.getElementById('user_lon').value = position.coords.longitude;
+                        document.getElementById('user_accuracy').value = position.coords.accuracy;
+                        document.getElementById('location_granted').value = 'true';
+                        
+                        // Update UI
+                        locationStatus.classList.remove('info');
+                        locationStatus.classList.add('success');
+                        locationStatusText.textContent = `Location obtained (accuracy: ±${Math.round(position.coords.accuracy)}m)`;
+                        locationSpinner.style.display = 'none';
+                        
+                        // Update button text
+                        loginText.textContent = 'Authenticating...';
+                        
+                        // Submit the form
+                        form.submit();
+                    },
+                    // ERROR: User denied permission or location failed
+                    function(error) {
+                        console.warn("Geolocation error (" + error.code + "): " + error.message);
+                        
+                        // Update UI
+                        locationStatus.classList.remove('info');
+                        locationStatus.classList.add('error');
+                        locationStatusText.textContent = 'Location access denied. Login cannot proceed.';
+                        locationSpinner.style.display = 'none';
+                        
+                        // Reset button state
+                        loginText.textContent = 'Sign In';
+                        loginSpinner.classList.add('d-none');
+                        loginBtn.disabled = false;
+                        
+                        // Show error message
+                        Swal.fire({
+                            title: 'Location Access Denied',
+                            text: 'Location permission is required for secure login. Please allow location access in your browser settings and try again.',
+                            icon: 'error',
+                            confirmButtonColor: '#e74a3b',
+                            confirmButtonText: 'OK'
+                        });
+                    },
+                    // OPTIONS: Request high accuracy
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000, // 10 seconds
+                        maximumAge: 0 // Do not use a cached position
+                    }
+                );
+            } else {
+                // Geolocation is not supported
+                locationStatus.classList.remove('info');
+                locationStatus.classList.add('error');
+                locationStatusText.textContent = 'Geolocation is not supported by your browser.';
+                locationSpinner.style.display = 'none';
+                
+                // Reset button state
+                loginText.textContent = 'Sign In';
+                loginSpinner.classList.add('d-none');
+                loginBtn.disabled = false;
+                
+                // Show error message
+                Swal.fire({
+                    title: 'Geolocation Not Supported',
+                    text: 'Your browser does not support geolocation. Please use a modern browser to login.',
+                    icon: 'error',
+                    confirmButtonColor: '#e74a3b',
+                    confirmButtonText: 'OK'
+                });
+            }
+        }
+
         // Login form submission
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             const isLockedOut = <?php echo $isLockedOut ? 'true' : 'false'; ?>;
@@ -1127,14 +1382,11 @@ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lock
                 return;
             }
             
-            // Show loading state
-            const loginBtn = document.getElementById('loginBtn');
-            const loginText = document.getElementById('loginText');
-            const loginSpinner = document.getElementById('loginSpinner');
+            // Prevent default form submission
+            e.preventDefault();
             
-            loginText.textContent = 'Authenticating...';
-            loginSpinner.classList.remove('d-none');
-            loginBtn.disabled = true;
+            // Get location and then submit
+            getLocationAndLogin(this);
         });
 
         // Enhanced 2FA verification handling
@@ -1190,7 +1442,7 @@ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lock
                         
                         validationMessage.classList.remove('show');
                         
-                        // Focus on the last input
+                        // Focus on last input
                         codeInputs[5].focus();
                         
                         // Auto-submit the form
@@ -1214,140 +1466,134 @@ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lock
         /**
          * Submit 2FA Form with Enhanced Validation
          */
-        /**
- * Submit 2FA Form with Enhanced Validation
- */
-/**
- * Submit 2FA Form with Enhanced Validation
- */
-function submit2FAForm() {
-    const codeInputs = document.querySelectorAll('.verification-code-input');
-    const verifyBtn = document.getElementById('verifyBtn');
-    const verifyText = document.getElementById('verifyText');
-    const verifySpinner = document.getElementById('verifySpinner');
-    const validationMessage = document.getElementById('codeValidationMessage');
-    
-    // Check if all fields are filled
-    const allFilled = Array.from(codeInputs).every(input => input.value.length === 1);
-    
-    if (!allFilled) {
-        // Show validation error
-        validationMessage.classList.add('show');
-        codeInputs.forEach(input => {
-            if (input.value.length === 0) {
-                input.classList.add('error');
-            }
-        });
-        
-        // Focus on first empty field
-        const firstEmpty = Array.from(codeInputs).find(input => input.value.length === 0);
-        if (firstEmpty) firstEmpty.focus();
-        
-        return;
-    }
-    
-    // Hide validation message
-    validationMessage.classList.remove('show');
-    
-    // Show loading state
-    verifyText.textContent = 'Verifying...';
-    verifySpinner.classList.remove('d-none');
-    verifyBtn.disabled = true;
-    
-    // Hide any existing alerts
-    hideModalAlerts();
-    
-    // Get the complete verification code
-    const verificationCode = Array.from(codeInputs).map(input => input.value).join('');
-    
-    // Validate it's a 6-digit number
-    if (!/^\d{6}$/.test(verificationCode)) {
-        showModalError('Please enter a valid 6-digit code.');
-        verifyText.textContent = 'Verify Code';
-        verifySpinner.classList.add('d-none');
-        verifyBtn.disabled = false;
-        return;
-    }
-    
-    // Submit the form via AJAX to handle response better
-    submit2FAViaAJAX(verificationCode);
-}
-
-/**
- * Submit 2FA via AJAX for better user experience
- */
-function submit2FAViaAJAX(verificationCode) {
-    const formData = new FormData();
-    formData.append('verify_2fa', '1');
-    formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
-    
-    // Add individual code fields
-    for (let i = 0; i < 6; i++) {
-        formData.append(`code_${i + 1}`, verificationCode[i]);
-    }
-    
-    fetch('', {
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(response => response.text())
-    .then(data => {
-        // Check if response contains success indicators
-        if (data.includes('dashboard.php') || data.includes('login_success')) {
-            // Success - redirect to dashboard
-            showModalSuccess('Verification successful! Redirecting to dashboard...');
+        function submit2FAForm() {
+            const codeInputs = document.querySelectorAll('.verification-code-input');
+            const verifyBtn = document.getElementById('verifyBtn');
+            const verifyText = document.getElementById('verifyText');
+            const verifySpinner = document.getElementById('verifySpinner');
+            const validationMessage = document.getElementById('codeValidationMessage');
             
-            setTimeout(() => {
-                window.location.href = 'dashboard.php';
-            }, 1500);
-        } else if (data.includes('Invalid verification code') || data.includes('error')) {
-            // Failed verification
-            showModalError('Invalid verification code. Please try again.');
-            reset2FAForm();
-        } else {
-            // Generic error
-            showModalError('Verification failed. Please try again.');
-            reset2FAForm();
+            // Check if all fields are filled
+            const allFilled = Array.from(codeInputs).every(input => input.value.length === 1);
+            
+            if (!allFilled) {
+                // Show validation error
+                validationMessage.classList.add('show');
+                codeInputs.forEach(input => {
+                    if (input.value.length === 0) {
+                        input.classList.add('error');
+                    }
+                });
+                
+                // Focus on first empty field
+                const firstEmpty = Array.from(codeInputs).find(input => input.value.length === 0);
+                if (firstEmpty) firstEmpty.focus();
+                
+                return;
+            }
+            
+            // Hide validation message
+            validationMessage.classList.remove('show');
+            
+            // Show loading state
+            verifyText.textContent = 'Verifying...';
+            verifySpinner.classList.remove('d-none');
+            verifyBtn.disabled = true;
+            
+            // Hide any existing alerts
+            hideModalAlerts();
+            
+            // Get the complete verification code
+            const verificationCode = Array.from(codeInputs).map(input => input.value).join('');
+            
+            // Validate it's a 6-digit number
+            if (!/^\d{6}$/.test(verificationCode)) {
+                showModalError('Please enter a valid 6-digit code.');
+                verifyText.textContent = 'Verify Code';
+                verifySpinner.classList.add('d-none');
+                verifyBtn.disabled = false;
+                return;
+            }
+            
+            // Submit the form via AJAX to handle response better
+            submit2FAViaAJAX(verificationCode);
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showModalError('Network error. Please try again.');
-        reset2FAForm();
-    });
-}
 
-/**
- * Reset 2FA form state
- */
-function reset2FAForm() {
-    const verifyBtn = document.getElementById('verifyBtn');
-    const verifyText = document.getElementById('verifyText');
-    const verifySpinner = document.getElementById('verifySpinner');
-    const codeInputs = document.querySelectorAll('.verification-code-input');
-    
-    // Reset button state
-    verifyText.textContent = 'Verify Code';
-    verifySpinner.classList.add('d-none');
-    verifyBtn.disabled = false;
-    
-    // Clear and focus on first input
-    codeInputs.forEach(input => {
-        input.value = '';
-        input.classList.add('error');
-    });
-    
-    // Focus on first input
-    document.getElementById('code_1').focus();
-    
-    // Remove error class after a delay
-    setTimeout(() => {
-        codeInputs.forEach(input => input.classList.remove('error'));
-    }, 2000);
-}
+        /**
+         * Submit 2FA via AJAX for better user experience
+         */
+        function submit2FAViaAJAX(verificationCode) {
+            const formData = new FormData();
+            formData.append('verify_2fa', '1');
+            formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
+            
+            // Add individual code fields
+            for (let i = 0; i < 6; i++) {
+                formData.append(`code_${i + 1}`, verificationCode[i]);
+            }
+            
+            fetch('', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.text())
+            .then(data => {
+                // Check if response contains success indicators
+                if (data.includes('dashboard.php') || data.includes('login_success')) {
+                    // Success - redirect to dashboard
+                    showModalSuccess('Verification successful! Redirecting to dashboard...');
+                    
+                    setTimeout(() => {
+                        window.location.href = 'dashboard.php';
+                    }, 1500);
+                } else if (data.includes('Invalid verification code') || data.includes('error')) {
+                    // Failed verification
+                    showModalError('Invalid verification code. Please try again.');
+                    reset2FAForm();
+                } else {
+                    // Generic error
+                    showModalError('Verification failed. Please try again.');
+                    reset2FAForm();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showModalError('Network error. Please try again.');
+                reset2FAForm();
+            });
+        }
+
+        /**
+         * Reset 2FA form state
+         */
+        function reset2FAForm() {
+            const verifyBtn = document.getElementById('verifyBtn');
+            const verifyText = document.getElementById('verifyText');
+            const verifySpinner = document.getElementById('verifySpinner');
+            const codeInputs = document.querySelectorAll('.verification-code-input');
+            
+            // Reset button state
+            verifyText.textContent = 'Verify Code';
+            verifySpinner.classList.add('d-none');
+            verifyBtn.disabled = false;
+            
+            // Clear and focus on first input
+            codeInputs.forEach(input => {
+                input.value = '';
+                input.classList.add('error');
+            });
+            
+            // Focus on first input
+            document.getElementById('code_1').focus();
+            
+            // Remove error class after a delay
+            setTimeout(() => {
+                codeInputs.forEach(input => input.classList.remove('error'));
+            }, 2000);
+        }
 
         /**
          * Show Error in Modal
@@ -1590,6 +1836,7 @@ function reset2FAForm() {
                 }
             <?php endif; ?>
         });
+        
     </script>
 </body>
 </html>
