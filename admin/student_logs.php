@@ -2,6 +2,88 @@
 session_start();
 include 'header.php';
 include '../connection.php';
+
+// Create the dedicated table if it doesn't exist
+$createTableQuery = "
+CREATE TABLE IF NOT EXISTS instructor_attendance_dedicated (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    instructor_name VARCHAR(255) NOT NULL,
+    subject_name VARCHAR(255),
+    year_level VARCHAR(50),
+    section VARCHAR(50),
+    room VARCHAR(100),
+    total_students INT DEFAULT 0,
+    present_count INT DEFAULT 0,
+    absent_count INT DEFAULT 0,
+    attendance_rate DECIMAL(5,2) DEFAULT 0.00,
+    time_in DATETIME,
+    time_out DATETIME,
+    session_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    INDEX idx_instructor_date (instructor_name, session_date),
+    INDEX idx_date (session_date),
+    INDEX idx_instructor (instructor_name)
+)";
+
+if ($db->query($createTableQuery) === TRUE) {
+    // Table created or already exists
+    error_log("Instructor attendance dedicated table ready");
+} else {
+    error_log("Error creating table: " . $db->error);
+}
+
+// Function to populate the dedicated table
+function populateDedicatedTable($db, $date = null) {
+    if ($date === null) {
+        $date = date('Y-m-d');
+    }
+    
+    // Remove existing records for the date to avoid duplicates
+    $deleteQuery = "DELETE FROM instructor_attendance_dedicated WHERE session_date = ?";
+    $stmt = $db->prepare($deleteQuery);
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $stmt->close();
+    
+    // Insert data from the original summary table
+    $insertQuery = "
+        INSERT INTO instructor_attendance_dedicated (
+            instructor_name, subject_name, year_level, section, room, 
+            total_students, present_count, absent_count, attendance_rate,
+            time_in, time_out, session_date
+        )
+        SELECT 
+            instructor_name,
+            subject_name,
+            year_level,
+            section,
+            room,
+            total_students,
+            present_count,
+            absent_count,
+            attendance_rate,
+            MIN(time_in) as time_in,
+            MAX(CASE WHEN time_out != '0000-00-00 00:00:00' THEN time_out ELSE NULL END) as time_out,
+            session_date
+        FROM instructor_attendance_summary 
+        WHERE session_date = ?
+        GROUP BY instructor_name, subject_name, year_level, section, session_date
+        ORDER BY instructor_name, time_in
+    ";
+    
+    $stmt = $db->prepare($insertQuery);
+    $stmt->bind_param("s", $date);
+    $result = $stmt->execute();
+    $stmt->close();
+    
+    return $result;
+}
+
+// Auto-populate data for today when page loads
+populateDedicatedTable($db, date('Y-m-d'));
+
 // Date filter logic
 if (isset($_GET['date']) && $_GET['date'] !== '') {
     $selected_date = $_GET['date'];
@@ -10,8 +92,66 @@ if (isset($_GET['date']) && $_GET['date'] !== '') {
 }
 
 // Add instructor filter logic
- $search_instructor = isset($_GET['search_instructor']) ? trim($_GET['search_instructor']) : '';
+$search_instructor = isset($_GET['search_instructor']) ? trim($_GET['search_instructor']) : '';
+$search_subject = isset($_GET['search_subject']) ? trim($_GET['search_subject']) : '';
+
+// Manual refresh action
+if (isset($_GET['refresh_data'])) {
+    if (populateDedicatedTable($db, $selected_date)) {
+        $_SESSION['message'] = "Data refreshed successfully!";
+    } else {
+        $_SESSION['message'] = "Error refreshing data!";
+    }
+    header('Location: instructor_attendance_summary.php?date=' . $selected_date);
+    exit();
+}
+
+// Build the query to fetch data from the DEDICATED table
+$query = "SELECT * FROM instructor_attendance_dedicated WHERE session_date = ?";
+$params = [$selected_date];
+$types = "s";
+
+// Add instructor filter
+if ($search_instructor !== '') {
+    $query .= " AND instructor_name LIKE ?";
+    $params[] = "%$search_instructor%";
+    $types .= "s";
+}
+
+// Add subject filter
+if ($search_subject !== '') {
+    $query .= " AND subject_name LIKE ?";
+    $params[] = "%$search_subject%";
+    $types .= "s";
+}
+
+$query .= " ORDER BY time_in DESC";
+
+$stmt = $db->prepare($query);
+if ($stmt === false) {
+    die("Error preparing query: " . $db->error);
+}
+
+if (!empty($params)) {
+    $bind_result = $stmt->bind_param($types, ...$params);
+    if ($bind_result === false) {
+        die("Error binding parameters: " . $stmt->error);
+    }
+}
+
+$execute_result = $stmt->execute();
+if ($execute_result === false) {
+    die("Error executing query: " . $stmt->error);
+}
+
+$result = $stmt->get_result();
+$attendance_data = [];
+while ($row = $result->fetch_assoc()) {
+    $attendance_data[] = $row;
+}
+$stmt->close();
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -162,16 +302,16 @@ if (isset($_GET['date']) && $_GET['date'] !== '') {
             color: white;
         }
 
-        /* Reset Button */
-        .btn-reset {
-            background: linear-gradient(135deg, #6c757d, #5a6268);
+        /* Refresh Button */
+        .btn-refresh {
+            background: linear-gradient(135deg, var(--warning-color), #f4b619);
             color: white;
-            box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+            box-shadow: 0 4px 15px rgba(246, 194, 62, 0.3);
         }
 
-        .btn-reset:hover {
+        .btn-refresh:hover {
             transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(108, 117, 125, 0.4);
+            box-shadow: 0 6px 20px rgba(246, 194, 62, 0.4);
             color: white;
         }
 
@@ -246,6 +386,11 @@ if (isset($_GET['date']) && $_GET['date'] !== '') {
             width: 1rem;
             height: 1rem;
         }
+
+        .record-count {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -289,15 +434,18 @@ if (isset($_GET['date']) && $_GET['date'] !== '') {
                                     <label for="search_subject" class="form-label fw-bold">Subject</label>
                                     <input type="text" class="form-control" id="search_subject" name="search_subject" 
                                            placeholder="Search subject" 
-                                           value="<?php echo isset($_GET['search_subject']) ? htmlspecialchars($_GET['search_subject']) : ''; ?>">
+                                           value="<?php echo htmlspecialchars($search_subject); ?>">
                                 </div>
                                 <div class="col-lg-3 col-md-6 d-flex align-items-end">
                                     <div class="button-container w-100">
                                         <button type="submit" class="btn btn-filter">
                                             <i class="fas fa-filter"></i> Filter
                                         </button>
+                                        <a href="?date=<?php echo $selected_date; ?>&refresh_data=true" class="btn btn-refresh">
+                                            <i class="fas fa-sync"></i> Refresh
+                                        </a>
                                         <button type="button" class="btn btn-export" onclick="exportToExcel()">
-                                            <i class="fas fa-file-excel"></i>
+                                            <i class="fas fa-file-excel"></i> Export
                                         </button>
                                     </div>
                                 </div>
@@ -309,6 +457,7 @@ if (isset($_GET['date']) && $_GET['date'] !== '') {
                                 <div class="table-responsive">
                                     <h6 class="p-3">
                                         Instructor Attendance Summary for: <span class="text-primary"><?php echo date('F d, Y', strtotime($selected_date)); ?></span>
+                                        <span class="badge bg-primary ms-2 record-count"><?php echo count($attendance_data); ?> Records</span>
                                     </h6>
                                     
                                     <!-- Instructor Attendance Summary Table -->
@@ -330,50 +479,9 @@ if (isset($_GET['date']) && $_GET['date'] !== '') {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <?php
-                                            // Build the query to fetch data from instructor_attendance_summary
-                                            $query = "SELECT * FROM instructor_attendance_summary WHERE session_date = ?";
-                                            $params = [$selected_date];
-                                            $types = "s";
-                                            
-                                            // Add instructor filter
-                                            if ($search_instructor !== '') {
-                                                $query .= " AND instructor_name LIKE ?";
-                                                $params[] = "%$search_instructor%";
-                                                $types .= "s";
-                                            }
-                                            
-                                            // Add subject filter
-                                            if (isset($_GET['search_subject']) && $_GET['search_subject'] !== '') {
-                                                $search_subject = trim($_GET['search_subject']);
-                                                $query .= " AND subject_name LIKE ?";
-                                                $params[] = "%$search_subject%";
-                                                $types .= "s";
-                                            }
-                                            
-                                            $query .= " ORDER BY time_in DESC";
-                                            
-                                            $stmt = $db->prepare($query);
-                                            if ($stmt === false) {
-                                                die("Error preparing query: " . $db->error);
-                                            }
-                                            
-                                            if (!empty($params)) {
-                                                $bind_result = $stmt->bind_param($types, ...$params);
-                                                if ($bind_result === false) {
-                                                    die("Error binding parameters: " . $stmt->error);
-                                                }
-                                            }
-                                            
-                                            $execute_result = $stmt->execute();
-                                            if ($execute_result === false) {
-                                                die("Error executing query: " . $stmt->error);
-                                            }
-                                            
-                                            $result = $stmt->get_result();
-
-                                            if ($result->num_rows > 0) {
-                                                while ($row = $result->fetch_assoc()) {
+                                            <?php if (count($attendance_data) > 0): ?>
+                                                <?php foreach ($attendance_data as $row): ?>
+                                                    <?php
                                                     // Calculate duration
                                                     $duration = 'N/A';
                                                     if ($row['time_in'] && $row['time_out'] && $row['time_out'] != '0000-00-00 00:00:00') {
@@ -394,32 +502,34 @@ if (isset($_GET['date']) && $_GET['date'] !== '') {
                                                     } else {
                                                         $attendance_badge = 'badge-absent';
                                                     }
-                                                    
-                                                    echo '<tr>';
-                                                    echo '<td><strong>' . htmlspecialchars($row['instructor_name']) . '</strong></td>';
-                                                    echo '<td>' . (!empty($row['subject_name']) ? htmlspecialchars($row['subject_name']) : '<span class="text-muted">N/A</span>') . '</td>';
-                                                    echo '<td>' . htmlspecialchars($row['year_level']) . '</td>';
-                                                    echo '<td>' . htmlspecialchars($row['section']) . '</td>';
-                                                    echo '<td>' . (!empty($row['room']) ? htmlspecialchars($row['room']) : '<span class="text-muted">N/A</span>') . '</td>';
-                                                    echo '<td>' . htmlspecialchars($row['total_students']) . '</td>';
-                                                    echo '<td><span class="badge badge-present">' . htmlspecialchars($row['present_count']) . '</span></td>';
-                                                    echo '<td><span class="badge badge-absent">' . htmlspecialchars($row['absent_count']) . '</span></td>';
-                                                    echo '<td><span class="badge ' . $attendance_badge . '">' . htmlspecialchars($row['attendance_rate']) . '%</span></td>';
-                                                    echo '<td>' . ($row['time_in'] && $row['time_in'] != '0000-00-00 00:00:00' ? date('h:i A', strtotime($row['time_in'])) : 'N/A') . '</td>';
-                                                    echo '<td>' . ($row['time_out'] && $row['time_out'] != '0000-00-00 00:00:00' ? date('h:i A', strtotime($row['time_out'])) : 'N/A') . '</td>';
-                                                    echo '<td>' . $duration . '</td>';
-                                                    echo '</tr>';
-                                                }
-                                            } else {
-                                                echo '<tr><td colspan="14" class="text-center py-4">';
-                                                echo '<div class="text-muted">';
-                                                echo '<i class="fa fa-search fa-2x mb-2"></i><br>';
-                                                echo 'No instructor attendance records found for ' . date('F d, Y', strtotime($selected_date));
-                                                echo '</div>';
-                                                echo '</td></tr>';
-                                            }
-                                            $stmt->close();
-                                            ?>
+                                                    ?>
+                                                    <tr>
+                                                        <td><strong><?php echo htmlspecialchars($row['instructor_name']); ?></strong></td>
+                                                        <td><?php echo !empty($row['subject_name']) ? htmlspecialchars($row['subject_name']) : '<span class="text-muted">N/A</span>'; ?></td>
+                                                        <td><?php echo htmlspecialchars($row['year_level']); ?></td>
+                                                        <td><?php echo htmlspecialchars($row['section']); ?></td>
+                                                        <td><?php echo !empty($row['room']) ? htmlspecialchars($row['room']) : '<span class="text-muted">N/A</span>'; ?></td>
+                                                        <td><?php echo htmlspecialchars($row['total_students']); ?></td>
+                                                        <td><span class="badge badge-present"><?php echo htmlspecialchars($row['present_count']); ?></span></td>
+                                                        <td><span class="badge badge-absent"><?php echo htmlspecialchars($row['absent_count']); ?></span></td>
+                                                        <td><span class="badge <?php echo $attendance_badge; ?>"><?php echo htmlspecialchars($row['attendance_rate']); ?>%</span></td>
+                                                        <td><?php echo $row['time_in'] && $row['time_in'] != '0000-00-00 00:00:00' ? date('h:i A', strtotime($row['time_in'])) : 'N/A'; ?></td>
+                                                        <td><?php echo $row['time_out'] && $row['time_out'] != '0000-00-00 00:00:00' ? date('h:i A', strtotime($row['time_out'])) : 'N/A'; ?></td>
+                                                        <td><?php echo $duration; ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <tr>
+                                                    <td colspan="12" class="text-center py-4">
+                                                        <div class="text-muted">
+                                                            <i class="fa fa-search fa-2x mb-2"></i><br>
+                                                            No instructor attendance records found for <?php echo date('F d, Y', strtotime($selected_date)); ?>
+                                                            <br>
+                                                            <small class="mt-2 d-block">Click "Refresh" to update data from the main table</small>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -438,13 +548,6 @@ if (isset($_GET['date']) && $_GET['date'] !== '') {
     <!-- Add SweetAlert JS -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        function resetFilters() {
-            document.getElementById('date').value = '';
-            document.getElementById('search_instructor').value = '';
-            document.getElementById('search_subject').value = '';
-            window.location.href = 'instructor_attendance_summary.php';
-        }
-
         function exportToExcel() {
             Swal.fire({
                 title: 'Export to Excel?',
@@ -498,6 +601,34 @@ if (isset($_GET['date']) && $_GET['date'] !== '') {
             }
         `;
         document.head.appendChild(style);
+
+        // Auto-refresh notification
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('refresh_data')) {
+                // Show a subtle notification that data was refreshed
+                setTimeout(() => {
+                    const toast = document.createElement('div');
+                    toast.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                    toast.style.top = '20px';
+                    toast.style.right = '20px';
+                    toast.style.zIndex = '9999';
+                    toast.innerHTML = `
+                        <i class="fas fa-check-circle me-2"></i>
+                        Data refreshed successfully!
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.body.appendChild(toast);
+                    
+                    // Remove after 3 seconds
+                    setTimeout(() => {
+                        if (toast.parentNode) {
+                            toast.parentNode.removeChild(toast);
+                        }
+                    }, 3000);
+                }, 500);
+            }
+        });
     </script>
 </body>
 </html>
