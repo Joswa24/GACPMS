@@ -84,22 +84,32 @@ function backupDatabase($db) {
 
 // Check if this is an AJAX request
 if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-    // Perform backup
-    $backup_content = backupDatabase($db);
-    
-    // Generate filename
-    $filename = 'backup_' . date('Y-m-d_H-i-s') . '.sql';
-    
-    // Set headers for direct download
-    header('Content-Type: application/octet-stream');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Content-Length: ' . strlen($backup_content));
-    header('Cache-Control: no-cache, must-revalidate');
-    header('Pragma: no-cache');
-    
-    // Output the backup content
-    echo $backup_content;
-    exit;
+    try {
+        // Perform backup
+        $backup_content = backupDatabase($db);
+        
+        // Generate filename
+        $filename = 'backup_' . date('Y-m-d_H-i-s') . '.sql';
+        
+        // Set headers for direct download
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . strlen($backup_content));
+        header('Cache-Control: no-cache, must-revalidate');
+        header('Pragma: no-cache');
+        
+        // Output backup content
+        echo $backup_content;
+        exit;
+    } catch (Exception $e) {
+        // Return error response
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'message' => 'Backup failed: ' . $e->getMessage()
+        ]);
+        exit;
+    }
 }
 
 // If not AJAX, redirect back to dashboard
