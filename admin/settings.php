@@ -671,15 +671,22 @@ try {
                                                     <span class="badge bg-secondary"><?php echo htmlspecialchars($log['ip_address']); ?></span>
                                                 </td>
                                                 <td>
-                                                    <?php 
-                                                    $location = htmlspecialchars($log['location'] ?? 'Unknown');
-                                                    if (!empty($log['map_link'])) {
-                                                        echo '<a href="' . $log['map_link'] . '" target="_blank" class="location-link">' . $location . ' <i class="fas fa-map-marker-alt"></i></a>';
-                                                    } else {
-                                                        echo $location;
-                                                    }
-                                                    ?>
-                                                </td>
+                                                <?php 
+                                                $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
+                                                $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
+
+                                                // Check if location details are available and valid
+                                                $locationData = json_decode($log['location_details'], true);
+                                                if ($locationData && isset($locationData['status']) && $locationData['status'] === 'success') {
+                                                    echo '<span class="d-block mb-1">' . $summaryLocation . '</span>';
+                                                    echo '<button class="btn btn-sm btn-info" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
+                                                    echo '<i class="fas fa-map-marked-alt"></i> View Details';
+                                                    echo '</button>';
+                                                } else {
+                                                    echo $summaryLocation;
+                                                }
+                                                ?>
+                                            </td>
                                                 <td>
                                                     <?php echo htmlspecialchars($log['activity'] ?? 'Login'); ?>
                                                 </td>
@@ -867,6 +874,65 @@ try {
                 }
             });
         }, 30000);
+        // Add this function inside the $(document).ready(function() { ... });
+
+    window.showLocationModal = function(locationJson) {
+        try {
+            const data = JSON.parse(locationJson);
+
+            // Check if the data is valid
+            if (data.status !== 'success' || !data.lat || !data.lon) {
+                // Populate with error or N/A data
+                document.getElementById('modalIp').textContent = data.query || 'N/A';
+                document.getElementById('modalCountry').textContent = 'N/A';
+                document.getElementById('modalRegion').textContent = 'N/A';
+                document.getElementById('modalCity').textContent = 'N/A';
+                document.getElementById('modalZip').textContent = 'N/A';
+                document.getElementById('modalTimezone').textContent = 'N/A';
+                document.getElementById('modalCoords').textContent = 'N/A';
+                document.getElementById('modalMap').style.display = 'none';
+                document.getElementById('mapError').style.display = 'block';
+                document.getElementById('modalMapsLink').style.display = 'none';
+            } else {
+                // Populate the modal with data
+                document.getElementById('modalIp').textContent = data.query || 'N/A';
+                document.getElementById('modalCountry').textContent = data.country || 'N/A';
+                document.getElementById('modalRegion').textContent = data.regionName || 'N/A';
+                document.getElementById('modalCity').textContent = data.city || 'N/A';
+                document.getElementById('modalZip').textContent = data.zip || 'N/A';
+                document.getElementById('modalTimezone').textContent = data.timezone || 'N/A';
+                document.getElementById('modalCoords').textContent = `${data.lat}, ${data.lon}`;
+
+                // --- IMPORTANT: SET YOUR GOOGLE MAPS API KEY ---
+                // Get a free key from: https://developers.google.com/maps/documentation/javascript/get-api-key
+                const googleMapsApiKey = 'YOUR_GOOGLE_MAPS_API_KEY'; // <-- REPLACE THIS
+
+                const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${data.lat},${data.lon}&zoom=13&size=600x300&markers=color:red|${data.lat},${data.lon}&key=${googleMapsApiKey}`;
+                const mapsLink = `https://www.google.com/maps?q=${data.lat},${data.lon}`;
+
+                const mapImg = document.getElementById('modalMap');
+                mapImg.src = mapUrl;
+                mapImg.style.display = 'block';
+                document.getElementById('mapError').style.display = 'none';
+                
+                const linkElement = document.getElementById('modalMapsLink');
+                linkElement.href = mapsLink;
+                linkElement.style.display = 'inline-flex';
+            }
+
+            // Show the modal
+            const locationModal = new bootstrap.Modal(document.getElementById('locationModal'));
+            locationModal.show();
+
+        } catch (e) {
+            console.error("Error parsing location data:", e);
+            Swal.fire({
+                icon: 'error',
+                title: 'Data Error',
+                text: 'Could not display location details.'
+            });
+        }
+    }
     });
     </script>
 </body>
