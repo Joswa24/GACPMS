@@ -107,9 +107,90 @@ function formatBytes($size, $precision = 2) {
     return round(pow(1024, $base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
 }
 
+// Function to list backup files
+function listBackupFiles($backup_dir) {
+    $backups = array();
+    
+    if (is_dir($backup_dir)) {
+        $files = scandir($backup_dir);
+        
+        foreach ($files as $file) {
+            if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'sql') {
+                $filepath = $backup_dir . $file;
+                $backups[] = array(
+                    'name' => $file,
+                    'size' => filesize($filepath),
+                    'date' => filemtime($filepath)
+                );
+            }
+        }
+        
+        // Sort by date (newest first)
+        usort($backups, function($a, $b) {
+            return $b['date'] - $a['date'];
+        });
+    }
+    
+    return $backups;
+}
+
+// Function to delete a backup file
+function deleteBackupFile($backup_dir, $filename) {
+    $filepath = $backup_dir . $filename;
+    
+    // Security check to prevent directory traversal
+    if (strpos($filename, '..') !== false || !file_exists($filepath)) {
+        return false;
+    }
+    
+    return unlink($filepath);
+}
+
 // Check if this is an AJAX request
 if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-    // Perform backup
+    $backup_dir = '../backups/';
+    
+    // Handle different actions
+    if (isset($_GET['action'])) {
+        $action = $_GET['action'];
+        
+        if ($action === 'list') {
+            // List backup files
+            $backups = listBackupFiles($backup_dir);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'backups' => $backups]);
+            exit;
+        } else if ($action === 'delete' && isset($_GET['file'])) {
+            // Delete a backup file
+            $filename = $_GET['file'];
+            $success = deleteBackupFile($backup_dir, $filename);
+            
+            header('Content-Type: application/json');
+            echo json_encode(['success' => $success]);
+            exit;
+        }
+    }
+    
+    // Handle download request
+    if (isset($_GET['download'])) {
+        $filename = $_GET['download'];
+        $filepath = $backup_dir . $filename;
+        
+        // Security check to prevent directory traversal
+        if (strpos($filename, '..') !== false || !file_exists($filepath)) {
+            header('HTTP/1.0 404 Not Found');
+            exit;
+        }
+        
+        // Set headers for file download
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . filesize($filepath));
+        readfile($filepath);
+        exit;
+    }
+    
+    // Default action: create backup
     $backup_result = backupDatabase($db);
     
     // Return JSON response

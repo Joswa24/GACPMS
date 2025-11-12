@@ -939,6 +939,93 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
     font-size: 0.9rem;
     color: var(--dark-text);
 }
+
+/* Backup list styling */
+.backup-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 15px;
+}
+
+.backup-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    transition: all 0.2s ease;
+}
+
+.backup-item:hover {
+    background-color: rgba(92, 149, 233, 0.05);
+}
+
+.backup-item:last-child {
+    border-bottom: none;
+}
+
+.backup-info {
+    flex-grow: 1;
+}
+
+.backup-name {
+    font-weight: 500;
+    color: var(--dark-text);
+}
+
+.backup-details {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.backup-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.backup-actions button {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+}
+
+/* Download button */
+.btn-download {
+    background: linear-gradient(135deg, var(--success-color), #17a673);
+    color: white;
+    border: none;
+}
+
+.btn-download:hover {
+    background: linear-gradient(135deg, #17a673, #13855c);
+    color: white;
+}
+
+/* Delete button */
+.btn-delete {
+    background: linear-gradient(135deg, var(--danger-color), #d73525);
+    color: white;
+    border: none;
+}
+
+.btn-delete:hover {
+    background: linear-gradient(135deg, #d73525, #be2617);
+    color: white;
+}
+
+/* Loading spinner */
+.backup-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
     </style>
 </head>
 
@@ -992,6 +1079,17 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
                                                 <span class="visually-hidden">Loading...</span>
                                             </div>
                                             <span id="backupStatusText">Creating backup...</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Backup List Section -->
+                                    <div class="mt-3">
+                                        <h6 class="mb-2"><i class="fas fa-list me-2"></i>Recent Backups</h6>
+                                        <div class="backup-list" id="backupList">
+                                            <!-- Backup items will be loaded here via AJAX -->
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-spinner fa-spin me-2"></i>Loading backup list...
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1477,7 +1575,7 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
             
             if (storedDate !== currentDate) {
                 localStorage.setItem('lastVisitDate', currentDate);
-                // Refresh the page to show new day's data
+                // Refresh page to show new day's data
                 window.location.reload();
             }
         }
@@ -1488,6 +1586,9 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
         
         // Database Backup Functionality
         let autoBackupInterval = null;
+
+        // Load backup list on page load
+        loadBackupList();
 
         // Manual backup on button click
         $('#backupBtn').click(function() {
@@ -1516,6 +1617,66 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
             }
         });
 
+        // Function to load backup list
+        function loadBackupList() {
+            $.ajax({
+                url: 'backup.php?action=list',
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        displayBackupList(response.backups);
+                    } else {
+                        $('#backupList').html('<div class="text-center text-danger py-3"><i class="fas fa-exclamation-triangle me-2"></i>Failed to load backup list</div>');
+                    }
+                },
+                error: function() {
+                    $('#backupList').html('<div class="text-center text-danger py-3"><i class="fas fa-exclamation-triangle me-2"></i>Server error loading backup list</div>');
+                }
+            });
+        }
+
+        // Function to display backup list
+        function displayBackupList(backups) {
+            if (backups.length === 0) {
+                $('#backupList').html('<div class="text-center text-muted py-3"><i class="fas fa-info-circle me-2"></i>No backups found</div>');
+                return;
+            }
+
+            let html = '';
+            backups.forEach(function(backup) {
+                const fileSize = formatBytes(backup.size);
+                const fileDate = new Date(backup.date).toLocaleString();
+                
+                html += `
+                    <div class="backup-item">
+                        <div class="backup-info">
+                            <div class="backup-name">${backup.name}</div>
+                            <div class="backup-details">${fileSize} - ${fileDate}</div>
+                        </div>
+                        <div class="backup-actions">
+                            <button class="btn btn-sm btn-download" onclick="downloadBackup('${backup.name}')">
+                                <i class="fas fa-download"></i>
+                            </button>
+                            <button class="btn btn-sm btn-delete" onclick="deleteBackup('${backup.name}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            $('#backupList').html(html);
+        }
+
+        // Function to format bytes
+        function formatBytes(size, precision = 2) {
+            const base = Math.log(size) / Math.log(1024);
+            const suffixes = ['', 'KB', 'MB', 'GB', 'TB'];
+            
+            return Math.round(Math.pow(1024, base - Math.floor(base)), precision) + ' ' + suffixes[Math.floor(base)];
+        }
+
         // Function to create backup
         function createBackup(isAuto = false) {
             // Show backup status
@@ -1542,9 +1703,12 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
                         if (!isAuto) {
                             showNotification('Database backup created successfully!', 'success');
                             
-                            // Trigger download of the backup file
-                            window.location.href = 'backup.php?download=' + response.file;
+                            // Trigger download of backup file
+                            downloadBackup(response.file);
                         }
+                        
+                        // Refresh backup list
+                        loadBackupList();
                         
                         // Hide status after 5 seconds
                         setTimeout(function() {
@@ -1572,6 +1736,50 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
                 complete: function() {
                     // Re-enable button
                     $('#backupBtn').prop('disabled', false);
+                }
+            });
+        }
+
+        // Function to download backup
+        function downloadBackup(filename) {
+            // Create a temporary link element
+            const link = document.createElement('a');
+            link.href = 'backup.php?download=' + filename;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Function to delete backup
+        function deleteBackup(filename) {
+            Swal.fire({
+                title: 'Delete Backup?',
+                text: `Are you sure you want to delete "${filename}"? This action cannot be undone.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Delete',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: 'backup.php?action=delete&file=' + filename,
+                        type: 'GET',
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                showNotification('Backup deleted successfully!', 'success');
+                                loadBackupList(); // Refresh the list
+                            } else {
+                                showNotification('Failed to delete backup!', 'danger');
+                            }
+                        },
+                        error: function() {
+                            showNotification('Server error while deleting backup!', 'danger');
+                        }
+                    });
                 }
             });
         }
