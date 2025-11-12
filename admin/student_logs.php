@@ -1,172 +1,569 @@
 <?php
-session_start();
-include 'header.php';
-include '../connection.php';
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
+// Start session at the very beginning
+session_start();
+
+// Set timezone and include connection
+date_default_timezone_set('Asia/Manila');
+include 'connection.php';
+
+// Set instructor login time if not already set
 if (!isset($_SESSION['instructor_login_time']) && isset($_SESSION['access']['instructor']['id'])) {
     $_SESSION['instructor_login_time'] = date('Y-m-d H:i:s');
     error_log("Instructor login time set: " . $_SESSION['instructor_login_time']);
 }
-// Create the dedicated table if it doesn't exist
-$createTableQuery = "
-CREATE TABLE IF NOT EXISTS instructor_attendance_admin (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    instructor_id INT(55) NOT NULL,
-    instructor_name VARCHAR(255) NOT NULL,
-    subject_name VARCHAR(255),
-    year_level VARCHAR(50),
-    section VARCHAR(50),
-    room VARCHAR(100),
-    total_students INT DEFAULT 0,
-    present_count INT DEFAULT 0,
-    absent_count INT DEFAULT 0,
-    attendance_rate DECIMAL(5,2) DEFAULT 0.00,
-    time_in DATETIME,
-    time_out DATETIME,
-    session_date DATE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
-    INDEX idx_instructor_date (instructor_name, session_date),
-    INDEX idx_date (session_date),
-    INDEX idx_instructor (instructor_name)
-)";
 
-if ($db->query($createTableQuery) === TRUE) {
-    // Table created or already exists
-    error_log("Instructor attendance dedicated table ready");
-} else {
-    error_log("Error creating table: " . $db->error);
-}
+// Set MySQL timezone to match PHP
+mysqli_query($db, "SET time_zone = '+08:00'");
 
-// Function to populate the dedicated table
-function populateDedicatedTable($db, $date = null) {
-    if ($date === null) {
-        $date = date('Y-m-d');
-    }
-    
-    // Remove existing records for the date to avoid duplicates
-    $deleteQuery = "DELETE FROM instructor_attendance_dedicated WHERE session_date = ?";
-    $stmt = $db->prepare($deleteQuery);
-    $stmt->bind_param("s", $date);
-    $stmt->execute();
-    $stmt->close();
-    
-    // Insert data from the original summary table
-    $insertQuery = "
-        INSERT INTO instructor_attendance_dedicated (
-            instructor_name, subject_name, year_level, section, room, 
-            total_students, present_count, absent_count, attendance_rate,
-            time_in, time_out, session_date
-        )
-        SELECT 
-            instructor_name,
-            subject_name,
-            year_level,
-            section,
-            room,
-            total_students,
-            present_count,
-            absent_count,
-            attendance_rate,
-            MIN(time_in) as time_in,
-            MAX(CASE WHEN time_out != '0000-00-00 00:00:00' THEN time_out ELSE NULL END) as time_out,
-            session_date
-        FROM instructor_attendance_admin 
-        WHERE session_date = ?
-        GROUP BY instructor_name, subject_name, year_level, section, session_date
-        ORDER BY instructor_name, time_in
-    ";
-    
-    $stmt = $db->prepare($insertQuery);
-    $stmt->bind_param("s", $date);
-    $result = $stmt->execute();
-    $stmt->close();
-    
-    return $result;
-}
+// Check if user came from scanner
+ $from_scanner = isset($_GET['from_scanner']) ? true : false;
 
-// Auto-populate data for today when page loads
-populateDedicatedTable($db, date('Y-m-d'));
+// Initialize variables
+ $attendance_saved = false;
+ $show_timeout_message = false;
+ $timeout_time = '';
+ $archive_message = '';
+ $first_student_section = null;
+ $first_student_year = null;
 
-// Date filter logic
-if (isset($_GET['date']) && $_GET['date'] !== '') {
-    $selected_date = $_GET['date'];
-} else {
-    $selected_date = date('Y-m-d');
-}
-
-// Add instructor filter logic
-$search_instructor = isset($_GET['search_instructor']) ? trim($_GET['search_instructor']) : '';
-$search_subject = isset($_GET['search_subject']) ? trim($_GET['search_subject']) : '';
-
-// Manual refresh action
-if (isset($_GET['refresh_data'])) {
-    if (populateDedicatedTable($db, $selected_date)) {
-        $_SESSION['message'] = "Data refreshed successfully!";
-    } else {
-        $_SESSION['message'] = "Error refreshing data!";
-    }
-    header('Location: instructor_attendance_summary.php?date=' . $selected_date);
+// Check if instructor is logged in
+if (!isset($_SESSION['access']['instructor']['id'])) {
+    $_SESSION['scanner_error'] = "Please log in as instructor first";
+    header("Location: index.php");
     exit();
 }
 
-// Build the query to fetch data from the DEDICATED table
-$query = "SELECT * FROM instructor_attendance_admin WHERE session_date = ?";
-$params = [$selected_date];
-$types = "s";
-
-// Add instructor filter
-if ($search_instructor !== '') {
-    $query .= " AND instructor_name LIKE ?";
-    $params[] = "%$search_instructor%";
-    $types .= "s";
+// Function to clear session data
+function clearAttendanceSessionData() {
+    unset(
+        $_SESSION['instructor_session_id'], 
+        $_SESSION['instructor_login_time'],
+        $_SESSION['allowed_section'],
+        $_SESSION['allowed_year'],
+        $_SESSION['is_first_student'],
+        $_SESSION['attendance_saved'],
+        $_SESSION['timeout_time'],
+        $_SESSION['archive_message'],
+        $_SESSION['original_time_in']
+    );
 }
 
-// Add subject filter
-if ($search_subject !== '') {
-    $query .= " AND subject_name LIKE ?";
-    $params[] = "%$search_subject%";
-    $types .= "s";
+// Handle logout action
+if (isset($_POST['logout_after_save'])) {
+    // Store success messages temporarily
+    $saved_messages = [
+        'timeout_time' => $_SESSION['timeout_time'] ?? '',
+        'archive_message' => $_SESSION['archive_message'] ?? ''
+    ];
+    
+    // Clear all session data
+    session_unset();
+    session_destroy();
+    
+    // Start new session and restore messages
+    session_start();
+    $_SESSION['attendance_success'] = true;
+    $_SESSION['timeout_time'] = $saved_messages['timeout_time'];
+    $_SESSION['archive_message'] = $saved_messages['archive_message'];
+    
+    header("Location: index.php");
+    exit();
 }
 
-$query .= " ORDER BY time_in DESC";
-
-$stmt = $db->prepare($query);
-if ($stmt === false) {
-    die("Error preparing query: " . $db->error);
+// Function to fetch actual student time in/out with proper timezone
+function getStudentAttendanceTimes($db, $id_number) {
+    $query = "SELECT 
+                al.time_in,
+                al.time_out,
+                (SELECT COUNT(*) FROM attendance_logs 
+                 WHERE student_id = s.id 
+                 AND DATE(time_in) = CURDATE()) as scan_count,
+                s.fullname
+              FROM attendance_logs al
+              JOIN students s ON al.student_id = s.id
+              WHERE s.id_number = ? 
+              AND DATE(al.time_in) = CURDATE()
+              ORDER BY al.time_in DESC
+              LIMIT 1";
+    
+    $stmt = $db->prepare($query);
+    if ($stmt) {
+        $stmt->bind_param("s", $id_number);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $attendance_data = $result->fetch_assoc();
+        $stmt->close();
+        
+        if ($attendance_data) {
+            // Use the same formatTime function as gate_logs.php
+            $time_in = formatTime($attendance_data['time_in']);
+            $time_out = formatTime($attendance_data['time_out']);
+            
+            return [
+                'time_in' => $time_in,
+                'time_out' => $time_out,
+                'scan_count' => $attendance_data['scan_count'],
+                'fullname' => $attendance_data['fullname'],
+                'has_time_in' => !empty($attendance_data['time_in']),
+                'has_time_out' => !empty($attendance_data['time_out'])
+            ];
+        }
+    }
+    
+    return [
+        'time_in' => null,
+        'time_out' => null,
+        'scan_count' => 0,
+        'fullname' => '',
+        'has_time_in' => false,
+        'has_time_out' => false
+    ];
 }
 
-if (!empty($params)) {
-    $bind_result = $stmt->bind_param($types, ...$params);
-    if ($bind_result === false) {
-        die("Error binding parameters: " . $stmt->error);
+// Function to convert UTC time from database to Asia/Manila time
+// Improved function to convert UTC time from database to Asia/Manila time
+// Function to format time correctly (using the same approach as gate_logs.php)
+function formatTime($time) {
+    if (empty($time) || $time == '00:00:00' || $time == '?' || $time == '0000-00-00 00:00:00') {
+        return '-';
+    }
+    try {
+        // Convert to Manila time (already set in date_default_timezone_set)
+        $dateTime = new DateTime($time);
+        return $dateTime->format('h:i A');
+    } catch (Exception $e) {
+        return '-';
     }
 }
 
-$execute_result = $stmt->execute();
-if ($execute_result === false) {
-    die("Error executing query: " . $stmt->error);
+// Enhanced function to get classmates with proper time formatting
+function getClassmatesByYearSection($db, $year, $section) {
+    $query = "SELECT 
+                s.id_number, 
+                s.fullname, 
+                s.section, 
+                s.year, 
+                d.department_name,
+                s.photo,
+                (SELECT COUNT(*) FROM attendance_logs al 
+                 WHERE al.student_id = s.id 
+                 AND DATE(al.time_in) = CURDATE()) as attendance_count,
+                (SELECT time_in FROM attendance_logs al 
+                 WHERE al.student_id = s.id 
+                 AND DATE(al.time_in) = CURDATE()
+                 ORDER BY al.time_in ASC LIMIT 1) as time_in,
+                (SELECT time_out FROM attendance_logs al 
+                 WHERE al.student_id = s.id 
+                 AND DATE(al.time_in) = CURDATE()
+                 ORDER BY al.time_in DESC LIMIT 1) as time_out
+              FROM students s
+              LEFT JOIN department d ON s.department_id = d.department_id
+              WHERE s.section = ? AND s.year = ?
+              ORDER BY s.fullname";
+    
+    $stmt = $db->prepare($query);
+    
+    if ($stmt) {
+        $stmt->bind_param("ss", $section, $year);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $classmates = $result->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+        
+        // Process times with proper time formatting (same as gate_logs.php)
+        foreach ($classmates as &$student) {
+            // Format Time In
+            $student['formatted_time_in'] = formatTime($student['time_in']);
+            
+            // Format Time Out
+            $student['formatted_time_out'] = formatTime($student['time_out']);
+            
+            // Determine attendance status
+            $student['attendance_status'] = $student['attendance_count'] > 0 ? 'Present' : 'Absent';
+        }
+        
+        return $classmates;
+    }
+    
+    return [];
 }
 
-$result = $stmt->get_result();
-$attendance_data = [];
-while ($row = $result->fetch_assoc()) {
-    $attendance_data[] = $row;
+// Function to display classmates table with consistent time formatting
+function displayClassmatesTable($classmates, $year, $section) {
+    if (empty($classmates)) {
+        echo '<div class="alert alert-info mt-4">No classmates found for ' . htmlspecialchars($year) . ' - ' . htmlspecialchars($section) . '</div>';
+        return;
+    }
+    
+    echo '<h5 class="mt-4">Class Attendance List (' . htmlspecialchars($year) . ' - ' . htmlspecialchars($section) . ')</h5>';
+    echo '<div class="table-responsive">';
+    echo '<table class="table table-striped table-hover">';
+    echo '<thead class="table-dark">';
+    echo '<tr>';
+    echo '<th>Instructor</th>';
+    echo '<th>ID Number</th>';
+    echo '<th>Section</th>';
+    echo '<th>Year</th>';
+    echo '<th>Department</th>';
+    echo '<th>Status</th>';
+    echo '<th>Time In</th>';
+    echo '<th>Time Out</th>';
+    echo '</tr>';
+    echo '</thead>';
+    echo '<tbody>';
+    
+    foreach ($classmates as $student) {
+        $status_badge = $student['attendance_count'] > 0 ? 
+            '<span class="badge bg-success">Present</span>' : 
+            '<span class="badge bg-danger">Absent</span>';
+        
+        echo '<tr>';
+        echo '<td>
+                <div class="d-flex align-items-center">
+                    <div class="instructor-photo me-2">
+                        <img src="uploads/students/' . htmlspecialchars($student['photo']) . '" alt="' . htmlspecialchars($student['fullname']) . '" onerror="this.src=\'https://via.placeholder.com/40\'">
+                    </div>
+                    <div>
+                        <strong>' . htmlspecialchars($student['fullname']) . '</strong>
+                    </div>
+                </div>
+              </td>';
+        echo '<td>' . htmlspecialchars($student['id_number']) . '</td>';
+        echo '<td>' . htmlspecialchars($student['section']) . '</td>';
+        echo '<td>' . htmlspecialchars($student['year']) . '</td>';
+        echo '<td>' . htmlspecialchars($student['department_name']) . '</td>';
+        echo '<td>' . $status_badge . '</td>';
+        echo '<td class="time-in-cell">' . $student['formatted_time_in'] . '</td>';
+        echo '<td class="time-out-cell">' . $student['formatted_time_out'] . '</td>';
+        echo '</tr>';
+    }
+    
+    echo '</tbody>';
+    echo '</table>';
+    echo '</div>';
 }
-$stmt->close();
+
+// Function to get first student details
+function getFirstStudentDetails($db) {
+    $query = "SELECT s.year, s.section 
+              FROM attendance_logs al
+              JOIN students s ON al.student_id = s.id
+              WHERE DATE(al.time_in) = CURDATE()
+              ORDER BY al.time_in ASC
+              LIMIT 1";
+    
+    $result = $db->query($query);
+    if ($result && $result->num_rows > 0) {
+        return $result->fetch_assoc();
+    }
+    
+    return null;
+}
+
+// Function to get attendance statistics
+function getAttendanceStats($db, $year, $section) {
+    // If we don't have valid section/year, return empty stats
+    if ($year === 'N/A' || $section === 'N/A') {
+        return ['total_students' => 0, 'present_count' => 0, 'absent_count' => 0, 'attendance_rate' => 0, 'absent_rate' => 0];
+    }
+    
+    $query = "SELECT 
+                COUNT(*) as total_students,
+                SUM(CASE WHEN EXISTS (
+                    SELECT 1 FROM attendance_logs al 
+                    WHERE al.student_id = s.id 
+                    AND DATE(al.time_in) = CURDATE()
+                ) THEN 1 ELSE 0 END) as present_count,
+                SUM(CASE WHEN NOT EXISTS (
+                    SELECT 1 FROM attendance_logs al 
+                    WHERE al.student_id = s.id 
+                    AND DATE(al.time_in) = CURDATE()
+                ) THEN 1 ELSE 0 END) as absent_count
+              FROM students s
+              WHERE s.section = ? AND s.year = ?";
+    
+    $stmt = $db->prepare($query);
+    if ($stmt) {
+        $stmt->bind_param("ss", $section, $year);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $stats = $result->fetch_assoc();
+        $stmt->close();
+        
+        // Ensure we have valid array
+        if (!$stats) {
+            return ['total_students' => 0, 'present_count' => 0, 'absent_count' => 0, 'attendance_rate' => 0, 'absent_rate' => 0];
+        }
+        
+        // Calculate percentages
+        if ($stats['total_students'] > 0) {
+            $stats['attendance_rate'] = round(($stats['present_count'] / $stats['total_students']) * 100, 1);
+            $stats['absent_rate'] = round(($stats['absent_count'] / $stats['total_students']) * 100, 1);
+        } else {
+            $stats['attendance_rate'] = 0;
+            $stats['absent_rate'] = 0;
+        }
+        
+        return $stats;
+    }
+    
+    return ['total_students' => 0, 'present_count' => 0, 'absent_count' => 0, 'attendance_rate' => 0, 'absent_rate' => 0];
+}
+
+// Get first student details to determine class
+ $first_student = getFirstStudentDetails($db);
+if ($first_student) {
+    $first_student_section = $first_student['section'];
+    $first_student_year = $first_student['year'];
+}
+
+// Handle Save Attendance action
+if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
+    $instructor_id = $_SESSION['access']['instructor']['id'] ?? null;
+    
+    if (!$instructor_id) {
+        $_SESSION['scanner_error'] = "Instructor not logged in";
+        header("Location: students_logs.php");
+        exit();
+    }
+
+    // Verify ID matches logged-in instructor
+    $instructor_id_number = $_SESSION['access']['instructor']['id_number'] ?? '';
+    if ($_POST['id_number'] != $instructor_id_number) {
+        $_SESSION['scanner_error'] = "ID verification failed. Expected: $instructor_id_number, Got: " . $_POST['id_number'];
+        header("Location: students_logs.php");
+        exit();
+    }
+
+    try {
+        $db->begin_transaction();
+
+        // Get session information - FIXED: Properly handle time in and time out
+        $current_datetime = date('Y-m-d H:i:s');
+        $current_date = date('Y-m-d');
+        
+        // Get instructor login time from session or use current time if not set
+        $original_time_in = $_SESSION['instructor_login_time'] ?? $current_datetime;
+        
+        // Format times for display
+        $time_in_display = date('h:i A', strtotime($original_time_in));
+        $time_out_display = date('h:i A');
+        
+        // Get room location from session
+        $room_location = $_SESSION['access']['room']['room'] ?? 'Classroom';
+        
+        // Get attendance stats - ensure we have valid values
+        $stats = getAttendanceStats($db, $first_student_year ?? 'N/A', $first_student_section ?? 'N/A');
+        
+        // 1. Save to instructor_attendance_summary (UPDATED WITH ROOM)
+        $summary_sql = "INSERT INTO instructor_attendance_admin 
+            (instructor_id, instructor_name, subject_name, year_level, section, room,
+            total_students, present_count, absent_count, attendance_rate, 
+            session_date, time_in, time_out) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        
+        $summary_stmt = $db->prepare($summary_sql);
+        
+        // Ensure we have non-null values for binding
+        $instructor_name = $_SESSION['access']['instructor']['fullname'] ?? 'Unknown Instructor';
+        $subject_name = $_SESSION['access']['subject']['name'] ?? 'General Subject';
+        $year_level = $first_student_year ?? 'N/A';
+        $section = $first_student_section ?? 'N/A';
+        $total_students = $stats['total_students'] ?? 0;
+        $present_count = $stats['present_count'] ?? 0;
+        $absent_count = $stats['absent_count'] ?? 0;
+        $attendance_rate = $stats['attendance_rate'] ?? 0;
+        
+        // FIXED: Use proper datetime format for time_in and time_out
+        $summary_stmt->bind_param(
+            "isssssiiidsss",
+            $instructor_id,
+            $instructor_name,
+            $subject_name,
+            $year_level,
+            $section,
+            $room_location,
+            $total_students,
+            $present_count,
+            $absent_count,
+            $attendance_rate,
+            $current_date,
+            $original_time_in,  // Use full datetime for time_in
+            $current_datetime   // Use full datetime for time_out
+        );
+        
+        if (!$summary_stmt->execute()) {
+            throw new Exception("Failed to save attendance summary: " . $summary_stmt->error);
+        }
+        $summary_stmt->close();
+
+        // 2. Archive PRESENT students (those who scanned) - UPDATED WITH ROOM
+        $present_archive_sql = "INSERT INTO archived_attendance_logs 
+            (student_id, id_number, fullname, department, location, time_in, time_out, 
+            status, instructor_id, instructor_name, session_date, year_level, section, subject_name, room)
+            SELECT 
+                al.student_id,
+                s.id_number,
+                s.fullname,
+                CONCAT(s.section, ' - ', s.year, ' Year'),
+                ?,
+                al.time_in,
+                al.time_out,
+                'Present',
+                ?,
+                ?,
+                ?,
+                s.year,
+                s.section,
+                ?,
+                ?
+            FROM attendance_logs al
+            JOIN students s ON al.student_id = s.id
+            WHERE DATE(al.time_in) = ?";
+        
+        $present_stmt = $db->prepare($present_archive_sql);
+        $location_name = $_SESSION['access']['subject']['name'] ?? 'Classroom';
+        $present_stmt->bind_param(
+            "sisssss",
+            $location_name,
+            $instructor_id,
+            $instructor_name,
+            $current_date,
+            $subject_name,
+            $room_location,
+            $current_date
+        );
+        
+        if (!$present_stmt->execute()) {
+            throw new Exception("Failed to archive present students: " . $present_stmt->error);
+        }
+        $present_stmt->close();
+
+        // 3. Archive ABSENT students (those who didn't scan) - UPDATED WITH ROOM
+        if ($first_student_section && $first_student_year) {
+            $absent_archive_sql = "INSERT INTO archived_attendance_logs 
+                (student_id, id_number, fullname, department, location, time_in, time_out, 
+                status, instructor_id, instructor_name, session_date, year_level, section, subject_name, room)
+                SELECT 
+                    s.id,
+                    s.id_number,
+                    s.fullname,
+                    CONCAT(s.section, ' - ', s.year, ' Year'),
+                    ?,
+                    NULL,
+                    NULL,
+                    'Absent',
+                    ?,
+                    ?,
+                    ?,
+                    s.year,
+                    s.section,
+                    ?,
+                    ?
+                FROM students s
+                WHERE s.section = ? AND s.year = ?
+                AND s.id NOT IN (
+                    SELECT student_id FROM attendance_logs WHERE DATE(time_in) = ?
+                )";
+            
+            $absent_stmt = $db->prepare($absent_archive_sql);
+            $absent_stmt->bind_param(
+                "sisssssss",
+                $location_name,
+                $instructor_id,
+                $instructor_name,
+                $current_date,
+                $subject_name,
+                $room_location,
+                $first_student_section,
+                $first_student_year,
+                $current_date
+            );
+            
+            if (!$absent_stmt->execute()) {
+                throw new Exception("Failed to archive absent students: " . $absent_stmt->error);
+            }
+            $absent_stmt->close();
+        } else {
+            error_log("⚠️ Cannot archive absent students: No section/year data available");
+        }
+
+        // 4. Clear current logs
+        $delete_stmt = $db->prepare("DELETE FROM attendance_logs WHERE DATE(time_in) = ?");
+        $delete_stmt->bind_param("s", $current_date);
+        if (!$delete_stmt->execute()) {
+            throw new Exception("Failed to clear logs: " . $delete_stmt->error);
+        }
+        $delete_stmt->close();
+
+        $db->commit();
+
+        // Success handling - FIXED: Store properly formatted times
+        $_SESSION['timeout_time'] = $time_out_display;
+        $_SESSION['original_time_in'] = $time_in_display;
+        $_SESSION['attendance_saved'] = true;
+        $_SESSION['archive_message'] = "Attendance saved successfully! Present: {$present_count}, Absent: {$absent_count}, Room: {$room_location}";
+        
+        // Clear session data
+        clearAttendanceSessionData();
+        
+        header("Location: students_logs.php");
+        exit();
+
+    } catch (Exception $e) {
+        $db->rollback();
+        error_log("Attendance save error: " . $e->getMessage());
+        $_SESSION['scanner_error'] = "Error saving attendance: " . $e->getMessage();
+        header("Location: students_logs.php");
+        exit();
+    }
+}
+
+// Check if attendance was just saved
+if (isset($_SESSION['attendance_saved']) && $_SESSION['attendance_saved']) {
+    $attendance_saved = true;
+    $show_timeout_message = true;
+    $timeout_time = $_SESSION['timeout_time'] ?? '';
+    $archive_message = $_SESSION['archive_message'] ?? '';
+    $original_time_in = $_SESSION['original_time_in'] ?? '';
+    
+    // Clear the session variables
+    unset(
+        $_SESSION['attendance_saved'], 
+        $_SESSION['timeout_time'], 
+        $_SESSION['archive_message'],
+        $_SESSION['first_student_section'],
+        $_SESSION['first_student_year'],
+        $_SESSION['original_time_in']
+    );
+}
+
+// AJAX handler for real-time time display
+if (isset($_GET['ajax']) && isset($_GET['id_number'])) {
+    $attendance_data = getStudentAttendanceTimes($db, $_GET['id_number']);
+    header('Content-Type: application/json');
+    echo json_encode($attendance_data);
+    exit();
+}
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instructor Attendance Summary - RFIDGPMS</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Add SweetAlert CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <link rel="stylesheet" href="assets/css/grow_up.css">
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.2/css/boxicons.min.css' rel='stylesheet'>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <title>Attendance Log - Class Checker</title>
+    <link rel="icon" href="admin/uploads/logo.png" type="image/png">
     <style>
         :root {
             --primary-color: #e1e7f0ff;
@@ -176,465 +573,1315 @@ $stmt->close();
             --light-bg: #f8f9fc;
             --dark-text: #5a5c69;
             --warning-color: #f6c23e;
-            --danger-color: #e74a3b;
-            --success-color: #1cc88a;
-            --info-color: #36b9cc;
-            --border-radius: 15px;
-            --box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            --danger-color: #e4652aff;
+            --border-radius: 12px;
+            --box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
         }
 
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            min-height: 100vh;
             color: var(--dark-text);
+            line-height: 1.6;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
 
-        .content {
+        /* Header - Fixed height and fully visible */
+        .header-container {
             background: transparent;
+            padding: 0;
+            margin: 0;
+            height: 120px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .bg-light {
-            background-color: var(--light-bg) !important;
-            border-radius: var(--border-radius);
+        .header-image {
+            max-width: 100%;
+            max-height: 150%;
+            object-fit: contain;
+            display: block;
         }
 
-        .card {
-            border: none;
+        /* Main Container - Allow scrolling */
+        .main-container {
+            background: white;
             border-radius: var(--border-radius);
             box-shadow: var(--box-shadow);
-            background: white;
+            margin: 10px;
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        /* Navigation Tabs */
+        .modern-tabs {
+            background: var(--accent-color);
+            border-radius: 8px;
+            padding: 4px;
+            margin: 10px;
+            flex-shrink: 0;
+        }
+
+        .modern-tabs .nav-link {
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-weight: 600;
+            color: var(--dark-text);
+            transition: var(--transition);
+            font-size: 0.85rem;
+        }
+
+        .modern-tabs .nav-link.active {
+            background: var(--secondary-color);
+            color: white;
+            box-shadow: 0 4px 12px rgba(92, 149, 233, 0.3);
+        }
+
+        /* Content Area - Allow scrolling */
+        .content-area {
+            flex: 1;
+            display: flex;
+            padding: 0 10px 10px 10px;
+            gap: 10px;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        /* Card Styles */
+        .stats-card {
+            border-radius: var(--border-radius);
+            border: none;
+            box-shadow: var(--box-shadow);
+            transition: var(--transition);
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .stats-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .stats-card .card-body {
+            padding: 1.5rem;
+        }
+
+        .stats-icon {
+            font-size: 2.5rem;
+            opacity: 0.8;
+            margin-bottom: 15px;
+        }
+
+        .stats-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stats-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stats-detail {
+            font-size: 0.8rem;
+            color: #495057;
+            margin-top: 10px;
+        }
+
+        .attendance-progress {
+            height: 8px;
+            margin-top: 10px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        /* Instructor Header */
+        .instructor-header {
+            background: var(--light-bg);
+            border-radius: var(--border-radius);
+            padding: 15px;
+            margin: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .instructor-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .instructor-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: var(--dark-text);
+            margin-right: 5px;
+        }
+
+        .detail-value {
+            color: var(--icon-color);
+            font-weight: 500;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--icon-color), #4361ee);
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-weight: 600;
+            transition: var(--transition);
+            box-shadow: 0 4px 12px rgba(92, 149, 233, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(92, 149, 233, 0.4);
+        }
+
+        .btn-outline-danger {
+            border-color: var(--danger-color);
+            color: var(--danger-color);
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-weight: 600;
             transition: var(--transition);
         }
 
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        .btn-outline-danger:hover {
+            background-color: var(--danger-color);
+            color: white;
+            transform: translateY(-2px);
         }
 
-        .table th {
+        /* Table Styles */
+        .table-container {
+            max-height: 70vh;
+            overflow-y: auto;
+            position: relative;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .table {
+            margin-bottom: 0;
+        }
+
+        .table thead th {
             background: linear-gradient(135deg, var(--icon-color), #4361ee);
             color: white;
-            font-weight: 600;
             border: none;
-            padding: 15px 12px;
+            padding: 12px 15px;
+            font-weight: 600;
         }
 
-        .table td {
-            padding: 12px;
-            border-color: rgba(0,0,0,0.05);
+        .table tbody tr {
+            transition: var(--transition);
+        }
+
+        .table tbody tr:hover {
+            background-color: var(--accent-color);
+        }
+
+        .table tbody td {
+            padding: 12px 15px;
+            border-color: #e9ecef;
             vertical-align: middle;
         }
 
-        .table-responsive {
-            border-radius: var(--border-radius);
-            overflow: hidden;
-            max-height: 600px;
-        }
-
+        /* Badge Styles */
         .badge {
-            font-size: 0.85em;
-            border-radius: 8px;
+            font-size: 0.75rem;
             padding: 6px 10px;
+            border-radius: 20px;
+            font-weight: 600;
         }
 
-        .badge-present {
-            background: linear-gradient(135deg, var(--success-color), #17a673);
-            color: white;
+        .badge.bg-success {
+            background: linear-gradient(135deg, #4cc9f0, #4361ee) !important;
         }
 
-        .badge-absent {
-            background: linear-gradient(135deg, var(--danger-color), #be2617);
-            color: white;
+        .badge.bg-danger {
+            background: linear-gradient(135deg, #e74a3b, #d62828) !important;
         }
 
-        .badge-high-attendance {
-            background: linear-gradient(135deg, var(--info-color), #2e59d9);
-            color: white;
-        }
-
-        .badge-warning {
-            background: linear-gradient(135deg, var(--warning-color), #f4b619);
-            color: white;
-        }
-
-        /* Modern Button Styles */
-        .btn {
-            border-radius: 10px;
-            font-weight: 500;
-            transition: var(--transition);
+        /* Alert Styles */
+        .alert {
+            border-radius: var(--border-radius);
             border: none;
-            padding: 10px 20px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            position: relative;
-            overflow: hidden;
-            z-index: 1;
+            padding: 15px 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
         }
 
-        .btn::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 0;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.2);
-            transition: width 0.3s ease;
-            z-index: -1;
-        }
-
-        .btn:hover::before {
-            width: 100%;
-        }
-
-        .btn i {
-            font-size: 0.9rem;
-        }
-
-        /* Filter Button */
-        .btn-filter {
-            background: linear-gradient(135deg, var(--icon-color), #4361ee);
-            color: white;
-            box-shadow: 0 4px 15px rgba(92, 149, 233, 0.3);
-        }
-
-        .btn-filter:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(92, 149, 233, 0.4);
+        .alert-info {
+            background: linear-gradient(135deg, #4cc9f0, #4361ee);
             color: white;
         }
 
-        /* Refresh Button */
-        .btn-refresh {
-            background: linear-gradient(135deg, var(--warning-color), #f4b619);
-            color: white;
-            box-shadow: 0 4px 15px rgba(246, 194, 62, 0.3);
-        }
-
-        .btn-refresh:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(246, 194, 62, 0.4);
+        .alert-success {
+            background: linear-gradient(135deg, #4cc9f0, #4361ee);
             color: white;
         }
 
-        /* Export Button */
-        .btn-export {
-            background: linear-gradient(135deg, var(--success-color), #17a673);
-            color: white;
-            box-shadow: 0 4px 15px rgba(28, 200, 138, 0.3);
-        }
-
-        .btn-export:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(28, 200, 138, 0.4);
+        .alert-warning {
+            background: linear-gradient(135deg, #f6c23e, #f4a261);
             color: white;
         }
 
-        .btn-sm {
-            padding: 8px 15px;
-            font-size: 0.875rem;
-        }
-
-        .form-control, .form-select {
-            border-radius: 8px;
-            border: 2px solid var(--accent-color);
-            padding: 10px 15px;
-            transition: var(--transition);
-        }
-
-        .form-control:focus, .form-select:focus {
-            border-color: var(--icon-color);
-            box-shadow: 0 0 0 3px rgba(92, 149, 233, 0.1);
-        }
-
-        .action-buttons {
-            white-space: nowrap;
-            display: flex;
-            gap: 5px;
-            justify-content: center;
-        }
-
-        .filter-section {
+        /* Classmates Section */
+        .classmates-section {
+            margin: 10px;
+            padding: 20px;
             background: var(--light-bg);
             border-radius: var(--border-radius);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Timeout Display */
+        .timeout-display {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--icon-color);
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .archived-message {
+            margin: 10px;
+            padding: 30px;
+            background: var(--light-bg);
+            border-radius: var(--border-radius);
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--accent-color);
+        }
+
+        .logout-after-save {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        /* Modal Styles */
+        .modal-content {
+            border-radius: var(--border-radius);
+            border: none;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, var(--icon-color), #4361ee);
+            color: white;
+            border-bottom: none;
+            padding: 15px 20px;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-footer {
+            border-top: none;
+            padding: 15px 20px;
+            justify-content: center;
+        }
+
+        /* Additional styles for time display */
+        .time-display {
+            padding: 10px;
+            background: var(--light-bg);
+            border-radius: 8px;
+            margin: 5px 0;
+        }
+
+        .time-display small {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+
+        .time-display .fw-bold {
+            font-size: 1.1rem;
+        }
+
+        /* Highlight recent scans */
+        tr:hover {
+            background-color: rgba(92, 149, 233, 0.05) !important;
+        }
+
+        /* Time cells styling */
+        .time-in-cell, .time-out-cell {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+        }
+
+        .time-in-cell {
+            color: #198754;
+        }
+
+        .time-out-cell {
+            color: #dc3545;
+        }
+
+        /* Student photo styling */
+        .instructor-photo {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #dee2e6;
+            background: linear-gradient(135deg, var(--icon-color), #4a7ec7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 8px rgba(92, 149, 233, 0.3);
+        }
+
+        .instructor-photo img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 992px) {
+            .header-container {
+                height: 100px;
+            }
+            
+            .content-area {
+                flex-direction: column;
+                padding: 0 8px 8px 8px;
+                gap: 8px;
+            }
+            
+            .instructor-info {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .instructor-details {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .action-buttons {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header-container {
+                height: 80px;
+            }
+            
+            .main-container {
+                margin: 8px;
+            }
+            
+            .modern-tabs {
+                margin: 8px;
+            }
+            
+            .modern-tabs .nav-link {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+            
+            .stats-number {
+                font-size: 1.5rem;
+            }
+            
+            .stats-icon {
+                font-size: 2rem;
+            }
+            
+            .table-container {
+                overflow-x: auto;
+            }
+            
+            table {
+                font-size: 0.9rem;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .header-container {
+                height: 70px;
+            }
+            
+            .main-container {
+                margin: 5px;
+            }
+            
+            .modern-tabs {
+                margin: 5px;
+            }
+            
+            .content-area {
+                padding: 0 5px 5px 5px;
+                gap: 5px;
+            }
+            
+            .classmates-section {
+                padding: 15px;
+            }
+            
+            .instructor-header {
+                padding: 10px;
+            }
+        }
+
+        /* Custom scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--light-bg);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--icon-color);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4a7fe0;
+        }
+        .scanner-container {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border: 3px dashed #dee2e6;
+            border-radius: 15px;
             padding: 25px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-
-        .table-hover tbody tr:hover {
-            background-color: rgba(92, 149, 233, 0.05);
-            transform: translateY(-1px);
-            transition: var(--transition);
-        }
-
-        .duration-badge {
-            background: linear-gradient(135deg, #6c757d, #495057);
-            color: white;
-            font-size: 0.75rem;
-            padding: 4px 8px;
-        }
-
-        /* Button container styling */
-        .button-container {
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-height: 150px;
             display: flex;
-            gap: 10px;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
         }
 
-        /* Loading spinner */
-        .spinner-border {
-            width: 1rem;
-            height: 1rem;
+        .scanner-container:hover {
+            border-color: var(--accent-color);
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
         }
 
-        .record-count {
+        .scanner-container.scanning {
+            border-color: var(--accent-color);
+            background: linear-gradient(135deg, #e8f5e8, #d4edda);
+            border-style: solid;
+        }
+
+        .scanner-container.scanned {
+            border-color: var(--success-color);
+            background: linear-gradient(135deg, #e8f5e8, #d4edda);
+            border-style: solid;
+        }
+
+        .scanner-icon {
+            font-size: 3rem;
+            color: var(--accent-color);
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .scanner-container.scanning .scanner-icon {
+            color: var(--accent-color);
+            animation: scan 1s infinite;
+        }
+
+        .scanner-container.scanned .scanner-icon {
+            color: var(--success-color);
+        }
+
+        @keyframes scan {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+            100% { transform: translateY(0); }
+        }
+
+        .scanner-title {
+            font-weight: 700;
+            color: var(--dark-text);
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+
+        .scanner-instruction {
+            color: #6c757d;
             font-size: 0.9rem;
-            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .barcode-display {
+            font-family: 'Courier New', monospace;
+            font-size: 1.5rem;
+            font-weight: bold;
+            letter-spacing: 3px;
+            color: #2c3e50;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #ced4da;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            word-break: break-all;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        .barcode-placeholder {
+            color: #6c757d;
+            font-style: italic;
+            font-size: 1rem;
+        }
+
+        .barcode-value {
+            color: var(--success-color);
+            animation: highlight 1s ease;
+        }
+
+        @keyframes highlight {
+            0% { 
+                background-color: #d1f7e9;
+                transform: scale(1.05);
+            }
+            100% { 
+                background-color: white;
+                transform: scale(1);
+            }
+        }
+
+        .scan-indicator {
+            text-align: center;
+            margin: 10px 0;
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .scan-animation {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Disable manual input styling */
+        .manual-input-disabled {
+            opacity: 0.6;
+            pointer-events: none;
+            background-color: #f8f9fa;
         }
     </style>
 </head>
 <body>
-    <div class="container-fluid position-relative bg-white d-flex p-0">
-        <?php include 'sidebar.php'; ?>
-        
-        <div class="content">
-            <?php include 'navbar.php'; ?>
+<!-- Header - Fixed height, fully visible -->
+<div class="header-container">
+    <img src="uploads/Head-removebg-preview.png" alt="Header" class="header-image">
+</div>
 
-            <div class="container-fluid pt-4 px-4">
-                <div class="col-sm-12 col-xl-12">
-                    <div class="bg-light rounded h-100 p-4">
-                        <div class="row">
-                            <div class="col-12">
-                                <h6 class="mb-4"><i class="fas fa-chalkboard-teacher me-2"></i>Instructor Attendance Summary</h6>
-                            </div>
-                        </div>
+<!-- Main Container - Scroll Design -->
+<div class="main-container">
+    <!-- Navigation Tabs -->
+    <div class="modern-tabs">
+        <ul class="nav nav-pills justify-content-center">
+            <li class="nav-item">
+                <a class="nav-link" href="main1.php">
+                    <i class="fas fa-qrcode me-2"></i>Scanner
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" aria-current="page" href="#">
+                    <i class="fas fa-history me-2"></i>Attendance Log
+                </a>
+            </li>
+        </ul>
+    </div>
 
-                        <?php if (isset($_SESSION['message'])): ?>
-                            <div class="alert alert-success mt-3">
-                                <?php echo $_SESSION['message']; unset($_SESSION['message']); ?>
-                            </div>
-                        <?php endif; ?>
-                        
-                        <!-- Filter Section -->
-                        <div class="filter-section">
-                            <form method="get" class="row g-3">
-                                <div class="col-lg-3 col-md-6">
-                                    <label for="date" class="form-label fw-bold">Date</label>
-                                    <input type="date" class="form-control" id="date" name="date" 
-                                           value="<?php echo htmlspecialchars($selected_date); ?>" 
-                                           max="<?php echo date('Y-m-d'); ?>">
-                                </div>
-                                <div class="col-lg-3 col-md-6">
-                                    <label for="search_instructor" class="form-label fw-bold">Instructor</label>
-                                    <input type="text" class="form-control" id="search_instructor" name="search_instructor" 
-                                           placeholder="Search instructor" 
-                                           value="<?php echo htmlspecialchars($search_instructor); ?>">
-                                </div>
-                                <div class="col-lg-3 col-md-6">
-                                    <label for="search_subject" class="form-label fw-bold">Subject</label>
-                                    <input type="text" class="form-control" id="search_subject" name="search_subject" 
-                                           placeholder="Search subject" 
-                                           value="<?php echo htmlspecialchars($search_subject); ?>">
-                                </div>
-                                <div class="col-lg-3 col-md-6 d-flex align-items-end">
-                                    <div class="button-container w-100">
-                                        <button type="submit" class="btn btn-filter">
-                                            <i class="fas fa-filter"></i> Filter
-                                        </button>
-                                        <a href="?date=<?php echo $selected_date; ?>&refresh_data=true" class="btn btn-refresh">
-                                            <i class="fas fa-sync"></i> Refresh
-                                        </a>
-                                        <button type="button" class="btn btn-export" onclick="exportToExcel()">
-                                            <i class="fas fa-file-excel"></i> Export
-                                        </button>
+    <!-- Content Area - Allow scrolling -->
+    <div class="content-area">
+        <div class="scanner-section" style="flex: 1;">
+            <?php if (isset($_SESSION['message'])): ?>
+                <div class="alert alert-success mt-3">
+                    <?php echo htmlspecialchars($_SESSION['message']); unset($_SESSION['message']); ?>
+                </div>
+            <?php endif; ?>
+            
+            <?php if (isset($_SESSION['scanner_error'])): ?>
+                <div class="alert alert-warning mt-3">
+                    <?php echo htmlspecialchars($_SESSION['scanner_error']); unset($_SESSION['scanner_error']); ?>
+                </div>
+            <?php endif; ?>
+
+            <div class="tab-content mt-3">
+                <!-- Student Attendance Tab -->
+                <div class="tab-pane fade show active" id="pills-students">
+                    <?php if ($attendance_saved): ?>
+                        <div class="archived-message">
+                            <h4>Attendance Records Archived</h4>
+                            <p><?php echo htmlspecialchars($archive_message); ?></p>
+                            <div class="session-timeline text-center mb-3">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="time-display">
+                                            <small class="text-muted">Time In</small>
+                                            <div class="fw-bold text-primary">
+                                                <?php 
+                                                if (!empty($original_time_in)) {
+                                                    echo htmlspecialchars($original_time_in);
+                                                } else {
+                                                    echo 'N/A';
+                                                }
+                                                ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="time-display">
+                                            <small class="text-muted">Time Out</small>
+                                            <div class="fw-bold text-primary">
+                                                <?php 
+                                                if (!empty($timeout_time)) {
+                                                    echo htmlspecialchars($timeout_time);
+                                                } else {
+                                                    echo 'N/A';
+                                                }
+                                                ?>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            </form>
+                            </div>
+                            <p class="text-success"><i class="fas fa-check-circle me-2"></i>Classmates data has been saved to your instructor panel.</p>
+                            
+                            <!-- Logout Button for Another Class -->
+                            <div class="logout-after-save">
+                                <form method="post" class="d-inline">
+                                    <button type="submit" name="logout_after_save" class="btn btn-success btn-lg">
+                                        <i class="fas fa-sign-out-alt me-2"></i>Logout & Start Another Class
+                                    </button>
+                                </form>
+                                <p class="text-muted mt-2">Click above to log out and start attendance for another class</p>
+                            </div>
                         </div>
-                        
-                        <div class="card">
-                            <div class="card-body p-0">
-                                <div class="table-responsive">
-                                    <h6 class="p-3">
-                                        Instructor Attendance Summary for: <span class="text-primary"><?php echo date('F d, Y', strtotime($selected_date)); ?></span>
-                                        <span class="badge bg-primary ms-2 record-count"><?php echo count($attendance_data); ?> Records</span>
-                                    </h6>
-                                    
-                                    <!-- Instructor Attendance Summary Table -->
-                                    <table class="table table-striped table-hover mb-0" id="instructorAttendanceTable">
-                                        <thead>
-                                            <tr>
-                                                <th><i class="fas fa-user me-1"></i> Name</th>
-                                                <th><i class="fas fa-book me-1"></i> Subject</th>
-                                                <th><i class="fas fa-graduation-cap me-1"></i> Year Level</th>
-                                                <th><i class="fas fa-users me-1"></i> Section</th>
-                                                <th><i class="fas fa-door-open me-1"></i> Room</th>
-                                                <th><i class="fas fa-user-friends me-1"></i> Total Students</th>
-                                                <th><i class="fas fa-user-check me-1"></i> Present</th>
-                                                <th><i class="fas fa-user-times me-1"></i> Absent</th>
-                                                <th><i class="fas fa-percentage me-1"></i> Attendance Rate</th>
-                                                <th><i class="fas fa-sign-in-alt me-1"></i> Time In</th>
-                                                <th><i class="fas fa-sign-out-alt me-1"></i> Time Out</th>
-                                                <th><i class="fas fa-clock me-1"></i> Duration</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php if (count($attendance_data) > 0): ?>
-                                                <?php foreach ($attendance_data as $row): ?>
-                                                    <?php
-                                                    // Calculate duration
-                                                    $duration = 'N/A';
-                                                    if ($row['time_in'] && $row['time_out'] && $row['time_out'] != '0000-00-00 00:00:00') {
-                                                        $time_in = new DateTime($row['time_in']);
-                                                        $time_out = new DateTime($row['time_out']);
-                                                        $interval = $time_in->diff($time_out);
-                                                        $duration = $interval->format('%h h %i m');
-                                                    }
-                                                    
-                                                    // Determine badge class for attendance rate
-                                                    $attendance_badge = '';
-                                                    if ($row['attendance_rate'] == 100) {
-                                                        $attendance_badge = 'badge-present';
-                                                    } elseif ($row['attendance_rate'] >= 80) {
-                                                        $attendance_badge = 'badge-high-attendance';
-                                                    } elseif ($row['attendance_rate'] > 0) {
-                                                        $attendance_badge = 'badge-warning';
-                                                    } else {
-                                                        $attendance_badge = 'badge-absent';
-                                                    }
-                                                    ?>
-                                                    <tr>
-                                                        <td><strong><?php echo htmlspecialchars($row['instructor_name']); ?></strong></td>
-                                                        <td><?php echo !empty($row['subject_name']) ? htmlspecialchars($row['subject_name']) : '<span class="text-muted">N/A</span>'; ?></td>
-                                                        <td><?php echo htmlspecialchars($row['year_level']); ?></td>
-                                                        <td><?php echo htmlspecialchars($row['section']); ?></td>
-                                                        <td><?php echo !empty($row['room']) ? htmlspecialchars($row['room']) : '<span class="text-muted">N/A</span>'; ?></td>
-                                                        <td><?php echo htmlspecialchars($row['total_students']); ?></td>
-                                                        <td><span class="badge badge-present"><?php echo htmlspecialchars($row['present_count']); ?></span></td>
-                                                        <td><span class="badge badge-absent"><?php echo htmlspecialchars($row['absent_count']); ?></span></td>
-                                                        <td><span class="badge <?php echo $attendance_badge; ?>"><?php echo htmlspecialchars($row['attendance_rate']); ?>%</span></td>
-                                                        <td><?php echo $row['time_in'] && $row['time_in'] != '0000-00-00 00:00:00' ? date('h:i A', strtotime($row['time_in'])) : 'N/A'; ?></td>
-                                                        <td><?php echo $row['time_out'] && $row['time_out'] != '0000-00-00 00:00:00' ? date('h:i A', strtotime($row['time_out'])) : 'N/A'; ?></td>
-                                                        <td><?php echo $duration; ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            <?php else: ?>
-                                                <tr>
-                                                    <td colspan="12" class="text-center py-4">
-                                                        <div class="text-muted">
-                                                            <i class="fa fa-search fa-2x mb-2"></i><br>
-                                                            No instructor attendance records found for <?php echo date('F d, Y', strtotime($selected_date)); ?>
-                                                            <br>
-                                                            <small class="mt-2 d-block">Click "Refresh" to update data from the main table</small>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            <?php endif; ?>
-                                        </tbody>
-                                    </table>
+                    <?php else: ?>
+                        <!-- Enhanced Statistics Section -->
+                        <?php if ($first_student_section && $first_student_year): 
+                            $stats = getAttendanceStats($db, $first_student_year, $first_student_section);
+                        ?>
+                        <div class="class-summary mb-4">
+                            <h4 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Class Attendance Dashboard</h4>
+                            
+                            <!-- Main Statistics Cards -->
+                            <div class="row g-3 mb-4">
+                                <!-- Present Students -->
+                                <div class="col-xl-4 col-md-6">
+                                    <div class="card stats-card border-success">
+                                        <div class="card-body text-center">
+                                            <div class="stats-icon text-success">
+                                                <i class="fas fa-user-check"></i>
+                                            </div>
+                                            <div class="stats-number text-success">
+                                                <?php echo $stats['present_count']; ?>
+                                            </div>
+                                            <div class="stats-label">Present</div>
+                                            <div class="stats-detail small">
+                                                Students who scanned today
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Absent Students -->
+                                <div class="col-xl-4 col-md-6">
+                                    <div class="card stats-card border-danger">
+                                        <div class="card-body text-center">
+                                            <div class="stats-icon text-danger">
+                                                <i class="fas fa-user-times"></i>
+                                            </div>
+                                            <div class="stats-number text-danger">
+                                                <?php echo $stats['absent_count']; ?>
+                                            </div>
+                                            <div class="stats-label">Absent</div>
+                                            <div class="stats-detail small">
+                                                <?php echo $stats['absent_rate']; ?>% of class
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Class Size -->
+                                <div class="col-xl-4 col-md-6">
+                                    <div class="card stats-card border-info">
+                                        <div class="card-body text-center">
+                                            <div class="stats-icon text-info">
+                                                <i class="fas fa-users"></i>
+                                            </div>
+                                            <div class="stats-number text-info">
+                                                <?php echo $stats['total_students']; ?>
+                                            </div>
+                                            <div class="stats-label">Class Size</div>
+                                            <div class="stats-detail small">
+                                                Total enrolled students
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                        <?php elseif ($from_scanner): ?>
+                        <div class="alert alert-info mb-4">
+                            <i class="fas fa-chart-bar me-2"></i>
+                            Analytics dashboard will appear when students start scanning their IDs.
+                        </div>
+                        <?php endif; ?>
+
+                        <div class="instructor-header">
+                            <div class="instructor-info">
+                                <div class="instructor-details">
+                                    <div>
+                                        <span class="detail-label">Instructor:</span>
+                                        <span class="detail-value">
+                                            <?php 
+                                            if (isset($_SESSION['access']['instructor']['fullname'])) {
+                                                echo htmlspecialchars($_SESSION['access']['instructor']['fullname']);
+                                            } else {
+                                                echo 'Not logged in';
+                                            }
+                                            ?>
+                                        </span>
+                                    </div>
+                                    
+                                    <?php if (isset($_SESSION['access']['subject']['name'])): ?>
+                                    <div>
+                                        <span class="detail-label">Subject:</span>
+                                        <span class="detail-value"><?php echo htmlspecialchars($_SESSION['access']['subject']['name']); ?></span>
+                                    </div>
+                                    <?php endif; ?>
+                                    
+                                    <?php if (isset($_SESSION['access']['subject']['time'])): ?>
+                                    <div>
+                                        <span class="detail-label">Time:</span>
+                                        <span class="detail-value"><?php echo htmlspecialchars($_SESSION['access']['subject']['time']); ?></span>
+                                    </div>
+                                    <?php endif; ?>
+                                    
+                                    <?php if ($first_student_section && $first_student_year): ?>
+                                    <div>
+                                        <span class="detail-label">Class:</span>
+                                        <span class="detail-value"><?php echo htmlspecialchars($first_student_year . ' - ' . $first_student_section); ?></span>
+                                    </div>
+                                    <?php endif; ?>
+                                    
+                                    <!-- FIXED: Added instructor login time display -->
+                                    <?php if (isset($_SESSION['instructor_login_time'])): ?>
+                                    <div>
+                                        <span class="detail-label">Session Started:</span>
+                                        <span class="detail-value"><?php echo date('h:i A', strtotime($_SESSION['instructor_login_time'])); ?></span>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                
+                                <?php if (isset($_SESSION['access']['instructor']['id'])): ?>
+                                <div class="action-buttons">
+                                    <button type="button" class="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#idModal">
+                                        <i class="fas fa-save me-1"></i> Save Today's Attendance
+                                    </button>
+                                    <a href="logout.php" class="btn btn-outline-danger">
+                                        <i class="bx bx-power-off me-1"></i> Logout
+                                    </a>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                        <!-- Classmates Section - ALWAYS VISIBLE FOR ATTENDANCE CHECKING -->
+                        <?php if ($first_student_section && $first_student_year): ?>
+                            <div class="classmates-section">
+                                <?php
+                                // Get classmates
+                                $classmates = getClassmatesByYearSection($db, $first_student_year, $first_student_section);
+                                // Display classmates table
+                                displayClassmatesTable($classmates, $first_student_year, $first_student_section);
+                                ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="alert alert-info mt-4">
+                                <i class="fas fa-info-circle me-2"></i>
+                                No class data available. Class attendance list will appear when the first student scans their ID.
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Verification Modal -->
+            <?php if (isset($_SESSION['access']['instructor']['id'])): ?>
+            <div class="modal fade" id="idModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Instructor Verification - Scan Required</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="text-center mb-3">
+                            <h5>Verifying: <?php echo htmlspecialchars($_SESSION['access']['instructor']['fullname'] ?? 'Instructor'); ?></h5>
+                            <p class="text-muted">Your ID: <?php echo htmlspecialchars($_SESSION['access']['instructor']['id_number'] ?? 'N/A'); ?></p>
+                            
+                            <!-- Scanner Box -->
+                            <div class="scanner-container mt-4" id="scannerBox" style="min-height: 200px;">
+                                <div class="scanner-icon">
+                                    <i class="fas fa-barcode"></i>
+                                </div>
+                                <div class="scanner-title" id="scannerTitle">
+                                    Click to Activate Scanner
+                                </div>
+                                <div class="scanner-instruction" id="scannerInstruction">
+                                    Click this box then scan your ID card
+                                </div>
+                                
+                                <!-- Barcode Display Area -->
+                                <div class="barcode-display mt-3" id="barcodeDisplay">
+                                    <span class="barcode-placeholder" id="barcodePlaceholder">Barcode will appear here after scanning</span>
+                                    <span id="barcodeValue" class="d-none"></span>
+                                </div>
+                            </div>
+
+                            <div class="scan-indicator scan-animation mt-3" id="scanIndicator">
+                                <i class="fas fa-rss me-2"></i>Scanner Ready - Click the box above to start scanning
+                            </div>
+                        </div>
+                        
+                        <!-- Hidden form for submission -->
+                        <form id="verifyForm" method="post">
+                            <input type="hidden" id="scanIdInput" name="id_number" value="">
+                            <input type="hidden" name="save_attendance" value="1">
+                        </form>
+                        
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Scan Only:</strong> Manual input is disabled. Please use your ID card scanner.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" form="verifyForm" class="btn btn-primary" id="verifyBtn" disabled>
+                            <i class="fas fa-check me-2"></i>Verify & Save
+                        </button>
                     </div>
                 </div>
             </div>
-            <?php include 'footer.php'; ?>
         </div>
-        <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="bi bi-arrow-up"></i></a>
+        <?php endif; ?>
+        </div>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Add SweetAlert JS -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
-        function exportToExcel() {
-            Swal.fire({
-                title: 'Export to Excel?',
-                text: 'This will export all filtered data to an Excel file.',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#1cc88a',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Export',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    const table = document.getElementById('instructorAttendanceTable');
-                    const ws = XLSX.utils.table_to_sheet(table);
-                    const wb = XLSX.utils.book_new();
-                    XLSX.utils.book_append_sheet(wb, ws, "Instructor Attendance Summary");
-                    
-                    const date = new Date().toISOString().split('T')[0];
-                    XLSX.writeFile(wb, `instructor_attendance_${date}.xlsx`);
-                    
-                    // Show success message
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Exported!',
-                        text: 'Data exported successfully to Excel',
-                        confirmButtonColor: '#1cc88a',
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle logout confirmation
+        const logoutBtn = document.querySelector('.btn-outline-danger');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', function(e) {
+                if (!confirm('Are you sure you want to log out? This will clear today\'s attendance records.')) {
+                    e.preventDefault();
                 }
             });
         }
 
-        // Add some custom styling to match your theme
-        const style = document.createElement('style');
-        style.textContent = `
-            .swal2-popup {
-                border-radius: 15px;
-                font-family: 'Inter', sans-serif;
+        // Scanner functionality for the modal
+        const idModal = document.getElementById('idModal');
+        const idInput = document.getElementById('idInput');
+        
+        if (idModal && idInput) {
+            let scanBuffer = '';
+            let scanTimer;
+            
+            idModal.addEventListener('shown.bs.modal', function() {
+                idInput.focus();
+                scanBuffer = '';
+                clearTimeout(scanTimer);
+            });
+            
+            function formatIdNumber(id) {
+                const cleaned = id.replace(/\D/g, '');
+                if (cleaned.length >= 8) {
+                    return cleaned.substring(0, 4) + '-' + cleaned.substring(4, 8);
+                }
+                return cleaned;
             }
-            .swal2-title {
-                color: var(--dark-text);
-            }
-            .swal2-confirm {
-                border-radius: 8px;
-                font-weight: 500;
-            }
-            .swal2-cancel {
-                border-radius: 8px;
-                font-weight: 500;
-            }
-        `;
-        document.head.appendChild(style);
-
-        // Auto-refresh notification
-        document.addEventListener('DOMContentLoaded', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('refresh_data')) {
-                // Show a subtle notification that data was refreshed
-                setTimeout(() => {
-                    const toast = document.createElement('div');
-                    toast.className = 'alert alert-success alert-dismissible fade show position-fixed';
-                    toast.style.top = '20px';
-                    toast.style.right = '20px';
-                    toast.style.zIndex = '9999';
-                    toast.innerHTML = `
-                        <i class="fas fa-check-circle me-2"></i>
-                        Data refreshed successfully!
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    `;
-                    document.body.appendChild(toast);
+            
+            idModal.addEventListener('keypress', function(e) {
+                if (document.activeElement === idInput) {
+                    clearTimeout(scanTimer);
+                    scanBuffer += e.key;
                     
-                    // Remove after 3 seconds
-                    setTimeout(() => {
-                        if (toast.parentNode) {
-                            toast.parentNode.removeChild(toast);
+                    scanTimer = setTimeout(function() {
+                        if (scanBuffer.length >= 8) {
+                            const formatted = formatIdNumber(scanBuffer);
+                            idInput.value = formatted;
+                            confirmAttendanceSave();
                         }
-                    }, 3000);
-                }, 500);
+                        scanBuffer = '';
+                    }, 100);
+                }
+            });
+            
+            function confirmAttendanceSave() {
+                Swal.fire({
+                    title: 'Confirm Save Attendance',
+                    text: 'This will record your time-out and save classmates data to your instructor panel. Continue?',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Yes, save it!'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        document.getElementById('verifyForm').submit();
+                    } else {
+                        idInput.value = '';
+                        idInput.focus();
+                    }
+                });
+            }
+
+            const verifyForm = document.getElementById('verifyForm');
+            if (verifyForm) {
+                verifyForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    confirmAttendanceSave();
+                });
+            }
+        }
+
+        <?php if ($show_timeout_message && $attendance_saved): ?>
+        // Show success message if attendance was saved
+        Swal.fire({
+            icon: 'success',
+            title: 'Attendance Saved Successfully!',
+            html: `<div class="text-center">
+                      <div class="mb-3">
+                          <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
+                      </div>
+                      <h5 class="mb-3">Your attendance session has been completed</h5>
+                      
+                      <div class="session-timeline mb-4">
+                          <div class="row justify-content-center">
+                              <div class="col-md-5">
+                                  <div class="time-display bg-light p-3 rounded">
+                                      <small class="text-muted d-block">Time In</small>
+                                      <div class="fw-bold text-primary fs-5">
+                                          <?php echo !empty($original_time_in) ? htmlspecialchars($original_time_in) : 'N/A'; ?>
+                                      </div>
+                                  </div>
+                              </div>
+                              <div class="col-md-2 d-flex align-items-center justify-content-center">
+                                  <i class="fas fa-arrow-right text-muted"></i>
+                              </div>
+                              <div class="col-md-5">
+                                  <div class="time-display bg-light p-3 rounded">
+                                      <small class="text-muted d-block">Time Out</small>
+                                      <div class="fw-bold text-primary fs-5">
+                                          <?php echo !empty($timeout_time) ? htmlspecialchars($timeout_time) : 'N/A'; ?>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                      
+                      <div class="alert alert-success bg-success text-white border-0">
+                          <i class="fas fa-users me-2"></i>
+                          <?php echo htmlspecialchars($archive_message); ?>
+                      </div>
+                      
+                      <p class="text-muted">
+                          <i class="fas fa-info-circle me-2"></i>
+                          Class attendance data has been archived to your instructor panel.
+                      </p>
+                   </div>`,
+            confirmButtonText: 'Continue',
+            confirmButtonColor: '#3085d6',
+            allowOutsideClick: false,
+            backdrop: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Optional: You can add any cleanup or redirect here if needed
             }
         });
-    </script>
+        <?php endif; ?>
+    });
+
+// Scanner functionality for the modal
+document.addEventListener('DOMContentLoaded', function() {
+    const idModal = document.getElementById('idModal');
+    const scannerBox = document.getElementById('scannerBox');
+    const scanIndicator = document.getElementById('scanIndicator');
+    const verifyBtn = document.getElementById('verifyBtn');
+    const scanIdInput = document.getElementById('scanIdInput');
+    
+    let isScannerActive = false;
+    let scanBuffer = '';
+    let scanTimeout;
+
+    // Initialize scanner when modal opens
+    if (idModal) {
+        idModal.addEventListener('shown.bs.modal', function() {
+            activateScanner();
+        });
+        
+        idModal.addEventListener('hidden.bs.modal', function() {
+            deactivateScanner();
+            resetScannerUI();
+            verifyBtn.disabled = true;
+        });
+    }
+
+    // Scanner box click handler
+    if (scannerBox) {
+        scannerBox.addEventListener('click', function() {
+            if (!isScannerActive) {
+                activateScanner();
+            }
+        });
+    }
+
+    // Global key listener for scanner input
+    document.addEventListener('keydown', handleKeyPress);
+
+    function activateScanner() {
+        isScannerActive = true;
+        const scannerTitle = document.getElementById('scannerTitle');
+        const scannerInstruction = document.getElementById('scannerInstruction');
+        const scannerIcon = scannerBox.querySelector('.scanner-icon i');
+
+        // Update UI for active scanning
+        scannerBox.classList.add('scanning');
+        scannerBox.classList.remove('scanned');
+        scannerTitle.textContent = 'Scanner Active - Scan Now';
+        scannerInstruction.textContent = 'Point your barcode scanner and scan the ID card';
+        scanIndicator.innerHTML = '<i class="fas fa-barcode me-2"></i>Scanner Active - Ready to receive scan';
+        scanIndicator.style.color = 'var(--accent-color)';
+        scannerIcon.className = 'fas fa-barcode';
+
+        // Clear any previous scan
+        scanBuffer = '';
+        clearTimeout(scanTimeout);
+        scanIdInput.value = '';
+        verifyBtn.disabled = true;
+
+        console.log('Scanner activated - ready to scan');
+    }
+
+    function deactivateScanner() {
+        isScannerActive = false;
+        scanIndicator.innerHTML = '<i class="fas fa-rss me-2"></i>Scanner Ready - Click the box to scan again';
+        scanIndicator.style.color = 'var(--accent-color)';
+        console.log('Scanner deactivated');
+    }
+
+    function resetScannerUI() {
+        const scannerTitle = document.getElementById('scannerTitle');
+        const scannerInstruction = document.getElementById('scannerInstruction');
+        const barcodePlaceholder = document.getElementById('barcodePlaceholder');
+        const barcodeValue = document.getElementById('barcodeValue');
+        
+        scannerBox.classList.remove('scanning', 'scanned');
+        scannerTitle.textContent = 'Click to Activate Scanner';
+        scannerInstruction.textContent = 'Click this box then scan your ID card';
+        barcodePlaceholder.classList.remove('d-none');
+        barcodeValue.classList.add('d-none');
+        barcodeValue.textContent = '';
+    }
+
+    function handleKeyPress(e) {
+        if (!isScannerActive) return;
+
+        // Prevent default behavior for most keys during scanning
+        if (e.key.length === 1 || e.key === 'Enter') {
+            e.preventDefault();
+        }
+
+        // Clear buffer if it's been too long between keystrokes
+        clearTimeout(scanTimeout);
+
+        // If Enter key is pressed, process the scan
+        if (e.key === 'Enter') {
+            processScan(scanBuffer);
+            scanBuffer = '';
+            return;
+        }
+
+        // Add character to buffer (ignore modifier keys)
+        if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            scanBuffer += e.key;
+            console.log('Scanner input:', e.key, 'Buffer:', scanBuffer);
+        }
+
+        // Set timeout to clear buffer if no activity
+        scanTimeout = setTimeout(() => {
+            console.log('Scanner buffer cleared due to inactivity');
+            scanBuffer = '';
+        }, 200);
+    }
+
+    function formatIdNumber(id) {
+        // Remove any non-digit characters
+        const cleaned = id.replace(/\D/g, '');
+        
+        // Format as 0000-0000 if we have 8 digits
+        if (cleaned.length === 8) {
+            return cleaned.substring(0, 4) + '-' + cleaned.substring(4, 8);
+        }
+        
+        // Return original if not 8 digits
+        return cleaned;
+    }
+
+    function processScan(data) {
+        if (data.trim().length > 0) {
+            // Format the scanned data as 0000-0000
+            const formattedValue = formatIdNumber(data.trim());
+            
+            console.log('Raw scan data:', data);
+            console.log('Formatted ID:', formattedValue);
+            
+            // Update the hidden input field
+            scanIdInput.value = formattedValue;
+            
+            // Update barcode display
+            updateBarcodeDisplay(formattedValue);
+            
+            // Update scanner UI
+            const scannerTitle = document.getElementById('scannerTitle');
+            const scannerInstruction = document.getElementById('scannerInstruction');
+            
+            scannerBox.classList.remove('scanning');
+            scannerBox.classList.add('scanned');
+            scannerTitle.textContent = 'ID Scanned Successfully!';
+            scannerInstruction.textContent = 'ID: ' + formattedValue;
+            scanIndicator.innerHTML = '<i class="fas fa-check-circle me-2"></i>Barcode scanned successfully!';
+            scanIndicator.style.color = 'var(--success-color)';
+            
+            // Enable verify button
+            verifyBtn.disabled = false;
+            
+            // Auto-confirm after a short delay
+            setTimeout(() => {
+                confirmAttendanceSave();
+            }, 1000);
+            
+            // Deactivate scanner after successful scan
+            setTimeout(deactivateScanner, 2000);
+        }
+    }
+
+    function updateBarcodeDisplay(value) {
+        const barcodeDisplay = document.getElementById('barcodeDisplay');
+        const barcodePlaceholder = document.getElementById('barcodePlaceholder');
+        const barcodeValue = document.getElementById('barcodeValue');
+        
+        // Hide placeholder and show actual value
+        barcodePlaceholder.classList.add('d-none');
+        barcodeValue.textContent = value;
+        barcodeValue.classList.remove('d-none');
+        barcodeValue.classList.add('barcode-value');
+        
+        // Add visual feedback
+        barcodeDisplay.classList.add('barcode-value');
+        
+        // Remove highlight animation after it completes
+        setTimeout(() => {
+            barcodeDisplay.classList.remove('barcode-value');
+        }, 1000);
+    }
+
+    function confirmAttendanceSave() {
+        Swal.fire({
+            title: 'Confirm Save Attendance',
+            text: 'This will record your time-out and save classmates data to your instructor panel. Continue?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, save it!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('verifyForm').submit();
+            } else {
+                // Reset scanner if cancelled
+                resetScannerUI();
+                activateScanner();
+                verifyBtn.disabled = true;
+            }
+        });
+    }
+
+    // Handle verify button click
+    if (verifyBtn) {
+        verifyBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!verifyBtn.disabled) {
+                confirmAttendanceSave();
+            }
+        });
+    }
+});
+
+</script>
 </body>
 </html>
-<?php mysqli_close($db); ?>
+<?php 
+if (isset($db)) {
+    mysqli_close($db);
+}
+?>
