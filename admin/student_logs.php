@@ -3,7 +3,10 @@ session_start();
 include 'header.php';
 include '../connection.php';
 
-
+if (!isset($_SESSION['instructor_login_time']) && isset($_SESSION['access']['instructor']['id'])) {
+    $_SESSION['instructor_login_time'] = date('Y-m-d H:i:s');
+    error_log("Instructor login time set: " . $_SESSION['instructor_login_time']);
+}
 // Create the dedicated table if it doesn't exist
 $createTableQuery = "
 CREATE TABLE IF NOT EXISTS instructor_attendance_admin (
