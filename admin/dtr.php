@@ -530,12 +530,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                             }
 
                             .btn-info {
-                                background: linear-gradient(135deg, #36b9cc 0%, #2e59d9 100%);
+                                background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
                                 color: #fff;
                             }
 
                             .btn-info:hover {
-                                background: linear-gradient(135deg, #2e59d9 0%, #1e40af 100%);
+                                background: linear-gradient(135deg, var(--secondary-color), var(--icon-color));
                                 color: #fff;
                             }
 
@@ -552,12 +552,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                             }
 
                             .btn-primary {
-                                background: linear-gradient(135deg, #4e73df 0%, #2e59d9 100%);
+                                background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
                                 border: none;
                             }
 
                             .btn-primary:hover {
-                                background: linear-gradient(135deg, #2e59d9 0%, #1e40af 100%);
+                                background: linear-gradient(135deg, var(--secondary-color), var(--icon-color));
                                 transform: translateY(-2px);
                                 box-shadow: 0 8px 25px rgba(78, 115, 223, 0.3);
                             }
@@ -642,8 +642,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                             }
 
                             .suggestions-dropdown div:hover {
-                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                color: white;
+                                background: linear-gradient(135deg, var(--secondary-color), var(--icon-color));
+                                color: black;
                             }
 
                             .suggestions-dropdown div:last-child {
