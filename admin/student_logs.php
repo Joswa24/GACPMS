@@ -42,7 +42,7 @@ function populateDedicatedTable($db, $date = null) {
     }
     
     // Remove existing records for the date to avoid duplicates
-    $deleteQuery = "DELETE FROM instructor_attendance_dedicated WHERE session_date = ?";
+    $deleteQuery = "DELETE FROM instructor_attendance_admin WHERE session_date = ?";
     $stmt = $db->prepare($deleteQuery);
     $stmt->bind_param("s", $date);
     $stmt->execute();
@@ -50,7 +50,7 @@ function populateDedicatedTable($db, $date = null) {
     
     // Insert data from the original summary table
     $insertQuery = "
-        INSERT INTO instructor_attendance_dedicated (
+        INSERT INTO instructor_attendance_admin (
             instructor_name, subject_name, year_level, section, room, 
             total_students, present_count, absent_count, attendance_rate,
             time_in, time_out, session_date
@@ -68,7 +68,7 @@ function populateDedicatedTable($db, $date = null) {
             MIN(time_in) as time_in,
             MAX(CASE WHEN time_out != '0000-00-00 00:00:00' THEN time_out ELSE NULL END) as time_out,
             session_date
-        FROM instructor_attendance_summary 
+        FROM instructor_attendance_admin 
         WHERE session_date = ?
         GROUP BY instructor_name, subject_name, year_level, section, session_date
         ORDER BY instructor_name, time_in

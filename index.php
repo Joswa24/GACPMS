@@ -280,6 +280,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Record instructor session start time
         $currentTime = date('Y-m-d H:i:s');
         $_SESSION['instructor_login_time'] = $currentTime;
+        $_SESSION['instructor_session_started'] = true;
 
         // Get year_level and section from the selected subject
         $subjectDetails = getSubjectDetails($db, $selected_subject, $selected_room);
