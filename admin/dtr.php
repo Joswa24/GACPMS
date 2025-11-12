@@ -353,6 +353,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
             }
         }
         </style>
+        <div>
             <div class="container-fluid pt-4 px-4">
                 <div class="col-sm-12 col-xl-12">
                     <div class="card">
