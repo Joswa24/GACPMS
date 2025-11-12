@@ -531,12 +531,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
 
                             .btn-info {
                                 background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-                                color: #fff;
+                                color:black;
                             }
 
                             .btn-info:hover {
                                 background: linear-gradient(135deg, var(--secondary-color), var(--icon-color));
-                                color: #fff;
+                                color: black;
                             }
 
                             /* Action Buttons */
@@ -552,14 +552,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                             }
 
                             .btn-primary {
-                                background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+                                background: linear-gradient(135deg, var(--secondary-color), var(--icon-color));
                                 border: none;
+                                color:black;
                             }
 
                             .btn-primary:hover {
-                                background: linear-gradient(135deg, var(--secondary-color), var(--icon-color));
+                                background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
                                 transform: translateY(-2px);
                                 box-shadow: 0 8px 25px rgba(78, 115, 223, 0.3);
+                                color:black;
                             }
 
                             .btn-success {
