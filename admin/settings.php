@@ -397,7 +397,7 @@ try {
         .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 10%; } /* Username */
         .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 14%; } /* Login Time */
         .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 14%; } /* Logout Time */
-        .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 114%; } /* IP Address */
+        .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; } /* IP Address */
         .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 15%; } /* Location */
         .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; } /* Activity */
         .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 8%; } /* Status */
