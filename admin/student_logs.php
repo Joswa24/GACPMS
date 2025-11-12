@@ -406,6 +406,23 @@ while ($row = $result->fetch_assoc()) {
             border-radius: 50%;
             object-fit: cover;
         }
+        .back-to-top {
+            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color)) !important;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--box-shadow);
+            transition: var(--transition);
+        }
+
+        .back-to-top:hover {
+            transform: translateY(-3px);
+        }
+
     </style>
 </head>
 <body>
@@ -575,7 +592,7 @@ while ($row = $result->fetch_assoc()) {
             </div>
             <?php include 'footer.php'; ?>
         </div>
-        <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="bi bi-arrow-up"></i></a>
+        <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="fas fa-arrow-up"></i></a>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
