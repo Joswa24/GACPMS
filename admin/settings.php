@@ -395,9 +395,9 @@ try {
         /* Optimized column widths to fit all columns */
         .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 4%; } /* ID */
         .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 9%; } /* Username */
-        .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 13%; } /* Login Time */
-        .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 13%; } /* Logout Time */
-        .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 16%; } /* IP Address */
+        .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; } /* Login Time */
+        .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; } /* Logout Time */
+        .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 18%; } /* IP Address */
         .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; } /* Location */
         .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; } /* Activity */
         .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 8%; } /* Status */
