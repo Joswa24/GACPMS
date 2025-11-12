@@ -1218,7 +1218,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                 });
                 
                 // Print functionality
-                $('#btn_print').on('click', function() {
+                $('#btn_print').on('button', function() {
                     // Load print.php content into a hidden iframe
                     var iframe = $('<iframe>', {
                         id: 'printFrame',
