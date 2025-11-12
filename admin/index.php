@@ -77,30 +77,17 @@ function reverseGeocode($lat, $lon) {
     if (isset($data['address'])) {
         $address = $data['address'];
         
-        // Try to build a specific location string with COUNTRY, CITY/PROVINCE, MUNICIPALITY, BARANGAY
+        // Try to build a specific location string
         $parts = [];
-        
-        // Country
-        if (isset($address['country'])) {
-            $parts[] = $address['country'];
+        if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
+            $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
         }
-        
-        // City/Municipality
-        if (isset($address['city']) || isset($address['town']) || isset($address['village'])) {
-            $parts[] = $address['city'] ?? $address['town'] ?? $address['village'];
+        if (isset($address['city']) || isset($address['city_district'])) {
+            $parts[] = $address['city'] ?? $address['city_district'];
         }
-        
-        // State/Province
         if (isset($address['state']) || isset($address['province'])) {
             $parts[] = $address['state'] ?? $address['province'];
         }
-        
-        // Add barangay/municipality if available
-        if (isset($address['suburb'])) {
-            $parts[] = $address['suburb'];
-        }
-        
-        // Country last (always included)
         if (isset($address['country'])) {
             $parts[] = $address['country'];
         }
@@ -114,7 +101,6 @@ function reverseGeocode($lat, $lon) {
     
     return null;
 }
-
 
 // Handle 2FA verification
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_2fa'])) {
