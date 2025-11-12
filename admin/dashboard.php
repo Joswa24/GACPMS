@@ -1026,6 +1026,63 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+/* Modal styling for download confirmation */
+#downloadModal .modal-header {
+    border-radius: 15px 15px 0 0;
+}
+
+#downloadModal .modal-content {
+    border-radius: 15px;
+    border: none;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+#downloadModal .modal-body {
+    padding: 30px;
+}
+
+#downloadModal .fa-database {
+    margin-bottom: 20px;
+    opacity: 0.8;
+}
+
+#downloadModal .alert-info {
+    background-color: rgba(23, 162, 184, 0.1);
+    border-color: rgba(23, 162, 184, 0.3);
+    color: #17a2b2;
+    border-radius: 10px;
+    margin-top: 20px;
+}
+
+#downloadModal .btn-success {
+    background: linear-gradient(135deg, #1cc88a, #17a673);
+    border: none;
+    padding: 10px 20px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+#downloadModal .btn-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(28, 200, 138, 0.3);
+}
+
+#downloadModal .btn-secondary {
+    background: linear-gradient(135deg, #6c757d, #5a6268);
+    border: none;
+    padding: 10px 20px;
+    font-weight: 500;
+}
+
+/* Backup status animation */
+#backupStatus .fa-spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
     </style>
 </head>
 
@@ -1585,224 +1642,211 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
         checkNewDay(); // Initial check
         
         // Database Backup Functionality
-        let autoBackupInterval = null;
+        // Database Backup Functionality
+let autoBackupInterval = null;
 
-        // Load backup list on page load
-        loadBackupList();
+// Manual backup on button click
+ $('#backupBtn').click(function() {
+    createAndDownloadBackup();
+});
 
-        // Manual backup on button click
-        $('#backupBtn').click(function() {
-            createBackup();
-        });
-
-        // Toggle auto-backup
-        $('#autoBackupToggle').change(function() {
-            if ($(this).is(':checked')) {
-                // Start auto-backup every 30 seconds
-                autoBackupInterval = setInterval(function() {
-                    createBackup(true); // true indicates this is an automatic backup
-                }, 30000);
-                
-                // Show notification
-                showNotification('Auto-backup enabled. Database will be backed up every 30 seconds.', 'info');
-            } else {
-                // Stop auto-backup
-                if (autoBackupInterval) {
-                    clearInterval(autoBackupInterval);
-                    autoBackupInterval = null;
-                }
-                
-                // Show notification
-                showNotification('Auto-backup disabled.', 'warning');
-            }
-        });
-
-        // Function to load backup list
-        function loadBackupList() {
-            $.ajax({
-                url: 'backup.php?action=list',
-                type: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        displayBackupList(response.backups);
-                    } else {
-                        $('#backupList').html('<div class="text-center text-danger py-3"><i class="fas fa-exclamation-triangle me-2"></i>Failed to load backup list</div>');
-                    }
-                },
-                error: function() {
-                    $('#backupList').html('<div class="text-center text-danger py-3"><i class="fas fa-exclamation-triangle me-2"></i>Server error loading backup list</div>');
-                }
-            });
+// Toggle auto-backup
+ $('#autoBackupToggle').change(function() {
+    if ($(this).is(':checked')) {
+        // Start auto-backup every 30 seconds
+        autoBackupInterval = setInterval(function() {
+            createAndDownloadBackup(true); // true indicates this is an automatic backup
+        }, 30000);
+        
+        // Show notification
+        showNotification('Auto-backup enabled. Database will be backed up every 30 seconds.', 'info');
+    } else {
+        // Stop auto-backup
+        if (autoBackupInterval) {
+            clearInterval(autoBackupInterval);
+            autoBackupInterval = null;
         }
+        
+        // Show notification
+        showNotification('Auto-backup disabled.', 'warning');
+    }
+});
 
-        // Function to display backup list
-        function displayBackupList(backups) {
-            if (backups.length === 0) {
-                $('#backupList').html('<div class="text-center text-muted py-3"><i class="fas fa-info-circle me-2"></i>No backups found</div>');
-                return;
-            }
-
-            let html = '';
-            backups.forEach(function(backup) {
-                const fileSize = formatBytes(backup.size);
-                const fileDate = new Date(backup.date).toLocaleString();
+// Function to create and download backup
+function createAndDownloadBackup(isAuto = false) {
+    // Show backup status
+    $('#backupStatus').show();
+    $('#backupStatusText').html('<i class="fas fa-spinner fa-spin me-2"></i>Creating backup...');
+    
+    // Disable button during backup
+    $('#backupBtn').prop('disabled', true);
+    
+    // Make AJAX request to backup.php
+    $.ajax({
+        url: 'backup.php',
+        type: 'GET',
+        dataType: 'json',
+        xhrFields: {
+            responseType: 'blob'  // Important for handling binary data
+        },
+        success: function(data, textStatus, xhr) {
+            // Check if response is JSON (error) or blob (success)
+            if (xhr.responseJSON) {
+                // JSON response means there was an error
+                $('#backupStatusText').html(
+                    '<i class="fas fa-exclamation-triangle text-danger me-2"></i>' +
+                    'Backup failed. Please try again.'
+                );
+                showNotification('Failed to create database backup!', 'danger');
+            } else {
+                // Blob response means backup was created successfully
+                const blob = new Blob([data], { type: 'application/octet-stream' });
+                const url = window.URL.createObjectURL(blob);
                 
-                html += `
-                    <div class="backup-item">
-                        <div class="backup-info">
-                            <div class="backup-name">${backup.name}</div>
-                            <div class="backup-details">${fileSize} - ${fileDate}</div>
+                // Extract filename from Content-Disposition header if available
+                let filename = 'backup_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.sql';
+                const contentDisposition = xhr.getResponseHeader('Content-Disposition');
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+                
+                // Show success modal
+                showDownloadModal(url, filename, isAuto);
+                
+                // Update status
+                $('#backupStatusText').html(
+                    '<i class="fas fa-check-circle text-success me-2"></i>' +
+                    'Backup created successfully!'
+                );
+                
+                // Hide status after 3 seconds
+                setTimeout(function() {
+                    $('#backupStatus').fadeOut();
+                }, 3000);
+            }
+        },
+        error: function(xhr, status, error) {
+            $('#backupStatusText').html(
+                '<i class="fas fa-exclamation-triangle text-danger me-2"></i>' +
+                'Backup failed. Server error.'
+            );
+            showNotification('Failed to create database backup! Server error.', 'danger');
+        },
+        complete: function() {
+            // Re-enable button
+            $('#backupBtn').prop('disabled', false);
+        }
+    });
+}
+
+// Function to show download modal
+function showDownloadModal(url, filename, isAuto) {
+    // Create modal HTML if it doesn't exist
+    if ($('#downloadModal').length === 0) {
+        const modalHtml = `
+            <div class="modal fade" id="downloadModal" tabindex="-1" aria-labelledby="downloadModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header bg-success text-white">
+                            <h5 class="modal-title" id="downloadModalLabel">
+                                <i class="fas fa-check-circle me-2"></i>Database Backup Ready
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
-                        <div class="backup-actions">
-                            <button class="btn btn-sm btn-download" onclick="downloadBackup('${backup.name}')">
-                                <i class="fas fa-download"></i>
+                        <div class="modal-body text-center">
+                            <div class="mb-3">
+                                <i class="fas fa-database fa-3x text-success"></i>
+                            </div>
+                            <h5>Your Database is Ready for Download</h5>
+                            <p class="text-muted">The database backup has been created successfully. Click "Download" to save the backup file to your device.</p>
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>File:</strong> ${filename}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-times me-2"></i>Cancel
                             </button>
-                            <button class="btn btn-sm btn-delete" onclick="deleteBackup('${backup.name}')">
-                                <i class="fas fa-trash"></i>
+                            <button type="button" class="btn btn-success" id="confirmDownloadBtn">
+                                <i class="fas fa-download me-2"></i>Download
                             </button>
                         </div>
                     </div>
-                `;
-            });
-            
-            $('#backupList').html(html);
-        }
-
-        // Function to format bytes
-        function formatBytes(size, precision = 2) {
-            const base = Math.log(size) / Math.log(1024);
-            const suffixes = ['', 'KB', 'MB', 'GB', 'TB'];
-            
-            return Math.round(Math.pow(1024, base - Math.floor(base)), precision) + ' ' + suffixes[Math.floor(base)];
-        }
-
-        // Function to create backup
-        function createBackup(isAuto = false) {
-            // Show backup status
-            $('#backupStatus').show();
-            $('#backupStatusText').text('Creating backup...');
-            
-            // Disable button during backup
-            $('#backupBtn').prop('disabled', true);
-            
-            // Make AJAX request to backup.php
-            $.ajax({
-                url: 'backup.php',
-                type: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        $('#backupStatusText').html(
-                            '<i class="fas fa-check-circle text-success me-2"></i>' +
-                            'Backup created successfully! File: ' + response.file + 
-                            ' (' + response.size + ') at ' + response.time
-                        );
-                        
-                        // Show success notification
-                        if (!isAuto) {
-                            showNotification('Database backup created successfully!', 'success');
-                            
-                            // Trigger download of backup file
-                            downloadBackup(response.file);
-                        }
-                        
-                        // Refresh backup list
-                        loadBackupList();
-                        
-                        // Hide status after 5 seconds
-                        setTimeout(function() {
-                            $('#backupStatus').fadeOut();
-                        }, 5000);
-                    } else {
-                        $('#backupStatusText').html(
-                            '<i class="fas fa-exclamation-triangle text-danger me-2"></i>' +
-                            'Backup failed. Please try again.'
-                        );
-                        
-                        // Show error notification
-                        showNotification('Failed to create database backup!', 'danger');
-                    }
-                },
-                error: function() {
-                    $('#backupStatusText').html(
-                        '<i class="fas fa-exclamation-triangle text-danger me-2"></i>' +
-                        'Backup failed. Server error.'
-                    );
-                    
-                    // Show error notification
-                    showNotification('Failed to create database backup! Server error.', 'danger');
-                },
-                complete: function() {
-                    // Re-enable button
-                    $('#backupBtn').prop('disabled', false);
-                }
-            });
-        }
-
-        // Function to download backup
-        function downloadBackup(filename) {
-            // Create a temporary link element
-            const link = document.createElement('a');
-            link.href = 'backup.php?download=' + filename;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        // Function to delete backup
-        function deleteBackup(filename) {
-            Swal.fire({
-                title: 'Delete Backup?',
-                text: `Are you sure you want to delete "${filename}"? This action cannot be undone.`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Delete',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $.ajax({
-                        url: 'backup.php?action=delete&file=' + filename,
-                        type: 'GET',
-                        dataType: 'json',
-                        success: function(response) {
-                            if (response.success) {
-                                showNotification('Backup deleted successfully!', 'success');
-                                loadBackupList(); // Refresh the list
-                            } else {
-                                showNotification('Failed to delete backup!', 'danger');
-                            }
-                        },
-                        error: function() {
-                            showNotification('Server error while deleting backup!', 'danger');
-                        }
-                    });
-                }
-            });
-        }
-
-        // Function to show notification
-        function showNotification(message, type) {
-            // Create notification element
-            const notification = $(`
-                <div class="alert alert-${type} alert-dismissible fade show position-fixed" 
-                     style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;" role="alert">
-                    ${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
-            `);
-            
-            // Add to body
-            $('body').append(notification);
-            
-            // Auto-dismiss after 5 seconds
-            setTimeout(function() {
-                notification.alert('close');
-            }, 5000);
-        }
+            </div>
+        `;
+        $('body').append(modalHtml);
+    }
+    
+    // Update modal content with current filename
+    $('#downloadModal .alert-info').html(
+        '<i class="fas fa-info-circle me-2"></i><strong>File:</strong> ' + filename
+    );
+    
+    // Store download URL and filename in button data
+    $('#confirmDownloadBtn').data('url', url).data('filename', filename);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('downloadModal'));
+    modal.show();
+    
+    // For auto-backups, automatically download after 2 seconds
+    if (isAuto) {
+        setTimeout(function() {
+            modal.hide();
+            triggerDownload(url, filename);
+        }, 2000);
+    }
+}
+
+// Function to trigger download
+function triggerDownload(url, filename) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    showNotification('Database backup downloaded successfully!', 'success');
+}
+
+// Handle download button click in modal
+ $(document).on('click', '#confirmDownloadBtn', function() {
+    const url = $(this).data('url');
+    const filename = $(this).data('filename');
+    
+    // Trigger download
+    triggerDownload(url, filename);
+    
+    // Hide modal
+    bootstrap.Modal.getInstance(document.getElementById('downloadModal')).hide();
+});
+
+// Function to show notification
+function showNotification(message, type) {
+    // Create notification element
+    const notification = $(`
+        <div class="alert alert-${type} alert-dismissible fade show position-fixed" 
+             style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `);
+    
+    // Add to body
+    $('body').append(notification);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(function() {
+        notification.alert('close');
+    }, 5000);
+}
     </script>
 
     <script>
