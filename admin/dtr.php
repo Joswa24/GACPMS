@@ -595,7 +595,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                             }
 
                             .input-group-modern .input-group-text {
-                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
                                 border: none;
                                 color: white;
                                 font-weight: 600;
