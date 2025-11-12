@@ -1025,7 +1025,7 @@ try {
                                     <div class="location-detail-value" id="modalCountry">-</div>
                                 </div>
                                 <div class="location-detail-item">
-                                    <div class="location-detail-label">State/Province:</div>
+                                    <div class="location-detail-label">Province:</div>
                                     <div class="location-detail-value" id="modalRegion">-</div>
                                 </div>
                                 <div class="location-detail-item">
@@ -1035,6 +1035,10 @@ try {
                                 <div class="location-detail-item">
                                     <div class="location-detail-label">Town/Barangay:</div>
                                     <div class="location-detail-value" id="modalTown">-</div>
+                                </div>
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">Timezone:</div>
+                                    <div class="location-detail-value" id="modalTimezone">-</div>
                                 </div>
                             </div>
                         </div>
@@ -1249,7 +1253,7 @@ try {
                     const addr = data.address;
                     document.getElementById('modalCountry').textContent = addr.country || 'N/A';
                     document.getElementById('modalRegion').textContent = addr.state || addr.province || 'N/A';
-                    document.getElementById('modalCity').textContent = addr.city || addr.province || 'N/A';
+                    document.getElementById('modalCity').textContent = addr.city || addr.town || 'N/A';
                     document.getElementById('modalTown').textContent = addr.suburb || addr.village || addr.town || 'N/A';
                     document.getElementById('modalTimezone').textContent = data.timezone || 'N/A';
                 } else {
