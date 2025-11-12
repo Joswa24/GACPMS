@@ -1137,6 +1137,11 @@ function send2FACodeEmail($email, $verificationCode) {
                             <i class="fas fa-map-marker-alt"></i> Allow location access for enhanced security
                         </label>
                     </div>
+                    <div class="location-status" id="locationStatus">
+                        <i class="fas fa-info-circle"></i>
+                        <span id="locationStatusText">Location permission will be requested when you click Sign In</span>
+                        <div class="spinner-border spinner-border-sm location-spinner" id="locationSpinner" role="status"></div>
+                    </div>
                 </div>
 
                 <!-- Attempts Counter -->
