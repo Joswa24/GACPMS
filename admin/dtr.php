@@ -371,8 +371,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                                             <button type="submit" class="btn btn-primary btn-action">
                                                 <i class="fas fa-search me-2"></i>Search Records
                                             </button>
-                                             <button onclick="printDiv('container')" type="button" class="btn btn-success btn-action">
-                                                <i class="fas fa-print me-2"></i>Print DTR
+                                             <button onclick="printDiv('container')" type="button" class="btn btn-success ms-2">
+                                                <i class="fa fa-print me-2"></i>Print
                                             </button>
                                         </div>
                                     </div>
