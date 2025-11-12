@@ -716,6 +716,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                                     justify-content: center;
                                     box-shadow: var(--box-shadow);
                                     transition: var(--transition);
+                                    color:black;
                                 }
 
                                 .back-to-top:hover {
