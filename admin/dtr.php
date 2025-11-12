@@ -1,6 +1,5 @@
 <?php
-session_start();
-include 'create_holidays_table.php';
+session_start(); 
 if (isset($_SESSION['reload_flag'])) {
     // Unset specific session variables
     unset($_SESSION['month']); 
