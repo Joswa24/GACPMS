@@ -99,110 +99,82 @@ while ($row = $result->fetch_assoc()) {
 }
 
 // Process each day's logs to determine time in/out
-foreach ($dailyLogs as $day => $logs) {
-    // Initialize day data
-    $daysData[$day] = [
-        'time_in_am' => '',
-        'time_out_am' => '',
-        'time_in_pm' => '',
-        'time_out_pm' => '',
-        'has_in_am' => false,
-        'has_out_am' => false,
-        'has_in_pm' => false,
-        'has_out_pm' => false
-    ];
-    
-    // Special logic for both instructors and personnel based on the new rules
-    if (!empty($logs)) {
-        // Get the first log entry for the day
-        $log = $logs[0];
-        
-        $time_in = !empty($log['time_in']) && $log['time_in'] != '00:00:00' ? $log['time_in'] : null;
-        $time_out = !empty($log['time_out']) && $log['time_out'] != '00:00:00' ? $log['time_out'] : null;
+                            foreach ($dailyLogs as $day => $logs) {
+                            // Initialize day data
+                            $daysData[$day] = [
+                                'time_in_am' => '',
+                                'time_out_am' => '',
+                                'time_in_pm' => '',
+                                'time_out_pm' => '',
+                                'has_in_am' => false,
+                                'has_out_am' => false,
+                                'has_in_pm' => false,
+                                'has_out_pm' => false
+                            ];
+                            
+                            // Special logic for both instructors and personnel based on the new rules
+                            if (!empty($logs)) {
+                                // Get the first log entry for the day
+                                $log = $logs[0];
+                                
+                                $time_in = !empty($log['time_in']) && $log['time_in'] != '00:00:00' ? $log['time_in'] : null;
+                                $time_out = !empty($log['time_out']) && $log['time_out'] != '00:00:00' ? $log['time_out'] : null;
 
-        // Get hour in 24-hour format for easy comparison
-        $hour_in = $time_in ? (int)date('H', strtotime($time_in)) : null;
-        $hour_out = $time_out ? (int)date('H', strtotime($time_out)) : null;
+                                // Get hour in 24-hour format for easy comparison
+                                $hour_in = $time_in ? (int)date('H', strtotime($time_in)) : null;
+                                $hour_out = $time_out ? (int)date('H', strtotime($time_out)) : null;
 
-        // LOGIC 1: Afternoon class only (Kung time-in sa hapon)
-        if ($hour_in !== null && $hour_in >= 12) {
-            // Walay record sa aga
-            $daysData[$day]['time_in_am'] = '';
-            $daysData[$day]['time_out_am'] = '';
-            
-            // May record sa hapon
-            $daysData[$day]['time_in_pm'] = '1:00 PM'; // Automatic 1 PM login
-            if ($time_out) {
-                $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out));
-            } else {
-                $daysData[$day]['time_out_pm'] = '';
-            }
-        }
-        // LOGIC 2: Morning class only (Kung time-out sa aga)
-        elseif ($hour_out !== null && $hour_out < 12) {
-            // May record sa aga
-            if ($time_in) {
-                $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
-            } else {
-                $daysData[$day]['time_in_am'] = '';
-            }
-            $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12 PM departure
-            
-            // Walay record sa hapon
-            $daysData[$day]['time_in_pm'] = '';
-            $daysData[$day]['time_out_pm'] = '';
-        }
-        // LOGIC 3: Both morning and afternoon class (Kung time-in sa aga ug time-out sa hapon)
-        elseif ($hour_in !== null && $hour_out !== null && $hour_in < 12 && $hour_out >= 12) {
-            // May record sa aga
-            $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
-            $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12 PM departure
-            
-            // May record sa hapon
-            $daysData[$day]['time_in_pm'] = '1:00 PM'; // Automatic 1 PM login
-            $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out));
-        }
-        // EDGE CASE: Only time-in exists, no time-out.
-        elseif ($time_in && !$time_out) {
-            if ($hour_in < 12) { // Time-in is in the morning (1:00 AM - 11:59 AM)
-                // May record sa aga
-                $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
-                $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12:00 PM departure
-                
-                // Walay record sa hapon
-                $daysData[$day]['time_in_pm'] = '';
-                $daysData[$day]['time_out_pm'] = '';
-            } else { // Time-in is in the afternoon (12:00 PM - 11:59 PM)
-                // Walay record sa aga
-                $daysData[$day]['time_in_am'] = '';
-                $daysData[$day]['time_out_am'] = '';
-                
-                // May record sa hapon
-                $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in)); // Actual time-in is the PM arrival
-                $daysData[$day]['time_out_pm'] = '5:00 PM'; // Automatic 5:00 PM departure
-            }
-        }
-        // Edge Case: Only time-out exists, no time-in.
-        elseif (!$time_in && $time_out) {
-            if ($hour_out < 12) {
-                // Morning class only
-                $daysData[$day]['time_in_am'] = '';
-                $daysData[$day]['time_out_am'] = date('g:i A', strtotime($time_out));
-                $daysData[$day]['time_in_pm'] = '';
-                $daysData[$day]['time_out_pm'] = '';
-            } else {
-                // Afternoon class only
-                $daysData[$day]['time_in_am'] = '';
-                $daysData[$day]['time_out_am'] = '';
-                $daysData[$day]['time_in_pm'] = '1:00 PM';
-                $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out));
-            }
-        }
-    }
-}
+                                // CASE 1: Time in is in the morning (1:00am-11:59am) with NO time out
+                                if ($time_in && !$time_out && $hour_in < 12) {
+                                    // Set morning record
+                                    $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12:00 PM departure
+                                    // Keep afternoon blank
+                                    $daysData[$day]['time_in_pm'] = '';
+                                    $daysData[$day]['time_out_pm'] = '';
+                                }
+                                // CASE 2: Time in is in the afternoon (12:01pm-11:59pm) with NO time out
+                                elseif ($time_in && !$time_out && $hour_in >= 12) {
+                                    // Keep morning blank
+                                    $daysData[$day]['time_in_am'] = '';
+                                    $daysData[$day]['time_out_am'] = '';
+                                    // Set afternoon record
+                                    $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_pm'] = '5:00 PM'; // Automatic 1:00 PM departure
+                                }
+                                // CASE 3: Time in and time out are both in the morning (1:00am-11:59am)
+                                elseif ($time_in && $time_out && $hour_in < 12 && $hour_out < 12) {
+                                    // Set morning record
+                                    $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_am'] = date('g:i A', strtotime($time_out)); // Actual time out
+                                    // Keep afternoon blank
+                                    $daysData[$day]['time_in_pm'] = '';
+                                    $daysData[$day]['time_out_pm'] = '';
+                                }
+                                // CASE 4: Time in and time out are both in the afternoon (12:01pm-11:59pm)
+                                elseif ($time_in && $time_out && $hour_in >= 12 && $hour_out >= 12) {
+                                    // Keep morning blank
+                                    $daysData[$day]['time_in_am'] = '';
+                                    $daysData[$day]['time_out_am'] = '';
+                                    // Set afternoon record
+                                    $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out)); // Actual time out
+                                }
+                                // CASE 5: Time in is in the morning (1:00am-11:59am) and time out is in the afternoon (1:00pm-11:59pm)
+                                elseif ($time_in && $time_out && $hour_in < 12 && $hour_out >= 12) {
+                                    // Set morning record
+                                    $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+                                    $daysData[$day]['time_out_am'] = '12:00 PM'; // Automatic 12:00 PM departure
+                                    // Set afternoon record
+                                    $daysData[$day]['time_in_pm'] = '1:00 PM'; // Automatic 1:00 PM arrival
+                                    $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out)); // Actual time out
+                                }
+                            }
+                        }
 
- $stmt->close();
- $db->close();
+                        // Close the statement
+                        $stmt->close();
+                    $db->close();
 ?>
 
 <!DOCTYPE html>
