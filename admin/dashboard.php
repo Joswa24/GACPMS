@@ -1558,10 +1558,10 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
                 // Start auto-backup every 30 seconds
                 autoBackupInterval = setInterval(function() {
                     createAndDownloadBackup(true); // true indicates this is an automatic backup
-                }, 30000);
+                }, 10800000); // 30000for 30 seconds
                 
                 // Show notification
-                showNotification('Auto-backup enabled. Database will be backed up every 30 seconds.', 'info');
+                showNotification('Auto-backup enabled. Database will be backed up every 3hrs.', 'info');
             } else {
                 // Stop auto-backup
                 if (autoBackupInterval) {
