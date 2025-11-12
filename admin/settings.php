@@ -802,9 +802,9 @@ try {
         @media (max-width: 1200px) {
             .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 5%; }
             .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 12%; }
-            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 14%; }
-            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 14%; }
-            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 10%; }
+            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; }
+            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; }
+            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; }
             .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 15%; }
             .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
             .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 10%; }
@@ -812,11 +812,11 @@ try {
         }
         
         @media (max-width: 992px) {
-            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 5%; }
-            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 12%; }
-            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 13%; }
-            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 13%; }
-            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 10%; }
+            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 4%; }
+            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 11%; }
+            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; }
+            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; }
+            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; }
             .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; }
             .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
             .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 10%; }
@@ -824,11 +824,11 @@ try {
         }
         
         @media (max-width: 768px) {
-            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 5%; }
-            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 12%; }
-            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; }
-            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; }
-            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 10%; }
+            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 4%; }
+            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 11%; }
+            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 11%; }
+            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 11%; }
+            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; }
             .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; }
             .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
             .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 11%; }
@@ -1478,40 +1478,40 @@ try {
         }, 30000);
     });
     // IP Address toggle function
-$(document).on('click', '.toggle-ip', function() {
-    const button = $(this);
-    const targetId = button.data('target');
-    const actualIp = button.data('ip');
-    const ipSpan = $('#' + targetId);
-    const icon = button.find('i');
-    
-    if (ipSpan.hasClass('encrypted-ip')) {
-        // Show actual IP
-        ipSpan.removeClass('encrypted-ip')
-               .addClass('actual-ip')
-               .text(actualIp);
-        icon.removeClass('fa-eye').addClass('fa-eye-slash');
-        button.addClass('btn-warning').removeClass('ip-toggle');
+    $(document).on('click', '.toggle-ip', function() {
+        const button = $(this);
+        const targetId = button.data('target');
+        const actualIp = button.data('ip');
+        const ipSpan = $('#' + targetId);
+        const icon = button.find('i');
         
-        // Auto hide after 10 seconds (longer than password for better readability)
-        setTimeout(() => {
-            if (ipSpan.hasClass('actual-ip')) {
-                ipSpan.removeClass('actual-ip')
-                       .addClass('encrypted-ip')
-                       .html('••••••••••••••••');
-                icon.removeClass('fa-eye-slash').addClass('fa-eye');
-                button.removeClass('btn-warning').addClass('ip-toggle');
-            }
-        }, 10000);
-    } else {
-        // Hide IP
-        ipSpan.removeClass('actual-ip')
-               .addClass('encrypted-ip')
-               .html('••••••••••••••••');
-        icon.removeClass('fa-eye-slash').addClass('fa-eye');
-        button.removeClass('btn-warning').addClass('ip-toggle');
-    }
-});
+        if (ipSpan.hasClass('encrypted-ip')) {
+            // Show actual IP
+            ipSpan.removeClass('encrypted-ip')
+                .addClass('actual-ip')
+                .text(actualIp);
+            icon.removeClass('fa-eye').addClass('fa-eye-slash');
+            button.addClass('btn-warning').removeClass('ip-toggle');
+            
+            // Auto hide after 10 seconds (longer than password for better readability)
+            setTimeout(() => {
+                if (ipSpan.hasClass('actual-ip')) {
+                    ipSpan.removeClass('actual-ip')
+                        .addClass('encrypted-ip')
+                        .html('••••••••••••••••');
+                    icon.removeClass('fa-eye-slash').addClass('fa-eye');
+                    button.removeClass('btn-warning').addClass('ip-toggle');
+                }
+            }, 10000);
+        } else {
+            // Hide IP
+            ipSpan.removeClass('actual-ip')
+                .addClass('encrypted-ip')
+                .html('••••••••••••••••');
+            icon.removeClass('fa-eye-slash').addClass('fa-eye');
+            button.removeClass('btn-warning').addClass('ip-toggle');
+        }
+    });
     </script>
 </body>
 </html>
