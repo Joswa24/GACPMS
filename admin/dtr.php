@@ -1420,6 +1420,80 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                     <?php unset($_SESSION['message']); ?>
                 <?php endif; ?>
             });
+            function printDiv(divId) {
+    // Create a new window for printing
+    var printWindow = window.open('', '_blank');
+    
+    // Get the div content
+    var printContents = document.getElementById(divId).innerHTML;
+    
+    // Write the print content
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Print DTR</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 20px;
+                }
+                .container {
+                    width: 100%;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    border: 1px solid #000;
+                    padding: 20px;
+                    box-sizing: border-box;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 20px;
+                }
+                th, td {
+                    border: 1px solid #000;
+                    padding: 5px;
+                    text-align: center;
+                }
+                .header {
+                    text-align: center;
+                    margin-bottom: 20px;
+                }
+                .header h1 {
+                    font-size: 20px;
+                    text-decoration: underline;
+                }
+                .info-table {
+                    width: 100%;
+                    margin-bottom: 10px;
+                }
+                .info-table th, .info-table td {
+                    border: none;
+                    padding: 5px;
+                }
+                @media print {
+                    body { margin: 0; }
+                    .container { border: none; padding: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            ${printContents}
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+    
+    // Wait for content to load then print
+    printWindow.onload = function() {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+    };
+}
         </script>
 
         <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="fas fa-arrow-up"></i></a>
