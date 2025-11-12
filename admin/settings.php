@@ -1013,6 +1013,10 @@ try {
                                     <div class="location-detail-value" id="modalSource">-</div>
                                 </div>
                                 <div class="location-detail-item">
+                                    <div class="location-detail-label">IP Address:</div>
+                                    <div class="location-detail-value" id="modalIp">-</div>
+                                </div>
+                                <div class="location-detail-item">
                                     <div class="location-detail-label">Coordinates:</div>
                                     <div class="location-detail-value" id="modalCoords">-</div>
                                 </div>
@@ -1025,7 +1029,7 @@ try {
                                     <div class="location-detail-value" id="modalCountry">-</div>
                                 </div>
                                 <div class="location-detail-item">
-                                    <div class="location-detail-label">Province:</div>
+                                    <div class="location-detail-label">State/Province:</div>
                                     <div class="location-detail-value" id="modalRegion">-</div>
                                 </div>
                                 <div class="location-detail-item">
