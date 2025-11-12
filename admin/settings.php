@@ -1012,10 +1012,10 @@ try {
                                     <div class="location-detail-label">Source:</div>
                                     <div class="location-detail-value" id="modalSource">-</div>
                                 </div>
-                                <div class="location-detail-item">
+                                <!-- <div class="location-detail-item">
                                     <div class="location-detail-label">IP Address:</div>
                                     <div class="location-detail-value" id="modalIp">-</div>
-                                </div>
+                                </div> -->
                                 <div class="location-detail-item">
                                     <div class="location-detail-label">Coordinates:</div>
                                     <div class="location-detail-value" id="modalCoords">-</div>
@@ -1029,21 +1029,21 @@ try {
                                     <div class="location-detail-value" id="modalCountry">-</div>
                                 </div>
                                 <div class="location-detail-item">
-                                    <div class="location-detail-label">State/Province:</div>
+                                    <div class="location-detail-label">City/Province:</div>
                                     <div class="location-detail-value" id="modalRegion">-</div>
                                 </div>
                                 <div class="location-detail-item">
-                                    <div class="location-detail-label">City:</div>
+                                    <div class="location-detail-label">Municipality:</div>
                                     <div class="location-detail-value" id="modalCity">-</div>
                                 </div>
-                                <div class="location-detail-item">
+                                <!-- <div class="location-detail-item">
                                     <div class="location-detail-label">Town/Barangay:</div>
                                     <div class="location-detail-value" id="modalTown">-</div>
-                                </div>
-                                <div class="location-detail-item">
+                                </div> -->
+                                <!-- <div class="location-detail-item">
                                     <div class="location-detail-label">Timezone:</div>
                                     <div class="location-detail-value" id="modalTimezone">-</div>
-                                </div>
+                                </div> -->
                             </div>
                         </div>
                         <div class="col-md-6">
