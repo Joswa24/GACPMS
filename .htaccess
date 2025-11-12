@@ -1,25 +1,75 @@
+# ======= URL REWRITING =======
+
+# Turn on the rewrite engine
 RewriteEngine On
 
-# Remove duplicate RewriteEngine and fix index.php redirect
+# 1. Redirect direct .php requests to the clean URL (prevents duplicate content)
+RewriteCond %{THE_REQUEST} \s/([^/]+)\.php[\s?] [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+RewriteCond %{THE_REQUEST} \s/admin/([^/]+)\.php[\s?] [NC]
+RewriteRule ^ admin/%1 [R=301,L]
+RewriteCond %{THE_REQUEST} \s/instructor/([^/]+)\.php[\s?] [NC]
+RewriteRule ^ instructor/%1 [R=301,L]
+
+# 2. Specific rules for admin pages (based on your sidebar navigation)
+RewriteRule ^admin/dashboard/?$ admin/dashboard.php [NC,L]
+RewriteRule ^admin/department/?$ admin/department.php [NC,L]
+RewriteRule ^admin/room/?$ admin/room.php [NC,L]
+RewriteRule ^admin/role/?$ admin/role.php [NC,L]
+RewriteRule ^admin/personell/?$ admin/personell.php [NC,L]
+RewriteRule ^admin/personell_logs/?$ admin/personell_logs.php [NC,L]
+RewriteRule ^admin/visitor/?$ admin/visitor.php [NC,L]
+RewriteRule ^admin/visitor_logs/?$ admin/visitor_logs.php [NC,L]
+RewriteRule ^admin/students/?$ admin/students.php [NC,L]
+RewriteRule ^admin/instructors/?$ admin/instructors.php [NC,L]
+RewriteRule ^admin/instructor_accounts/?$ admin/instructor_accounts.php [NC,L]
+RewriteRule ^admin/manage_subjects/?$ admin/manage_subjects.php [NC,L]
+RewriteRule ^admin/dtr/?$ admin/dtr.php [NC,L]
+RewriteRule ^admin/student_logs/?$ admin/student_logs.php [NC,L]
+RewriteRule ^admin/attendance_log/?$ admin/attendance_log.php [NC,L]
+RewriteRule ^admin/room_schedule/?$ admin/room_schedule.php [NC,L]
+RewriteRule ^admin/settings/?$ admin/settings.php [NC,L]
+RewriteRule ^instructor/dashboard/?$ instructor/dashboard.php [NC,L]
+RewriteRule ^instructor/attendance/?$ instructor/attendance.php [NC,L]
+RewriteRule ^instructor/index/?$ instructor/index.php [NC,L]
+RewriteRule ^instructor/forgot_password/?$ instructor/forgot_password.php [NC,L]
+RewriteRule ^instructor/schedule/?$ instructor/schedule.php [NC,L]
+
+# 3. Redirect requests for index.php to the root
 RewriteRule ^index\.php$ / [R=301,L]
 
-# Hide .php extensions
+# 4. Internally rewrite clean URLs to the .php file
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^([^/]+)$ $1.php [L]
+
+# 5. Handle admin subdirectory clean URLs
+RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
-RewriteRule ^(.*)$ $1.php [L]
+RewriteRule ^admin/([^/]+)$ admin/$1.php [L]
 
 # ======= SECURITY HEADERS & PROTECTION =======
 
-# Enable HSTS Header
-Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+# Enable HSTS Header (uncomment if you have a valid SSL certificate)
+# Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
-# Additional Security Headers
+# Additional Security Headers (non-duplicated)
 Header always set X-Content-Type-Options "nosniff"
 Header always set X-Frame-Options "SAMEORIGIN"
 Header always set X-XSS-Protection "1; mode=block"
 Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
 
-# Block common attacks
+# REMOVED CSP HEADER - Let PHP handle CSP via meta tag
+# Header always set Content-Security-Policy "..."
+
+# Disable server signature
+ServerSignature Off
+
+# Block common attacks in query string
 RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
 RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
 RewriteCond %{QUERY_STRING} (javascript:) [NC,OR]
@@ -27,34 +77,23 @@ RewriteCond %{QUERY_STRING} (<script) [NC,OR]
 RewriteCond %{QUERY_STRING} (document\.cookie) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
-# Block SQL injections
+# Block SQL injections in query string
 RewriteCond %{QUERY_STRING} (union.*select) [NC,OR]
 RewriteCond %{QUERY_STRING} (insert.*into) [NC,OR]
 RewriteCond %{QUERY_STRING} (drop.*table) [NC,OR]
 RewriteCond %{QUERY_STRING} (update.*set) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
-# Block file inclusion attacks
+# Block file inclusion attacks in query string
 RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
 RewriteRule ^(.*)$ - [F,L]
 
-# Disable server signature
-ServerSignature Off
-
-# Prevent clickjacking
-Header always set X-Frame-Options "SAMEORIGIN"
-
-# Prevent MIME type sniffing
-Header always set X-Content-Type-Options "nosniff"
-
-# Enable XSS protection
-Header always set X-XSS-Protection "1; mode=block"
-# Block direct access to recaptcha config files
+# Protect sensitive files
 <Files "recaptcha.php">
     Order Allow,Deny
     Deny from all
 </Files>
-# Protect sensitive files
+
 <FilesMatch "\.(env|log|ini|conf|sql)$">
     Deny from all
 </FilesMatch>
@@ -62,3 +101,108 @@ Header always set X-XSS-Protection "1; mode=block"
 <FilesMatch "^\.">
     Deny from all
 </FilesMatch>
+
+# Protect admin directory
+<FilesMatch "\.(php)$">
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Allow from all
+    </IfModule>
+</FilesMatch>
+# ======= SERVER HARDENING =======
+
+# Disable directory listing
+Options -Indexes
+
+# Disable server signature
+ServerSignature Off
+
+# Disable ETags to prevent file enumeration
+FileETag None
+Header unset ETag
+
+# Disable TRACE and TRACK methods to prevent XST attacks
+RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK)
+RewriteRule .* - [F]
+
+# Prevent access to version control directories
+RewriteRule ^(\.git|\.svn|\.hg|\.bzr) - [F,L]
+
+# Block access to backup and source files
+<FilesMatch "(\.(bak|config|sql|fla|psd|ini|log|sh|inc|swp|dist)|~)$">
+    Order allow,deny
+    Deny from all
+    Satisfy All
+</FilesMatch>
+
+# Cache control for static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/pdf "access plus 1 month"
+    ExpiresByType text/javascript "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType application/x-javascript "access plus 1 month"
+    ExpiresByType application/x-shockwave-flash "access plus 1 month"
+    ExpiresByType image/x-icon "access plus 1 year"
+    ExpiresDefault "access plus 2 days"
+</IfModule>
+
+# Gzip compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+    AddOutputFilterByType DEFLATE application/json
+</IfModule>
+
+# Additional security measures
+<IfModule mod_headers.c>
+    # Prevent MIME type sniffing
+    Header always set X-Content-Type-Options "nosniff"
+    
+    # Clickjacking protection
+    Header always set X-Frame-Options "SAMEORIGIN"
+    
+    # XSS protection
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # Referrer policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # Permissions policy
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+    
+    # Remove X-Powered-By header
+    Header unset X-Powered-By
+    
+    # Remove Server header
+    Header always unset Server
+</IfModule>
+
+# Block access to sensitive directories
+RewriteRule ^(includes|config|logs|temp)/ - [F,L]
+
+# Rate limiting (requires mod_security or similar)
+# This is a basic example - consider using mod_evasive for proper rate limiting
+
+# Password protect sensitive directories (optional)
+#<Files "admin">
+#    AuthType Basic
+#    AuthName "Restricted Area"
+#    AuthUserFile /path/to/.htpasswd
+#    Require valid-user
+#</Files>
