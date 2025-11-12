@@ -1583,65 +1583,43 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
             // Disable button during backup
             $('#backupBtn').prop('disabled', true);
             
-            // Make AJAX request to backup.php
-            $.ajax({
-                url: 'backup.php',
-                type: 'GET',
-                dataType: 'json',
-                xhrFields: {
-                    responseType: 'blob'  // Important for handling binary data
-                },
-                success: function(data, textStatus, xhr) {
-                    // Check if response is JSON (error) or blob (success)
-                    if (xhr.responseJSON) {
-                        // JSON response means there was an error
-                        $('#backupStatusText').html(
-                            '<i class="fas fa-exclamation-triangle text-danger me-2"></i>' +
-                            'Backup failed. Please try again.'
-                        );
-                        showNotification('Failed to create database backup!', 'danger');
-                    } else {
-                        // Blob response means backup was created successfully
-                        const blob = new Blob([data], { type: 'application/octet-stream' });
-                        const url = window.URL.createObjectURL(blob);
-                        
-                        // Extract filename from Content-Disposition header if available
-                        let filename = 'backup_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.sql';
-                        const contentDisposition = xhr.getResponseHeader('Content-Disposition');
-                        if (contentDisposition) {
-                            const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-                            if (filenameMatch) {
-                                filename = filenameMatch[1];
-                            }
-                        }
-                        
-                        // Show success modal
-                        showDownloadModal(url, filename, isAuto);
-                        
-                        // Update status
-                        $('#backupStatusText').html(
-                            '<i class="fas fa-check-circle text-success me-2"></i>' +
-                            'Backup created successfully!'
-                        );
-                        
-                        // Hide status after 3 seconds
-                        setTimeout(function() {
-                            $('#backupStatus').fadeOut();
-                        }, 3000);
-                    }
-                },
-                error: function(xhr, status, error) {
-                    $('#backupStatusText').html(
-                        '<i class="fas fa-exclamation-triangle text-danger me-2"></i>' +
-                        'Backup failed. Server error.'
-                    );
-                    showNotification('Failed to create database backup! Server error.', 'danger');
-                },
-                complete: function() {
-                    // Re-enable button
-                    $('#backupBtn').prop('disabled', false);
-                }
-            });
+            // Create a temporary iframe for download
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+            
+            // Generate filename
+            const filename = 'backup_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.sql';
+            
+            // Create the download URL
+            const downloadUrl = 'backup.php?t=' + Date.now();
+            
+            // Show success modal immediately (since download will start)
+            showDownloadModal(downloadUrl, filename, isAuto);
+            
+            // Start the download
+            setTimeout(() => {
+                iframe.src = downloadUrl;
+                
+                // Update status
+                $('#backupStatusText').html(
+                    '<i class="fas fa-check-circle text-success me-2"></i>' +
+                    'Backup created successfully!'
+                );
+                
+                // Hide status after 3 seconds
+                setTimeout(function() {
+                    $('#backupStatus').fadeOut();
+                }, 3000);
+                
+                // Re-enable button
+                $('#backupBtn').prop('disabled', false);
+                
+                // Clean up iframe after download
+                setTimeout(() => {
+                    document.body.removeChild(iframe);
+                }, 5000);
+            }, 1000);
         }
 
         // Function to show download modal
@@ -1663,7 +1641,7 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
                                         <i class="fas fa-database fa-3x text-success"></i>
                                     </div>
                                     <h5>Your Database is Ready for Download</h5>
-                                    <p class="text-muted">The database backup has been created successfully. Click "Download" to save backup file to your device.</p>
+                                    <p class="text-muted">The database backup has been created successfully. Click "Download" to save the backup file to your device.</p>
                                     <div class="alert alert-info">
                                         <i class="fas fa-info-circle me-2"></i>
                                         <strong>File:</strong> ${filename}
@@ -1700,22 +1678,9 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
             if (isAuto) {
                 setTimeout(function() {
                     modal.hide();
-                    triggerDownload(url, filename);
+                    window.open(url, '_blank');
                 }, 2000);
             }
-        }
-
-        // Function to trigger download
-        function triggerDownload(url, filename) {
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            
-            showNotification('Database backup downloaded successfully!', 'success');
         }
 
         // Handle download button click in modal
@@ -1724,10 +1689,12 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
             const filename = $(this).data('filename');
             
             // Trigger download
-            triggerDownload(url, filename);
+            window.open(url, '_blank');
             
             // Hide modal
             bootstrap.Modal.getInstance(document.getElementById('downloadModal')).hide();
+            
+            showNotification('Database backup downloaded successfully!', 'success');
         });
 
         // Function to show notification
@@ -1735,7 +1702,7 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
             // Create notification element
             const notification = $(`
                 <div class="alert alert-${type} alert-dismissible fade show position-fixed" 
-                     style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;" role="alert">
+                    style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;" role="alert">
                     ${message}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>

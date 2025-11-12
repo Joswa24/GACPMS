@@ -1,26 +1,22 @@
 <?php
-// Include connection
-if (isset($_SESSION['success_message'])) {
-    echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
-    unset($_SESSION['success_message']);
-}
-if (isset($_SESSION['error_message'])) {
-    echo '<div class="alert alert-danger">' . $_SESSION['error_message'] . '</div>';
-    unset($_SESSION['error_message']);
-}
+session_start();
 
 // Check if user is logged in and 2FA verified
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
     !isset($_SESSION['2fa_verified']) || $_SESSION['2fa_verified'] !== true) {
-    header('Location: index.php');
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Unauthorized access']);
     exit();
 }
+
 // Include connection
 include '../connection.php';
 
 // Check if connection is successful
 if (!$db) {
-    die("Database connection failed: " . mysqli_connect_error());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Database connection failed']);
+    exit();
 }
 
 // Function to perform database backup
@@ -52,38 +48,42 @@ function backupDatabase($db) {
         // Get table data
         $result = $db->query("SELECT * FROM `$table`");
         $num_fields = $result->field_count;
+        $num_rows = $result->num_rows;
         
-        $backup_content .= "-- Dumping data for table `$table`\n";
-        
-        while ($row = $result->fetch_row()) {
-            $backup_content .= "INSERT INTO `$table` VALUES (";
+        if ($num_rows > 0) {
+            $backup_content .= "-- Dumping data for table `$table`\n";
             
-            for ($j = 0; $j < $num_fields; $j++) {
-                $row[$j] = addslashes($row[$j]);
-                $row[$j] = str_replace("\n", "\\n", $row[$j]);
+            while ($row = $result->fetch_row()) {
+                $backup_content .= "INSERT INTO `$table` VALUES (";
                 
-                if (isset($row[$j])) {
-                    $backup_content .= '"' . $row[$j] . '"';
-                } else {
-                    $backup_content .= '""';
+                $values = array();
+                for ($j = 0; $j < $num_fields; $j++) {
+                    $value = $row[$j];
+                    
+                    if ($value === null) {
+                        $values[] = 'NULL';
+                    } else {
+                        $value = addslashes($value);
+                        $value = str_replace("\n", "\\n", $value);
+                        $value = str_replace("\r", "\\r", $value);
+                        $value = str_replace("\t", "\\t", $value);
+                        $values[] = '"' . $value . '"';
+                    }
                 }
                 
-                if ($j < ($num_fields - 1)) {
-                    $backup_content .= ',';
-                }
+                $backup_content .= implode(', ', $values);
+                $backup_content .= ");\n";
             }
             
-            $backup_content .= ");\n";
+            $backup_content .= "\n\n";
         }
-        
-        $backup_content .= "\n\n";
     }
     
     return $backup_content;
 }
 
-// Check if this is an AJAX request
-if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+// Handle the backup request
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     try {
         // Perform backup
         $backup_content = backupDatabase($db);
@@ -97,12 +97,15 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQU
         header('Content-Length: ' . strlen($backup_content));
         header('Cache-Control: no-cache, must-revalidate');
         header('Pragma: no-cache');
+        header('Expires: 0');
         
-        // Output backup content
+        // Output the backup content
         echo $backup_content;
         exit;
+        
     } catch (Exception $e) {
-        // Return error response
+        // Return error
+        http_response_code(500);
         header('Content-Type: application/json');
         echo json_encode([
             'success' => false,
@@ -112,7 +115,8 @@ if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQU
     }
 }
 
-// If not AJAX, redirect back to dashboard
-header('Location: dashboard.php');
+// If not GET request, return error
+http_response_code(405);
+echo json_encode(['success' => false, 'message' => 'Method not allowed']);
 exit;
 ?>
