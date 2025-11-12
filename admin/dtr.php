@@ -582,7 +582,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                                     $daysData[$day]['time_out_am'] = '';
                                     // Set afternoon record
                                     $daysData[$day]['time_in_pm'] = date('g:i A', strtotime($time_in));
-                                    $daysData[$day]['time_out_pm'] = '1:00 PM'; // Automatic 1:00 PM departure
+                                    $daysData[$day]['time_out_pm'] = '5:00 PM'; // Automatic 1:00 PM departure
                                 }
                                 // CASE 3: Time in and time out are both in the morning (1:00am-11:59am)
                                 elseif ($time_in && $time_out && $hour_in < 12 && $hour_out < 12) {
@@ -610,22 +610,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                                     // Set afternoon record
                                     $daysData[$day]['time_in_pm'] = '1:00 PM'; // Automatic 1:00 PM arrival
                                     $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out)); // Actual time out
-                                }
-                                // CASE 6: Only time out exists, no time in
-                                elseif (!$time_in && $time_out) {
-                                    if ($hour_out < 12) {
-                                        // Morning time out only
-                                        $daysData[$day]['time_in_am'] = '';
-                                        $daysData[$day]['time_out_am'] = date('g:i A', strtotime($time_out));
-                                        $daysData[$day]['time_in_pm'] = '';
-                                        $daysData[$day]['time_out_pm'] = '';
-                                    } else {
-                                        // Afternoon time out only
-                                        $daysData[$day]['time_in_am'] = '';
-                                        $daysData[$day]['time_out_am'] = '';
-                                        $daysData[$day]['time_in_pm'] = '1:00 PM'; // Default 1:00 PM arrival
-                                        $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out));
-                                    }
                                 }
                             }
                         }
