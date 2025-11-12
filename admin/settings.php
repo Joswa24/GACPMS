@@ -1013,10 +1013,6 @@ try {
                                     <div class="location-detail-value" id="modalSource">-</div>
                                 </div>
                                 <div class="location-detail-item">
-                                    <div class="location-detail-label">IP Address:</div>
-                                    <div class="location-detail-value" id="modalIp">-</div>
-                                </div>
-                                <div class="location-detail-item">
                                     <div class="location-detail-label">Coordinates:</div>
                                     <div class="location-detail-value" id="modalCoords">-</div>
                                 </div>
@@ -1039,10 +1035,6 @@ try {
                                 <div class="location-detail-item">
                                     <div class="location-detail-label">Town/Barangay:</div>
                                     <div class="location-detail-value" id="modalTown">-</div>
-                                </div>
-                                <div class="location-detail-item">
-                                    <div class="location-detail-label">Timezone:</div>
-                                    <div class="location-detail-value" id="modalTimezone">-</div>
                                 </div>
                             </div>
                         </div>
@@ -1257,7 +1249,7 @@ try {
                     const addr = data.address;
                     document.getElementById('modalCountry').textContent = addr.country || 'N/A';
                     document.getElementById('modalRegion').textContent = addr.state || addr.province || 'N/A';
-                    document.getElementById('modalCity').textContent = addr.city || addr.town || 'N/A';
+                    document.getElementById('modalCity').textContent = addr.city || addr.province || 'N/A';
                     document.getElementById('modalTown').textContent = addr.suburb || addr.village || addr.town || 'N/A';
                     document.getElementById('modalTimezone').textContent = data.timezone || 'N/A';
                 } else {
