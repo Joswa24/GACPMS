@@ -336,7 +336,7 @@ if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
         $db->begin_transaction();
 
         // Get session information
-        $original_time_in = $_SESSION['instructor_login_time'] ?? date('Y-m-d H:i:s');
+        $original_time_in = $_SESSION['instructor_login_time'] = date('Y-m-d H:i:s');
         $time_in_formatted = date('H:i:s', strtotime($original_time_in));
         $time_out_formatted = date('H:i:s');
         $current_date = date('Y-m-d');
