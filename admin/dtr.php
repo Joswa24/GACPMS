@@ -597,7 +597,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                             .input-group-modern .input-group-text {
                                 background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
                                 border: none;
-                                color: white;
+                                color: #5c95e9ff;
                                 font-weight: 600;
                                 padding: 12px 16px;
                             }
@@ -1392,7 +1392,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                 // Close toast
                 window.closeToast = function(toastId) {
                     const toast = $('#' + toastId);
-                    toast.fadeOut(300, function() {
+                    toast.fadeOut(600, function() {
                         $(this).remove();
                     });
                 };
