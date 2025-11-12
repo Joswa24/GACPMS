@@ -302,88 +302,103 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
         #suggestions div:hover {
             background-color: #e0e0e0;
         }
-    </style>
-            <div class="container-fluid pt-4 px-4">
-            <div class="col-sm-12 col-xl-12">
-                <div class="card modern-card">
-                    <div class="card-header modern-card-header d-flex justify-content-between align-items-center">
-                        <div class="header-content">
-                            <h4 class="mb-1"><i class="fas fa-file-alt me-2"></i>Generate DTR</h4>
-                            <p class="mb-0 text-muted small">Generate and print daily time records</p>
+        </style>
+                <div class="container-fluid pt-4 px-4">
+                <div class="col-sm-12 col-xl-12">
+                    <div class="card modern-card">
+                        <div class="card-header modern-card-header d-flex justify-content-between align-items-center">
+                            <div class="header-content">
+                                <h4 class="mb-1"><i class="fas fa-file-alt me-2"></i>Generate DTR</h4>
+                                <p class="mb-0 text-muted small">Generate and print daily time records</p>
+                            </div>
+                            <div class="header-actions">
+                                <button type="button" class="btn btn-warning btn-modern" data-bs-toggle="modal" data-bs-target="#holidayModal">
+                                    <i class="fas fa-calendar-plus me-2"></i>Add Holiday
+                                </button>
+                                <button type="button" class="btn btn-info btn-modern ms-2" data-bs-toggle="modal" data-bs-target="#holidaysListModal">
+                                    <i class="fas fa-list me-2"></i>View Holidays
+                                </button>
+                            </div>
                         </div>
-                        <div class="header-actions">
-                            <button type="button" class="btn btn-warning btn-modern" data-bs-toggle="modal" data-bs-target="#holidayModal">
-                                <i class="fas fa-calendar-plus me-2"></i>Add Holiday
-                            </button>
-                            <button type="button" class="btn btn-info btn-modern ms-2" data-bs-toggle="modal" data-bs-target="#holidaysListModal">
-                                <i class="fas fa-list me-2"></i>View Holidays
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <form id="filterForm" method="POST" action="">
-                            <div class="row g-4 align-items-end">
-                                <div class="col-lg-4">
-                                    <div class="form-group">
-                                        <label class="form-label fw-semibold mb-2">Search Personnel</label>
-                                        <div class="search-container">
+                        <div class="card-body">
+                            <form id="filterForm" method="POST" action="">
+                                <div class="row g-4 align-items-end">
+                                    <div class="col-lg-4">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold mb-2">Search Personnel</label>
+                                            <div class="search-container">
+                                                <div class="input-group input-group-modern">
+                                                    <span class="input-group-text">
+                                                        <i class="fas fa-search"></i>
+                                                    </span>
+                                                    <input type="text" name="pname" class="form-control form-control-modern" 
+                                                        id="searchInput" autocomplete="off" placeholder="Type name to search...">
+                                                    <input hidden type="text" id="pername" name="pername">
+                                                    <input hidden type="text" id="perid" name="perid">
+                                                    <input hidden type="text" id="persontype" name="persontype">
+                                                </div>
+                                                <div id="suggestions" class="suggestions-dropdown"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-3">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold mb-2">Select Month</label>
                                             <div class="input-group input-group-modern">
                                                 <span class="input-group-text">
-                                                    <i class="fas fa-search"></i>
+                                                    <i class="fas fa-calendar"></i>
                                                 </span>
-                                                <input type="text" name="pname" class="form-control form-control-modern" 
-                                                    id="searchInput" autocomplete="off" placeholder="Type name to search...">
-                                                <input hidden type="text" id="pername" name="pername">
-                                                <input hidden type="text" id="perid" name="perid">
-                                                <input hidden type="text" id="persontype" name="persontype">
+                                                <select class="form-select form-select-modern" id="months" name="month">
+                                                    <option value="<?php echo date('F'); ?>" selected><?php echo date('F'); ?></option>
+                                                    <option value="January">January</option>
+                                                    <option value="February">February</option>
+                                                    <option value="March">March</option>
+                                                    <option value="April">April</option>
+                                                    <option value="May">May</option>
+                                                    <option value="June">June</option>
+                                                    <option value="July">July</option>
+                                                    <option value="August">August</option>
+                                                    <option value="September">September</option>
+                                                    <option value="October">October</option>
+                                                    <option value="November">November</option>
+                                                    <option value="December">December</option>
+                                                </select>
                                             </div>
-                                            <div id="suggestions" class="suggestions-dropdown"></div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-5">
+                                        <div class="d-flex gap-3 justify-content-end">
+                                            <button type="submit" class="btn btn-primary btn-action">
+                                                <i class="fas fa-search me-2"></i>Search Records
+                                            </button>
+                                            <button onclick="printDiv('container')" type="button" class="btn btn-success btn-action">
+                                                <i class="fas fa-print me-2"></i>Print DTR
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-lg-3">
-                                    <div class="form-group">
-                                        <label class="form-label fw-semibold mb-2">Select Month</label>
-                                        <div class="input-group input-group-modern">
-                                            <span class="input-group-text">
-                                                <i class="fas fa-calendar"></i>
-                                            </span>
-                                            <select class="form-select form-select-modern" id="months" name="month">
-                                                <option value="<?php echo date('F'); ?>" selected><?php echo date('F'); ?></option>
-                                                <option value="January">January</option>
-                                                <option value="February">February</option>
-                                                <option value="March">March</option>
-                                                <option value="April">April</option>
-                                                <option value="May">May</option>
-                                                <option value="June">June</option>
-                                                <option value="July">July</option>
-                                                <option value="August">August</option>
-                                                <option value="September">September</option>
-                                                <option value="October">October</option>
-                                                <option value="November">November</option>
-                                                <option value="December">December</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-lg-5">
-                                    <div class="d-flex gap-3 justify-content-end">
-                                        <button type="submit" class="btn btn-primary btn-action">
-                                            <i class="fas fa-search me-2"></i>Search Records
-                                        </button>
-                                        <button onclick="printDiv('container')" type="button" class="btn btn-success btn-action">
-                                            <i class="fas fa-print me-2"></i>Print DTR
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </form>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
                         <div class="table-responsive">
                             <style>
+                                :root {
+                                    --primary-color: #e1e7f0ff;
+                                    --secondary-color: #b0caf0ff;
+                                    --accent-color: #f3f5fcff;
+                                    --icon-color: #5c95e9ff;
+                                    --light-bg: #f8f9fc;
+                                    --dark-text: #5a5c69;
+                                    --warning-color: #f6c23e;
+                                    --danger-color: #e74a3b;
+                                    --success-color: #1cc88a;
+                                    --info-color: #36b9cc;
+                                    --border-radius: 15px;
+                                    --box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+                                    --transition: all 0.3s ease;
+                                }
                                 .container {
                                     width: 100%;
                                     max-width: 800px;
@@ -450,7 +465,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_holiday'])) {
                             }
 
                             .modern-card-header {
-                                background: linear-gradient(135deg, #36b9cc, #2e59d9);
+                                background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
                                 color: white;
                                 border: none;
                                 padding: 1.5rem 2rem;
