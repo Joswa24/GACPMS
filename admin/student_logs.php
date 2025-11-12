@@ -3,7 +3,6 @@ session_start();
 include 'header.php';
 include '../connection.php';
 
-
 // Create the dedicated table if it doesn't exist
 $createTableQuery = "
 CREATE TABLE IF NOT EXISTS instructor_attendance_admin (
