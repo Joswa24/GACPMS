@@ -531,6 +531,23 @@ if (isset($_GET['edit'])) {
             margin-top: 0.25rem;
             display: block;
         }
+        .back-to-top {
+            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color)) !important;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--box-shadow);
+            transition: var(--transition);
+        }
+
+        .back-to-top:hover {
+            transform: translateY(-3px);
+        }
+
     </style>
 </head>
 
@@ -1250,7 +1267,7 @@ if (isset($_GET['edit'])) {
 
             <?php include 'footer.php'; ?>
         </div>
-         <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top" style="background-color: #87abe0ff"><i class="bi bi-arrow-up" style="background-color: #87abe0ff"></i></a>
+         <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top"><i class="fas fa-arrow-up"></i></a></a>
     </div>
 
     <!-- JavaScript Libraries -->
