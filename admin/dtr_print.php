@@ -99,6 +99,7 @@ while ($row = $result->fetch_assoc()) {
 }
 
 // Process each day's logs to determine time in/out
+// Process each day's logs to determine time in/out
 foreach ($dailyLogs as $day => $logs) {
     // Initialize day data
     $daysData[$day] = [
@@ -112,92 +113,105 @@ foreach ($dailyLogs as $day => $logs) {
         'has_out_pm' => false
     ];
     
-    // Process each log entry for the day
-    foreach ($logs as $log) {
+    // Special handling for instructors (simplified logic)
+    if ($personType === 'instructor' && !empty($logs)) {
+        // Instructors have only one time in and one time out per day
+        $log = $logs[0]; // Get the first (and only) log entry
+        
         $time_in = !empty($log['time_in']) && $log['time_in'] != '00:00:00' ? $log['time_in'] : null;
         $time_out = !empty($log['time_out']) && $log['time_out'] != '00:00:00' ? $log['time_out'] : null;
-        $action = strtoupper($log['action'] ?? '');
-        $period = strtoupper($log['period'] ?? '');
         
-        // Process time_in entries
         if ($time_in) {
-            $hour = (int)date('H', strtotime($time_in));
-            $time_12h = date('g:i A', strtotime($time_in));
+            // Set AM arrival from the actual time in
+            $daysData[$day]['time_in_am'] = date('g:i A', strtotime($time_in));
+            $daysData[$day]['has_in_am'] = true;
             
-            // Check if it's AM or PM based on period field if available
-            if ($period === 'AM' && !$daysData[$day]['has_in_am']) {
-                // AM time in
-                $daysData[$day]['time_in_am'] = $time_12h;
-                $daysData[$day]['has_in_am'] = true;
-            } elseif ($period === 'PM' && !$daysData[$day]['has_in_pm']) {
-                // PM time in
-                $daysData[$day]['time_in_pm'] = $time_12h;
-                $daysData[$day]['has_in_pm'] = true;
-            } elseif ($hour < 12 && !$daysData[$day]['has_in_am']) {
-                // AM time in (based on hour)
-                $daysData[$day]['time_in_am'] = $time_12h;
-                $daysData[$day]['has_in_am'] = true;
-            } elseif ($hour >= 12 && !$daysData[$day]['has_in_pm']) {
-                // PM time in (based on hour)
-                $daysData[$day]['time_in_pm'] = $time_12h;
-                $daysData[$day]['has_in_pm'] = true;
-            }
+            // Auto-fill AM departure to 12:00 PM
+            $daysData[$day]['time_out_am'] = '12:00 PM';
+            $daysData[$day]['has_out_am'] = true;
+            
+            // Auto-fill PM arrival to 1:00 PM
+            $daysData[$day]['time_in_pm'] = '1:00 PM';
+            $daysData[$day]['has_in_pm'] = true;
         }
         
-        // Process time_out entries
         if ($time_out) {
-            $hour = (int)date('H', strtotime($time_out));
-            $time_12h = date('g:i A', strtotime($time_out));
-            
-            // Check if it's AM or PM based on period field if available
-            if ($period === 'AM' && !$daysData[$day]['has_out_am']) {
-                // AM time out
-                $daysData[$day]['time_out_am'] = $time_12h;
-                $daysData[$day]['has_out_am'] = true;
-            } elseif ($period === 'PM' && !$daysData[$day]['has_out_pm']) {
-                // PM time out
-                $daysData[$day]['time_out_pm'] = $time_12h;
-                $daysData[$day]['has_out_pm'] = true;
-            } elseif ($hour < 12 && !$daysData[$day]['has_out_am']) {
-                // AM time out (based on hour)
-                $daysData[$day]['time_out_am'] = $time_12h;
-                $daysData[$day]['has_out_am'] = true;
-            } elseif ($hour >= 12 && !$daysData[$day]['has_out_pm']) {
-                // PM time out (based on hour)
-                $daysData[$day]['time_out_pm'] = $time_12h;
-                $daysData[$day]['has_out_pm'] = true;
-            }
+            // Set PM departure from the actual time out
+            $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($time_out));
+            $daysData[$day]['has_out_pm'] = true;
         }
-    }
-    
-    // Auto-fill logic: If no time_out but there's a time_in, check for next day's time_in
-    if (!$daysData[$day]['has_out_am'] && $daysData[$day]['has_in_am']) {
-        // Check if next day has an AM time in (meaning they left after midnight)
-        if (isset($dailyLogs[$day + 1])) {
-            foreach ($dailyLogs[$day + 1] as $nextDayLog) {
-                $next_time_in = !empty($nextDayLog['time_in']) && $nextDayLog['time_in'] != '00:00:00' ? $nextDayLog['time_in'] : null;
-                if ($next_time_in) {
-                    $next_hour = (int)date('H', strtotime($next_time_in));
-                    if ($next_hour < 6) { // Before 6 AM is considered same day's night out
-                        $daysData[$day]['time_out_pm'] = date('g:i A', strtotime($next_time_in));
-                        $daysData[$day]['has_out_pm'] = true;
-                        break;
-                    }
+    } else {
+        // Original logic for non-instructors (personnel, etc.)
+        // Process each log entry for the day
+        foreach ($logs as $log) {
+            $time_in = !empty($log['time_in']) && $log['time_in'] != '00:00:00' ? $log['time_in'] : null;
+            $time_out = !empty($log['time_out']) && $log['time_out'] != '00:00:00' ? $log['time_out'] : null;
+            $action = strtoupper($log['action'] ?? '');
+            $period = strtoupper($log['period'] ?? '');
+            
+            // Process time_in entries
+            if ($time_in) {
+                $hour = (int)date('H', strtotime($time_in));
+                $time_12h = date('g:i A', strtotime($time_in));
+                
+                // Check if it's AM or PM based on period field if available
+                if ($period === 'AM' && !$daysData[$day]['has_in_am']) {
+                    // AM time in
+                    $daysData[$day]['time_in_am'] = $time_12h;
+                    $daysData[$day]['has_in_am'] = true;
+                } elseif ($period === 'PM' && !$daysData[$day]['has_in_pm']) {
+                    // PM time in
+                    $daysData[$day]['time_in_pm'] = $time_12h;
+                    $daysData[$day]['has_in_pm'] = true;
+                } elseif ($hour < 12 && !$daysData[$day]['has_in_am']) {
+                    // AM time in (based on hour)
+                    $daysData[$day]['time_in_am'] = $time_12h;
+                    $daysData[$day]['has_in_am'] = true;
+                } elseif ($hour >= 12 && !$daysData[$day]['has_in_pm']) {
+                    // PM time in (based on hour)
+                    $daysData[$day]['time_in_pm'] = $time_12h;
+                    $daysData[$day]['has_in_pm'] = true;
+                }
+            }
+            
+            // Process time_out entries
+            if ($time_out) {
+                $hour = (int)date('H', strtotime($time_out));
+                $time_12h = date('g:i A', strtotime($time_out));
+                
+                // Check if it's AM or PM based on period field if available
+                if ($period === 'AM' && !$daysData[$day]['has_out_am']) {
+                    // AM time out
+                    $daysData[$day]['time_out_am'] = $time_12h;
+                    $daysData[$day]['has_out_am'] = true;
+                } elseif ($period === 'PM' && !$daysData[$day]['has_out_pm']) {
+                    // PM time out
+                    $daysData[$day]['time_out_pm'] = $time_12h;
+                    $daysData[$day]['has_out_pm'] = true;
+                } elseif ($hour < 12 && !$daysData[$day]['has_out_am']) {
+                    // AM time out (based on hour)
+                    $daysData[$day]['time_out_am'] = $time_12h;
+                    $daysData[$day]['has_out_am'] = true;
+                } elseif ($hour >= 12 && !$daysData[$day]['has_out_pm']) {
+                    // PM time out (based on hour)
+                    $daysData[$day]['time_out_pm'] = $time_12h;
+                    $daysData[$day]['has_out_pm'] = true;
                 }
             }
         }
-    }
-    
-    // If still no time_out in PM but has time_in_pm, assume 5:00 PM (standard office hours)
-    if (!$daysData[$day]['has_out_pm'] && $daysData[$day]['has_in_pm']) {
-        $daysData[$day]['time_out_pm'] = '5:00 PM';
-        $daysData[$day]['has_out_pm'] = true;
-    }
-    
-    // If still no time_out in AM but has time_in_am, assume 12:00 PM (lunch time)
-    if (!$daysData[$day]['has_out_am'] && $daysData[$day]['has_in_am']) {
-        $daysData[$day]['time_out_am'] = '12:00 PM';
-        $daysData[$day]['has_out_am'] = true;
+        
+        // Auto-fill logic for non-instructors
+        // If no time_out in PM but has time_in_pm, assume 5:00 PM (standard office hours)
+        if (!$daysData[$day]['has_out_pm'] && $daysData[$day]['has_in_pm']) {
+            $daysData[$day]['time_out_pm'] = '5:00 PM';
+            $daysData[$day]['has_out_pm'] = true;
+        }
+        
+        // If no time_out in AM but has time_in_am, assume 12:00 PM (lunch time)
+        if (!$daysData[$day]['has_out_am'] && $daysData[$day]['has_in_am']) {
+            $daysData[$day]['time_out_am'] = '12:00 PM';
+            $daysData[$day]['has_out_am'] = true;
+        }
     }
 }
 
