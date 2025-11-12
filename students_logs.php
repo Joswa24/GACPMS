@@ -9,11 +9,7 @@ session_start();
 // Set timezone and include connection
 date_default_timezone_set('Asia/Manila');
 include 'connection.php';
-// Set instructor login time if not already set
-if (!isset($_SESSION['instructor_login_time']) && isset($_SESSION['access']['instructor']['id'])) {
-    $_SESSION['instructor_login_time'] = date('Y-m-d H:i:s');
-    error_log("Instructor login time set: " . $_SESSION['instructor_login_time']);
-}
+
 // Set MySQL timezone to match PHP
 mysqli_query($db, "SET time_zone = '+08:00'");
 
