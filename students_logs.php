@@ -9,24 +9,26 @@ session_start();
 // Set timezone and include connection
 date_default_timezone_set('Asia/Manila');
 include 'connection.php';
+
 // Set instructor login time if not already set
 if (!isset($_SESSION['instructor_login_time']) && isset($_SESSION['access']['instructor']['id'])) {
     $_SESSION['instructor_login_time'] = date('Y-m-d H:i:s');
     error_log("Instructor login time set: " . $_SESSION['instructor_login_time']);
 }
+
 // Set MySQL timezone to match PHP
 mysqli_query($db, "SET time_zone = '+08:00'");
 
 // Check if user came from scanner
-$from_scanner = isset($_GET['from_scanner']) ? true : false;
+ $from_scanner = isset($_GET['from_scanner']) ? true : false;
 
 // Initialize variables
-$attendance_saved = false;
-$show_timeout_message = false;
-$timeout_time = '';
-$archive_message = '';
-$first_student_section = null;
-$first_student_year = null;
+ $attendance_saved = false;
+ $show_timeout_message = false;
+ $timeout_time = '';
+ $archive_message = '';
+ $first_student_section = null;
+ $first_student_year = null;
 
 // Check if instructor is logged in
 if (!isset($_SESSION['access']['instructor']['id'])) {
@@ -72,7 +74,6 @@ if (isset($_POST['logout_after_save'])) {
     exit();
 }
 
-// Function to fetch actual student time in/out with proper timezone
 // Function to fetch actual student time in/out with proper timezone
 function getStudentAttendanceTimes($db, $id_number) {
     $query = "SELECT 
@@ -138,7 +139,6 @@ function formatTime($time) {
         return '-';
     }
 }
-
 
 // Enhanced function to get classmates with proper time formatting
 function getClassmatesByYearSection($db, $year, $section) {
@@ -256,7 +256,6 @@ function getFirstStudentDetails($db) {
 }
 
 // Function to get attendance statistics
-// Function to get attendance statistics
 function getAttendanceStats($db, $year, $section) {
     // If we don't have valid section/year, return empty stats
     if ($year === 'N/A' || $section === 'N/A') {
@@ -307,13 +306,12 @@ function getAttendanceStats($db, $year, $section) {
 }
 
 // Get first student details to determine class
-$first_student = getFirstStudentDetails($db);
+ $first_student = getFirstStudentDetails($db);
 if ($first_student) {
     $first_student_section = $first_student['section'];
     $first_student_year = $first_student['year'];
 }
 
-// Handle Save Attendance action
 // Handle Save Attendance action
 if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
     $instructor_id = $_SESSION['access']['instructor']['id'] ?? null;
@@ -335,12 +333,17 @@ if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
     try {
         $db->begin_transaction();
 
-        // Get session information
-        $original_time_in = $_SESSION['instructor_login_time'] ?? date('Y-m-d H:i:s');
-        $time_in_formatted = date('H:i:s', strtotime($original_time_in));
-        $time_out_formatted = date('H:i:s');
+        // Get session information - FIXED: Properly handle time in and time out
+        $current_datetime = date('Y-m-d H:i:s');
         $current_date = date('Y-m-d');
-
+        
+        // Get instructor login time from session or use current time if not set
+        $original_time_in = $_SESSION['instructor_login_time'] ?? $current_datetime;
+        
+        // Format times for display
+        $time_in_display = date('h:i A', strtotime($original_time_in));
+        $time_out_display = date('h:i A');
+        
         // Get room location from session
         $room_location = $_SESSION['access']['room']['room'] ?? 'Classroom';
         
@@ -366,6 +369,7 @@ if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
         $absent_count = $stats['absent_count'] ?? 0;
         $attendance_rate = $stats['attendance_rate'] ?? 0;
         
+        // FIXED: Use proper datetime format for time_in and time_out
         $summary_stmt->bind_param(
             "isssssiiidsss",
             $instructor_id,
@@ -373,14 +377,14 @@ if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
             $subject_name,
             $year_level,
             $section,
-            $room_location, // ADDED ROOM PARAMETER
+            $room_location,
             $total_students,
             $present_count,
             $absent_count,
             $attendance_rate,
             $current_date,
-            $time_in_formatted,
-            $time_out_formatted
+            $original_time_in,  // Use full datetime for time_in
+            $current_datetime   // Use full datetime for time_out
         );
         
         if (!$summary_stmt->execute()) {
@@ -421,7 +425,7 @@ if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
             $instructor_name,
             $current_date,
             $subject_name,
-            $room_location, // ADDED ROOM PARAMETER
+            $room_location,
             $current_date
         );
         
@@ -465,7 +469,7 @@ if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
                 $instructor_name,
                 $current_date,
                 $subject_name,
-                $room_location, // ADDED ROOM PARAMETER
+                $room_location,
                 $first_student_section,
                 $first_student_year,
                 $current_date
@@ -489,9 +493,9 @@ if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
 
         $db->commit();
 
-        // Success handling
-        $_SESSION['timeout_time'] = date('h:i A');
-        $_SESSION['original_time_in'] = date('h:i A', strtotime($original_time_in));
+        // Success handling - FIXED: Store properly formatted times
+        $_SESSION['timeout_time'] = $time_out_display;
+        $_SESSION['original_time_in'] = $time_in_display;
         $_SESSION['attendance_saved'] = true;
         $_SESSION['archive_message'] = "Attendance saved successfully! Present: {$present_count}, Absent: {$absent_count}, Room: {$room_location}";
         
@@ -509,25 +513,25 @@ if (isset($_POST['save_attendance']) && isset($_POST['id_number'])) {
         exit();
     }
 }
-// Check if attendance was just saved
 
-    if (isset($_SESSION['attendance_saved']) && $_SESSION['attendance_saved']) {
-        $attendance_saved = true;
-        $show_timeout_message = true;
-        $timeout_time = $_SESSION['timeout_time'] ?? '';
-        $archive_message = $_SESSION['archive_message'] ?? '';
-        $original_time_in = $_SESSION['original_time_in'] ?? '';
-        
-        // Clear the session variables
-        unset(
-            $_SESSION['attendance_saved'], 
-            $_SESSION['timeout_time'], 
-            $_SESSION['archive_message'],
-            $_SESSION['first_student_section'],
-            $_SESSION['first_student_year'],
-            $_SESSION['original_time_in']
-        );
-    }
+// Check if attendance was just saved
+if (isset($_SESSION['attendance_saved']) && $_SESSION['attendance_saved']) {
+    $attendance_saved = true;
+    $show_timeout_message = true;
+    $timeout_time = $_SESSION['timeout_time'] ?? '';
+    $archive_message = $_SESSION['archive_message'] ?? '';
+    $original_time_in = $_SESSION['original_time_in'] ?? '';
+    
+    // Clear the session variables
+    unset(
+        $_SESSION['attendance_saved'], 
+        $_SESSION['timeout_time'], 
+        $_SESSION['archive_message'],
+        $_SESSION['first_student_section'],
+        $_SESSION['first_student_year'],
+        $_SESSION['original_time_in']
+    );
+}
 
 // AJAX handler for real-time time display
 if (isset($_GET['ajax']) && isset($_GET['id_number'])) {
@@ -1405,6 +1409,14 @@ if (isset($_GET['ajax']) && isset($_GET['id_number'])) {
                                         <span class="detail-value"><?php echo htmlspecialchars($first_student_year . ' - ' . $first_student_section); ?></span>
                                     </div>
                                     <?php endif; ?>
+                                    
+                                    <!-- FIXED: Added instructor login time display -->
+                                    <?php if (isset($_SESSION['instructor_login_time'])): ?>
+                                    <div>
+                                        <span class="detail-label">Session Started:</span>
+                                        <span class="detail-value"><?php echo date('h:i A', strtotime($_SESSION['instructor_login_time'])); ?></span>
+                                    </div>
+                                    <?php endif; ?>
                                 </div>
                                 
                                 <?php if (isset($_SESSION['access']['instructor']['id'])): ?>
@@ -1886,3 +1898,4 @@ document.addEventListener('DOMContentLoaded', function() {
 if (isset($db)) {
     mysqli_close($db);
 }
+?>
