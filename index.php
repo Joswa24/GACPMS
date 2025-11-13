@@ -1,5 +1,5 @@
 <?php
-session_start();
+
 // Simple error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -7,12 +7,14 @@ ini_set('display_errors', 1);
 // Include required files
 include 'security-headers.php';
 include 'connection.php';
-include 'recaptcha.php';
 
+// Start session first
+session_start();
 // Clear any existing output
 if (ob_get_level() > 0) {
     ob_clean();
 }
+
 
 // =====================================================================
 // HELPER FUNCTION - Improved Sanitization
@@ -22,34 +24,6 @@ function sanitizeInput($data) {
         return array_map('sanitizeInput', $data);
     }
     return htmlspecialchars(stripslashes(trim($data)), ENT_QUOTES, 'UTF-8');
-}
-
-// =====================================================================
-// RECAPTCHA VERIFICATION FUNCTION
-// =====================================================================
-function verifyRecaptcha($token, $secretKey) {
-    $url = 'https://www.google.com/recaptcha/api/siteverify';
-    $data = [
-        'secret' => $secretKey,
-        'response' => $token
-    ];
-    
-    $options = [
-        'http' => [
-            'header' => "Content-type: application/x-www-form-urlencoded\r\n",
-            'method' => 'POST',
-            'content' => http_build_query($data)
-        ]
-    ];
-    
-    $context = stream_context_create($options);
-    $response = file_get_contents($url, false, $context);
-    $responseKeys = json_decode($response, true);
-    
-    // Log the response for debugging
-    error_log("reCAPTCHA Response: " . print_r($responseKeys, true));
-    
-    return $responseKeys['success'] && ($responseKeys['score'] ?? 0) > 0.5;
 }
 
 // =====================================================================
@@ -242,9 +216,6 @@ function getSubjectDetails($db, $subject, $room) {
 // MAIN LOGIN PROCESSING
 // =====================================================================
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Log the POST data for debugging
-    error_log("POST Data: " . print_r($_POST, true));
-    
     // Sanitize inputs
     $department = sanitizeInput($_POST['roomdpt'] ?? '');
     $location = sanitizeInput($_POST['location'] ?? '');
@@ -252,8 +223,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $id_number = sanitizeInput($_POST['Pid_number'] ?? '');
     $selected_subject = sanitizeInput($_POST['selected_subject'] ?? '');
     $selected_room = sanitizeInput($_POST['selected_room'] ?? '');
-    $recaptchaToken = $_POST['recaptcha_token'] ?? '';
-    $validateOnly = $_POST['validate_only'] ?? '';
 
     // Validate required inputs
     $errors = [];
@@ -262,52 +231,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($password)) $errors[] = "Password is required";
     if (empty($id_number)) $errors[] = "ID number is required";
     
-    // Verify reCAPTCHA
-    $recaptchaSecret = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
-    
-    // Skip reCAPTCHA verification for debugging - COMMENT THIS LINE IN PRODUCTION
-    // $recaptchaValid = true; 
-    
-    // Uncomment the following lines for production
-    if (empty($recaptchaToken)) {
-        error_log("reCAPTCHA token is empty");
-        $errors[] = "reCAPTCHA token is missing. Please refresh the page and try again.";
-    } else {
-        $recaptchaValid = verifyRecaptcha($recaptchaToken, $recaptchaSecret);
-        if (!$recaptchaValid) {
-            error_log("reCAPTCHA verification failed for token: " . $recaptchaToken);
-            $errors[] = "reCAPTCHA verification failed. Please try again.";
-        }
-    }
-    
     if (!empty($errors)) {
         http_response_code(400);
         header('Content-Type: application/json');
         die(json_encode(['status' => 'error', 'message' => implode("<br>", $errors)]));
-    }
-
-    // If this is just a password validation request (before subject selection)
-    if ($validateOnly === 'true') {
-        $validationResult = validateRoomPassword($db, $department, $location, $password, $id_number);
-        
-        if (!$validationResult['success']) {
-            sleep(2); // Rate limiting
-            http_response_code(401);
-            header('Content-Type: application/json');
-            die(json_encode([
-                'status' => 'error', 
-                'message' => implode("<br>", $validationResult['errors'])
-            ]));
-        }
-        
-        // Password validation successful
-        header('Content-Type: application/json');
-        echo json_encode([
-            'status' => 'success',
-            'message' => 'Password validated successfully',
-            'user_type' => $validationResult['user_type']
-        ]);
-        exit;
     }
 
     // Universal password validation for all rooms
@@ -416,11 +343,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     
     <!-- CORRECTED Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; 
-    script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com https://www.google.com/recaptcha/ 'unsafe-inline' 'unsafe-eval'; 
+    script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com 'unsafe-inline' 'unsafe-eval'; 
     style-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; 
     font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.gstatic.com; 
     img-src 'self' data: https:; 
-    connect-src 'self' https://www.google.com/recaptcha/; 
+    connect-src 'self'; 
     frame-ancestors 'none';">
     
     <!-- Security Meta Tags -->
@@ -435,9 +362,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <link rel="stylesheet" href="admin/css/bootstrap.min.css">
     <!-- SweetAlert CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-    
-    <!-- Google reCAPTCHA v3 -->
-    <script src="https://www.google.com/recaptcha/api.js?render=6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_&onload=onRecaptchaLoad"></script>
     
     <style>
         :root {
@@ -962,15 +886,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             margin-top: 1rem;
         }
 
-        /* reCAPTCHA badge styling - CHANGED TO VISIBLE */
-        .grecaptcha-badge {
-            visibility: visible !important;
-            position: fixed !important;
-            bottom: 20px !important;
-            right: 20px !important;
-            z-index: 1000 !important;
-        }
-
         /* Responsive adjustments */
         @media (max-width: 576px) {
             .login-container {
@@ -1153,9 +1068,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <!-- Hidden field for scan mode -->
                 <input type="text" class="hidden-field" id="scan-id-input" name="Pid_number" required>
                 
-                <!-- Hidden field for reCAPTCHA token -->
-                <input type="hidden" id="recaptcha-token" name="recaptcha_token">
-                
                 <!-- Gate access information -->
                 <div id="gateAccessInfo" class="gate-access-info d-none">
                     <i class="fas fa-shield-alt"></i>
@@ -1237,63 +1149,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         console.error = function() {};
     }
 
-    // Initialize reCAPTCHA
-    let recaptchaReady = false;
-    
-    // Function to execute reCAPTCHA and get token
-    function executeRecaptcha(action) {
-        return new Promise(function(resolve, reject) {
-            if (!recaptchaReady) {
-                console.error('reCAPTCHA not ready');
-                // Try to initialize it
-                if (typeof grecaptcha !== 'undefined') {
-                    grecaptcha.ready(function() {
-                        recaptchaReady = true;
-                        grecaptcha.execute('6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_', {action: action})
-                            .then(function(token) {
-                                console.log('reCAPTCHA token obtained');
-                                document.getElementById('recaptcha-token').value = token;
-                                resolve(token);
-                            })
-                            .catch(function(error) {
-                                console.error('reCAPTCHA execution error:', error);
-                                reject(error);
-                            });
-                    });
-                } else {
-                    reject(new Error('reCAPTCHA not loaded'));
-                }
-                return;
-            }
-            
-            grecaptcha.execute('6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_', {action: action})
-                .then(function(token) {
-                    console.log('reCAPTCHA token obtained');
-                    document.getElementById('recaptcha-token').value = token;
-                    resolve(token);
-                })
-                .catch(function(error) {
-                    console.error('reCAPTCHA execution error:', error);
-                    reject(error);
-                });
-        });
-    }
-    
-    // reCAPTCHA onload callback - FIXED
-    function onRecaptchaLoad() {
-        console.log('reCAPTCHA script loaded');
-        recaptchaReady = true;
-        
-        // Initialize reCAPTCHA with a test token to ensure it's working
-        executeRecaptcha('homepage')
-            .then(function(token) {
-                console.log('Initial reCAPTCHA test successful');
-            })
-            .catch(function(error) {
-                console.error('Initial reCAPTCHA test failed:', error);
-            });
-    }
-
     // Scanner state management
     let isScannerActive = false;
     let scanBuffer = '';
@@ -1356,21 +1211,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             
             console.log('🔄 Proceeding with login logic...');
             
-            // Get reCAPTCHA token before proceeding
-            executeRecaptcha('login')
-                .then(function(token) {
-                    console.log('reCAPTCHA token obtained for login');
-                    // FIRST validate password for the room, THEN handle subject selection
-                    validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
-                })
-                .catch(function(error) {
-                    console.error('reCAPTCHA error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'reCAPTCHA Error',
-                        text: 'Could not verify reCAPTCHA. Please refresh the page and try again.'
-                    });
-                });
+            // FIRST validate password for the room, THEN handle subject selection
+            validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
         });
 
         // NEW FUNCTION: Validate password BEFORE showing subject modal
@@ -1385,7 +1227,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 location: location,
                 Ppassword: password,
                 Pid_number: idNumber,
-                recaptcha_token: $('#recaptcha-token').val(),
                 validate_only: 'true' // Add a flag to indicate this is just password validation
             };
             
@@ -1745,22 +1586,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 return;
             }
             
-            // Get new reCAPTCHA token before submitting
-            executeRecaptcha('subject_selection')
-                .then(function(token) {
-                    console.log('reCAPTCHA token obtained for subject selection');
-                    // Close modal and submit form
-                    $('#subjectModal').modal('hide');
-                    submitLoginForm();
-                })
-                .catch(function(error) {
-                    console.error('reCAPTCHA error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'reCAPTCHA Error',
-                        text: 'Could not verify reCAPTCHA. Please refresh the page and try again.'
-                    });
-                });
+            // Close modal and submit form
+            $('#subjectModal').modal('hide');
+            submitLoginForm();
         });
 
         // Cancel subject selection - go back to login form
@@ -1784,8 +1612,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Submit login form to server
         function submitLoginForm() {
             const formData = $('#logform').serialize();
-            
-            console.log('Submitting form with data:', formData);
             
             Swal.fire({
                 title: 'Logging in...',
