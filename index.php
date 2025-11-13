@@ -5,7 +5,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // Include required files
-//include 'security-headers.php';
+include 'security-headers.php';
 include 'connection.php';
 
 // Start session first
@@ -46,6 +46,9 @@ function verifyRecaptcha($token, $secretKey) {
     $context = stream_context_create($options);
     $response = file_get_contents($url, false, $context);
     $responseKeys = json_decode($response, true);
+    
+    // Log the response for debugging
+    error_log("reCAPTCHA Response: " . print_r($responseKeys, true));
     
     return $responseKeys['success'] && ($responseKeys['score'] ?? 0) > 0.5;
 }
@@ -240,6 +243,9 @@ function getSubjectDetails($db, $subject, $room) {
 // MAIN LOGIN PROCESSING
 // =====================================================================
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Log the POST data for debugging
+    error_log("POST Data: " . print_r($_POST, true));
+    
     // Sanitize inputs
     $department = sanitizeInput($_POST['roomdpt'] ?? '');
     $location = sanitizeInput($_POST['location'] ?? '');
@@ -259,8 +265,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     
     // Verify reCAPTCHA
     $recaptchaSecret = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
-    if (empty($recaptchaToken) || !verifyRecaptcha($recaptchaToken, $recaptchaSecret)) {
-        $errors[] = "reCAPTCHA verification failed. Please try again.";
+    
+    // Skip reCAPTCHA verification for debugging - COMMENT THIS LINE IN PRODUCTION
+    // $recaptchaValid = true; 
+    
+    // Uncomment the following lines for production
+    if (empty($recaptchaToken)) {
+        error_log("reCAPTCHA token is empty");
+        $errors[] = "reCAPTCHA token is missing. Please refresh the page and try again.";
+    } else {
+        $recaptchaValid = verifyRecaptcha($recaptchaToken, $recaptchaSecret);
+        if (!$recaptchaValid) {
+            error_log("reCAPTCHA verification failed for token: " . $recaptchaToken);
+            $errors[] = "reCAPTCHA verification failed. Please try again.";
+        }
     }
     
     if (!empty($errors)) {
@@ -420,7 +438,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     
     <!-- Google reCAPTCHA v3 -->
-    <script src="https://www.google.com/recaptcha/api.js?render=6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_"></script>
+    <script src="https://www.google.com/recaptcha/api.js?render=6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_&onload=onRecaptchaLoad"></script>
     
     <style>
         :root {
@@ -945,9 +963,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             margin-top: 1rem;
         }
 
-        /* reCAPTCHA badge styling */
+        /* reCAPTCHA badge styling - CHANGED TO VISIBLE */
         .grecaptcha-badge {
-            visibility: hidden;
+            visibility: visible !important;
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            z-index: 1000 !important;
         }
 
         /* Responsive adjustments */
@@ -1205,7 +1227,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="admin/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://www.google.com/recaptcha/api.js?render=6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_"></script>
     <!-- SweetAlert JS -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
@@ -1224,27 +1245,54 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     function executeRecaptcha(action) {
         return new Promise(function(resolve, reject) {
             if (!recaptchaReady) {
-                reject(new Error('reCAPTCHA not ready'));
+                console.error('reCAPTCHA not ready');
+                // Try to initialize it
+                if (typeof grecaptcha !== 'undefined') {
+                    grecaptcha.ready(function() {
+                        recaptchaReady = true;
+                        grecaptcha.execute('6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_', {action: action})
+                            .then(function(token) {
+                                console.log('reCAPTCHA token obtained');
+                                document.getElementById('recaptcha-token').value = token;
+                                resolve(token);
+                            })
+                            .catch(function(error) {
+                                console.error('reCAPTCHA execution error:', error);
+                                reject(error);
+                            });
+                    });
+                } else {
+                    reject(new Error('reCAPTCHA not loaded'));
+                }
                 return;
             }
             
-            grecaptcha.ready(function() {
-                grecaptcha.execute('6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_', {action: action})
-                    .then(function(token) {
-                        document.getElementById('recaptcha-token').value = token;
-                        resolve(token);
-                    })
-                    .catch(function(error) {
-                        reject(error);
-                    });
-            });
+            grecaptcha.execute('6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_', {action: action})
+                .then(function(token) {
+                    console.log('reCAPTCHA token obtained');
+                    document.getElementById('recaptcha-token').value = token;
+                    resolve(token);
+                })
+                .catch(function(error) {
+                    console.error('reCAPTCHA execution error:', error);
+                    reject(error);
+                });
         });
     }
     
-    // reCAPTCHA onload callback
+    // reCAPTCHA onload callback - FIXED
     function onRecaptchaLoad() {
+        console.log('reCAPTCHA script loaded');
         recaptchaReady = true;
-        console.log('reCAPTCHA loaded successfully');
+        
+        // Initialize reCAPTCHA with a test token to ensure it's working
+        executeRecaptcha('homepage')
+            .then(function(token) {
+                console.log('Initial reCAPTCHA test successful');
+            })
+            .catch(function(error) {
+                console.error('Initial reCAPTCHA test failed:', error);
+            });
     }
 
     // Scanner state management
@@ -1312,7 +1360,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Get reCAPTCHA token before proceeding
             executeRecaptcha('login')
                 .then(function(token) {
-                    console.log('reCAPTCHA token obtained');
+                    console.log('reCAPTCHA token obtained for login');
                     // FIRST validate password for the room, THEN handle subject selection
                     validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
                 })
@@ -1701,6 +1749,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Get new reCAPTCHA token before submitting
             executeRecaptcha('subject_selection')
                 .then(function(token) {
+                    console.log('reCAPTCHA token obtained for subject selection');
                     // Close modal and submit form
                     $('#subjectModal').modal('hide');
                     submitLoginForm();
@@ -1736,6 +1785,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Submit login form to server
         function submitLoginForm() {
             const formData = $('#logform').serialize();
+            
+            console.log('Submitting form with data:', formData);
             
             Swal.fire({
                 title: 'Logging in...',
