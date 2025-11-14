@@ -1,5 +1,5 @@
 <?php
-// admin/index.php
+//  admin/index.php
 include '../connection.php';
 include '../security-headers.php';
 session_start();

@@ -3,7 +3,7 @@ RewriteEngine On
 # Remove duplicate RewriteEngine and fix index.php redirect
 RewriteRule ^index\.php$ / [R=301,L]
 
-# Hide .php extensions
+#  Hide .php extensions
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^(.*)$ $1.php [L]

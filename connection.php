@@ -9,7 +9,7 @@ date_default_timezone_set('Asia/Manila');
        mysqli_select_db($db, 'u802714156_rfidgpms' ) or die(mysqli_error($db));
 ?> 
 <?php
-//  date_default_timezone_set('Asia/Manila');
+//   date_default_timezone_set('Asia/Manila');
 
 //    $db = mysqli_connect('sql210.infinityfree.com','if0_39846067','HwDGHVhNuVvO','if0_39846067_gpassdb')  or
 
