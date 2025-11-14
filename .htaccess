@@ -16,7 +16,7 @@ RewriteRule ^admin/(img)/ - [F,L,NC]
 # ======= SECURITY HEADERS & PROTECTION =======
 
 # Enable HSTS Header
-Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+;Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
 # Additional Security Headers
 Header always set X-Content-Type-Options "nosniff"
