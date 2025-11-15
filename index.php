@@ -927,11 +927,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             right: 10px;
             z-index: 1000;
             opacity: 0.8;
-            background: white;
-            padding: 5px;
-            border-radius: 4px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            font-size: 12px;
         }
 
         /* Responsive adjustments */
