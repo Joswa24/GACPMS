@@ -22,7 +22,7 @@ function setSecurityHeaders() {
         "manifest-src 'self'"
     ];
     
-    //header("Content-Security-Policy: " . implode("; ", $csp));
+    header("Content-Security-Policy: " . implode("; ", $csp));
     
     // Other security headers
     header("X-Content-Type-Options: nosniff");
