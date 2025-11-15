@@ -2,21 +2,21 @@
 // admin/index.php
 session_start();
 include '../connection.php';
-include '../security-headers.php';
+// include '../security-headers.php';
 
-// Additional security headers
-header("X-Frame-Options: DENY");
-header("X-Content-Type-Options: nosniff");
-header("X-XSS-Protection: 1; mode=block");
-header("Referrer-Policy: strict-origin-when-cross-origin");
-header("Permissions-Policy: geolocation=(self), microphone=(), camera=()");
-header("X-Permitted-Cross-Domain-Policies: none");
-header("Cross-Origin-Embedder-Policy: require-corp");
-header("Cross-Origin-Opener-Policy: same-origin");
-header("Cross-Origin-Resource-Policy: same-origin");
-header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
-header("Pragma: no-cache");
-header("Expires: 0");
+// // Additional security headers
+// header("X-Frame-Options: DENY");
+// header("X-Content-Type-Options: nosniff");
+// header("X-XSS-Protection: 1; mode=block");
+// header("Referrer-Policy: strict-origin-when-cross-origin");
+// header("Permissions-Policy: geolocation=(self), microphone=(), camera=()");
+// header("X-Permitted-Cross-Domain-Policies: none");
+// header("Cross-Origin-Embedder-Policy: require-corp");
+// header("Cross-Origin-Opener-Policy: same-origin");
+// header("Cross-Origin-Resource-Policy: same-origin");
+// header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+// header("Pragma: no-cache");
+// header("Expires: 0");
 
 // Initialize variables
  $maxAttempts = 3;
