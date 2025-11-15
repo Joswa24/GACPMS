@@ -425,6 +425,13 @@ function getRecentActivity($db) {
     return $activity;
 }
 
+// Get data
+ $stats = getDashboardStats($db);
+ $logsResult = getTodaysLogs($db);
+ $weeklyData = getWeeklyEntrants($db);
+ $entrantsDistribution = getEntrantsDistribution($db);
+ $recentActivity = getRecentActivity($db);
+
 // Helper function to get icons for person types
 function getPersonTypeIcon($type) {
     $icons = [
@@ -848,7 +855,7 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
         }
 
         /* Chart responsiveness */
-        @media (max-width:768px) {
+        @media (max-width: 768px) {
             .chart-container {
                 height: 300px;
                 padding: 15px;
@@ -879,6 +886,12 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
 #backupBtn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* Form switch styling */
+.form-check-input:checked {
+    background-color: #5c95e9;
+    border-color: #5c95e9;
 }
 
 /* Backup status styling */
@@ -950,7 +963,7 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
 #downloadModal .alert-info {
     background-color: rgba(23, 162, 184, 0.1);
     border-color: rgba(23, 162, 184, 0.3);
-    color: #17a2b8;
+    color: #17a2b2;
     border-radius: 10px;
     margin-top: 20px;
 }
@@ -1581,7 +1594,10 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
             // Create the download URL
             const downloadUrl = 'backup.php?t=' + Date.now();
             
-            // Start the download process
+            // Show success modal immediately (since download will start)
+            showDownloadModal(downloadUrl, filename, isAuto);
+            
+            // Start the download
             setTimeout(() => {
                 iframe.src = downloadUrl;
                 
@@ -1606,6 +1622,81 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
             }, 1000);
         }
 
+        // Function to show download modal
+        function showDownloadModal(url, filename, isAuto) {
+            // Create modal HTML if it doesn't exist
+            if ($('#downloadModal').length === 0) {
+                const modalHtml = `
+                    <div class="modal fade" id="downloadModal" tabindex="-1" aria-labelledby="downloadModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header bg-success text-white">
+                                    <h5 class="modal-title" id="downloadModalLabel">
+                                        <i class="fas fa-check-circle me-2"></i>Database Backup Ready
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body text-center">
+                                    <div class="mb-3">
+                                        <i class="fas fa-database fa-3x text-success"></i>
+                                    </div>
+                                    <h5>Your Database is Ready for Download</h5>
+                                    <p class="text-muted">The database backup has been created successfully. Click "Download" to save the backup file to your device.</p>
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        <strong>File:</strong> ${filename}
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                        <i class="fas fa-times me-2"></i>Cancel
+                                    </button>
+                                    <button type="button" class="btn btn-success" id="confirmDownloadBtn">
+                                        <i class="fas fa-download me-2"></i>Download
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                $('body').append(modalHtml);
+            }
+            
+            // Update modal content with current filename
+            $('#downloadModal .alert-info').html(
+                '<i class="fas fa-info-circle me-2"></i><strong>File:</strong> ' + filename
+            );
+            
+            // Store download URL and filename in button data
+            $('#confirmDownloadBtn').data('url', url).data('filename', filename);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('downloadModal'));
+            modal.show();
+            
+            // For auto-backups, automatically download after 2 seconds
+            if (isAuto) {
+                setTimeout(function() {
+                    modal.hide();
+                    window.open(url, '_blank');
+                }, 2000);
+            }
+        }
+
+        // Handle download button click in modal
+        $(document).on('click', '#confirmDownloadBtn', function() {
+            const url = $(this).data('url');
+            const filename = $(this).data('filename');
+            
+            // Trigger download
+            window.open(url, '_blank');
+            
+            // Hide modal
+            bootstrap.Modal.getInstance(document.getElementById('downloadModal')).hide();
+            
+            showNotification('Database backup downloaded successfully!', 'success');
+        });
+
         // Function to show notification
         function showNotification(message, type) {
             // Create notification element
@@ -1625,6 +1716,38 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
                 notification.alert('close');
             }, 5000);
         }
+    </script>
+
+    <script>
+    $(document).ready(function() {
+        // Initialize DataTable for logs - FIXED VERSION
+        $('#logsTable').DataTable({
+            order: [[3, 'desc']], // Order by Time In (newest first) - 4th column (0-based index)
+            pageLength: 15,
+            responsive: true,
+            language: {
+                search: "Search logs:",
+                lengthMenu: "Show _MENU_ entries",
+                info: "Showing _START_ to _END_ of _TOTAL_ entries",
+                infoEmpty: "Showing 0 to 0 of 0 entries",
+                infoFiltered: "(filtered from _MAX_ total entries)",
+                emptyTable: "No entrance logs found for today.",
+                zeroRecords: "No matching records found",
+                paginate: {
+                    previous: "Previous",
+                    next: "Next"
+                }
+            },
+            dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rt<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'
+        });
+
+        // Auto-refresh dashboard every 60 seconds
+        setInterval(function() {
+            // Optional: Add a visual indicator before refresh
+            console.log('Auto-refreshing dashboard...');
+            window.location.reload();
+        }, 60000);
+    });
     </script>
 </body>
 </html>
