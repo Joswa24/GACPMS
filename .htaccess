@@ -1,4 +1,4 @@
-RewriteEngine On
+
 
 # Remove duplicate RewriteEngine and fix index.php redirect
 RewriteRule ^index\.php$ / [R=301,L]
@@ -10,7 +10,6 @@ RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^(.*)$ $1.php [L]
 
 # Block direct access to specific directories
-
 RewriteRule ^admin/img/ - [F,L,NC]
 RewriteRule ^admin/admin/uploads - [F,L,NC]
 RewriteRule ^admin/uploads/ - [F,L,NC]
