@@ -10,13 +10,10 @@ RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^(.*)$ $1.php [L]
 
 # Block direct access to specific directories
-RewriteRule ^(assets|backup|uploads|img)/ - [F,L,NC]
+RewriteRule ^(assets|backup|uploads)/ - [F,L,NC]
 RewriteRule ^admin/admin/(uploads)/ - [F,L,NC]
 RewriteRule ^admin/(img)/ - [F,L,NC]
 
-# Allow access to images in admin/img directory but not other admin subdirectories
-RewriteCond %{REQUEST_FILENAME} -f
-RewriteCond %{REQUEST_FILENAME} \.(jpg|jpeg|png|gif|ico|svg|webp)$ RewriteRule ^admin/students/(.*)$ - [L]
 # ======= SECURITY HEADERS & PROTECTION =======
 
 # Enable HSTS Header
