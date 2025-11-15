@@ -1,5 +1,5 @@
 <?php
-//  admin/index.php
+// admin/index.php
 include '../connection.php';
 include '../security-headers.php';
 session_start();
@@ -599,7 +599,8 @@ function send2FACodeEmail($email, $verificationCode) {
     <title>Admin Login - RFID System</title>
     
     <!-- Security Meta Tags -->
-    <!-- <meta http-equiv="X-Frame-Options" content="DENY">
+    <!-- <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.google.com/recaptcha/; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://nominatim.openstreetmap.org https://www.google.com/recaptcha/; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
+    <meta http-equiv="X-Frame-Options" content="DENY">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="robots" content="noindex, nofollow">
@@ -1046,108 +1047,12 @@ function send2FACodeEmail($email, $verificationCode) {
             display: none;
         }
         
-        /* reCAPTCHA Styles */
-        .recaptcha-container {
-            background-color: #f8f9fa;
-            border: 1px solid #e3e6f0;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .recaptcha-container i {
-            color: var(--accent-color);
-            margin-right: 8px;
-        }
-        
-        .recaptcha-status {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.9rem;
-            color: var(--dark-text);
-        }
-        
-        .recaptcha-status.verifying {
-            color: var(--warning-color);
-        }
-        
-        .recaptcha-status.success {
-            color: #28a745;
-        }
-        
-        .recaptcha-status.error {
-            color: var(--danger-color);
-        }
-        
-        .recaptcha-spinner {
-            margin-left: 8px;
-            display: none;
-        }
-        
         .recaptcha-badge {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            bottom: 10px;
+            right: 10px;
             z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.85rem;
-            color: var(--dark-text);
-            transition: all 0.3s ease;
-        }
-        
-        .recaptcha-badge:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-        }
-        
-        .recaptcha-badge i {
-            color: #4285f4;
-            font-size: 1.2rem;
-        }
-        
-        .recaptcha-pulse {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(66, 133, 244, 0.1), transparent);
-            animation: pulse 2s infinite;
-            pointer-events: none;
-        }
-        
-        @keyframes pulse {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-        
-        .recaptcha-progress {
-            height: 3px;
-            background: var(--accent-color);
-            border-radius: 3px;
-            margin-top: 10px;
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-        
-        .recaptcha-progress.active {
-            animation: progress 2s ease-in-out;
-        }
-        
-        @keyframes progress {
-            0% { width: 0%; }
-            50% { width: 70%; }
-            100% { width: 100%; }
+            opacity: 0.8;
         }
         
         @media (max-width: 576px) {
@@ -1188,13 +1093,6 @@ function send2FACodeEmail($email, $verificationCode) {
                 width: 40px;
                 height: 40px;
                 font-size: 1.2rem;
-            }
-            
-            .recaptcha-badge {
-                bottom: 10px;
-                right: 10px;
-                font-size: 0.75rem;
-                padding: 8px;
             }
         }
     </style>
@@ -1287,17 +1185,6 @@ function send2FACodeEmail($email, $verificationCode) {
                         <span id="locationStatusText">Location permission will be requested when you click Sign In</span>
                         <div class="spinner-border spinner-border-sm location-spinner" id="locationSpinner" role="status"></div>
                     </div>
-                </div>
-
-                <!-- reCAPTCHA Verification Section -->
-                <div class="recaptcha-container" id="recaptchaContainer">
-                    <div class="recaptcha-pulse" id="recaptchaPulse" style="display: none;"></div>
-                    <div class="recaptcha-status" id="recaptchaStatus">
-                        <i class="fas fa-shield-alt"></i>
-                        <span id="recaptchaStatusText">Protected by Google reCAPTCHA</span>
-                        <div class="spinner-border spinner-border-sm recaptcha-spinner" id="recaptchaSpinner" role="status"></div>
-                    </div>
-                    <div class="recaptcha-progress" id="recaptchaProgress"></div>
                 </div>
 
                 <!-- Attempts Counter -->
@@ -1397,10 +1284,10 @@ function send2FACodeEmail($email, $verificationCode) {
         </div>
     </div>
 
-    <!-- reCAPTCHA Badge -->
-    <div class="recaptcha-badge" id="recaptchaBadge">
-        <i class="fas fa-shield-alt"></i>
-        <span>Protected by reCAPTCHA</span>
+    <div class="recaptcha-badge">
+        This site is protected by reCAPTCHA and the Google
+        <a href="https://policies.google.com/privacy">Privacy Policy</a> and
+        <a href="https://policies.google.com/terms">Terms of Service</a> apply.
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -1423,56 +1310,6 @@ function send2FACodeEmail($email, $verificationCode) {
                 passwordField.type = "password";
                 eyeIcon.classList.remove('fa-eye-slash');
                 eyeIcon.classList.add('fa-eye');
-            }
-        }
-
-        // Update reCAPTCHA status
-        function updateRecaptchaStatus(status, message) {
-            const recaptchaStatus = document.getElementById('recaptchaStatus');
-            const recaptchaStatusText = document.getElementById('recaptchaStatusText');
-            const recaptchaSpinner = document.getElementById('recaptchaSpinner');
-            const recaptchaPulse = document.getElementById('recaptchaPulse');
-            const recaptchaProgress = document.getElementById('recaptchaProgress');
-            const recaptchaBadge = document.getElementById('recaptchaBadge');
-            
-            // Remove all status classes
-            recaptchaStatus.classList.remove('verifying', 'success', 'error');
-            
-            switch(status) {
-                case 'verifying':
-                    recaptchaStatus.classList.add('verifying');
-                    recaptchaStatusText.textContent = message || 'Verifying with reCAPTCHA...';
-                    recaptchaSpinner.style.display = 'inline-block';
-                    recaptchaPulse.style.display = 'block';
-                    recaptchaProgress.classList.add('active');
-                    recaptchaBadge.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Verifying...</span>';
-                    break;
-                case 'success':
-                    recaptchaStatus.classList.add('success');
-                    recaptchaStatusText.textContent = message || 'reCAPTCHA verification successful';
-                    recaptchaSpinner.style.display = 'none';
-                    recaptchaPulse.style.display = 'none';
-                    recaptchaProgress.style.width = '100%';
-                    recaptchaBadge.innerHTML = '<i class="fas fa-check-circle" style="color: #28a745;"></i><span>Verified</span>';
-                    setTimeout(() => {
-                        recaptchaProgress.classList.remove('active');
-                        recaptchaProgress.style.width = '0%';
-                    }, 1000);
-                    break;
-                case 'error':
-                    recaptchaStatus.classList.add('error');
-                    recaptchaStatusText.textContent = message || 'reCAPTCHA verification failed';
-                    recaptchaSpinner.style.display = 'none';
-                    recaptchaPulse.style.display = 'none';
-                    recaptchaProgress.style.width = '0%';
-                    recaptchaBadge.innerHTML = '<i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i><span>Failed</span>';
-                    break;
-                default:
-                    recaptchaStatusText.textContent = message || 'Protected by Google reCAPTCHA';
-                    recaptchaSpinner.style.display = 'none';
-                    recaptchaPulse.style.display = 'none';
-                    recaptchaProgress.style.width = '0%';
-                    recaptchaBadge.innerHTML = '<i class="fas fa-shield-alt"></i><span>Protected by reCAPTCHA</span>';
             }
         }
 
@@ -1528,16 +1365,11 @@ function send2FACodeEmail($email, $verificationCode) {
                         // Update button text
                         loginText.textContent = 'Verifying...';
                         
-                        // Execute reCAPTCHA with visible feedback
-                        updateRecaptchaStatus('verifying', 'Running security checks...');
-                        
+                        // Execute reCAPTCHA
                         grecaptcha.ready(function() {
                             grecaptcha.execute('<?php echo $recaptchaSiteKey; ?>', {action: 'login'}).then(function(token) {
                                 // Set the reCAPTCHA response token
                                 document.getElementById('recaptchaResponse').value = token;
-                                
-                                // Update reCAPTCHA status
-                                updateRecaptchaStatus('success', 'Security verification passed');
                                 
                                 // Update button text
                                 loginText.textContent = 'Authenticating...';
@@ -1546,8 +1378,7 @@ function send2FACodeEmail($email, $verificationCode) {
                                 form.submit();
                             }).catch(function(error) {
                                 console.error('reCAPTCHA error:', error);
-                                updateRecaptchaStatus('error', 'Security verification failed');
-                                loginText.textContent = 'Verification Error';
+                                loginText.textContent = 'reCAPTCHA Error';
                                 loginSpinner.classList.add('d-none');
                                 loginBtn.disabled = false;
                                 
