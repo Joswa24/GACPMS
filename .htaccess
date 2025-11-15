@@ -1,44 +1,22 @@
 RewriteEngine On
 
-# Remove duplicate RewriteEngine and fix index.php redirect
+# Remove duplicate RewriteEngine and fix index.php  redirect
 RewriteRule ^index\.php$ / [R=301,L]
 
-# Hide .php extensions
+
+#  Hide .php extensions
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^(.*)$ $1.php [L]
 
 # Block direct access to specific directories
 RewriteRule ^(assets|backup|uploads)/ - [F,L,NC]
-RewriteRule ^admin/admin/(uploads|imgs)/ - [F,L,NC]
+RewriteRule ^admin/admin/(uploads)/ - [F,L,NC]
 RewriteRule ^admin/(img)/ - [F,L,NC]
 
 # Allow access to images in admin/img directory but not other admin subdirectories
 RewriteCond %{REQUEST_FILENAME} -f
-RewriteCond %{REQUEST_FILENAME} \.(jpg|jpeg|png|gif|ico|svg|webp)$ RewriteRule ^admin/img/(.*)$ - [L]
-
-# Block access to sensitive files and directories
-RewriteRule ^(config|\.env|\.htaccess|composer\.(json|lock)|\.git) - [F,L,NC]
-RewriteRule ^\.(git|svn|hg)/ - [F,L,NC]
-RewriteRule ^admin/(config|logs|tmp|cache)/ - [F,L,NC]
-
-# Block common attack patterns
-RewriteCond %{QUERY_STRING} (eval\(|base64_encode|javascript:|document\.cookie) [NC,OR]
-RewriteCond %{QUERY_STRING} (<script|onload=|onerror=) [NC,OR]
-RewriteCond %{QUERY_STRING} (union.*select|insert.*into|drop.*table|update.*set|delete.*from) [NC,OR]
-RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC,OR]
-RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider|scraper) [NC]
-RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK|DEBUG|OPTIONS) [NC]
-RewriteRule ^(.*)$ - [F,L]
-
-# Force HTTPS (uncomment if you have SSL certificate)
-# RewriteCond %{HTTPS} off
-# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-# Add trailing slash to directories (prevents duplicate content)
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_URI} !(.*)/$ RewriteCond %{REQUEST_URI} !(.*)\.(css|js|png|jpg|jpeg|gif|ico)$ RewriteRule ^(.*)$ /$1/ [L,R=301]
-
+RewriteCond %{REQUEST_FILENAME} \.(jpg|jpeg|png|gif|ico|svg|webp)$ RewriteRule ^admin/uploads/(.*)$ - [L]
 # ======= SECURITY HEADERS & PROTECTION =======
 
 # Enable HSTS Header
@@ -49,7 +27,31 @@ Header always set X-Content-Type-Options "nosniff"
 Header always set X-Frame-Options "SAMEORIGIN"
 Header always set X-XSS-Protection "1; mode=block"
 Header always set Referrer-Policy "strict-origin-when-cross-origin"
-Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.google.com; frame-ancestors 'none';"
+
+# Block common attacks
+RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
+RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
+RewriteCond %{QUERY_STRING} (javascript:) [NC,OR]
+RewriteCond %{QUERY_STRING} (<script) [NC,OR]
+RewriteCond %{QUERY_STRING} (document\.cookie) [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Block SQL injections
+RewriteCond %{QUERY_STRING} (union.*select) [NC,OR]
+RewriteCond %{QUERY_STRING} (insert.*into) [NC,OR]
+RewriteCond %{QUERY_STRING} (drop.*table) [NC,OR]
+RewriteCond %{QUERY_STRING} (update.*set) [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Block file inclusion attacks
+RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Disable server signature
+ServerSignature Off
+
+# Prevent clickjacking
+Header always set X-Frame-Options "SAMEORIGIN"
 
 # Prevent MIME type sniffing
 Header always set X-Content-Type-Options "nosniff"
@@ -64,61 +66,15 @@ Header always set X-XSS-Protection "1; mode=block"
 </Files>
 
 # Protect sensitive files
-<FilesMatch "\.(env|log|ini|conf|sql|bak|backup)$">
-    Require all denied
+<FilesMatch "\.(env|log|ini|conf|sql)$">
+    Deny from all
 </FilesMatch>
 
 <FilesMatch "^\.">
-    Require all denied
+    Deny from all
 </FilesMatch>
 
-# Prevent access to .htaccess file
-<Files .htaccess>
-    Require all denied
-</Files>
-
-# Additional directory protection
-<Directory "admin">
-    Options -Indexes
-    AuthType Basic
-    AuthName "Restricted Area"
-    AuthUserFile /path/to/.htpasswd
-    Require valid-user
-</Directory>
-
-<Directory "backup">
-    Options -Indexes
-    Require ip 127.0.0.1
-    Require ip ::1
-</Directory>
-
-<Directory "uploads">
-    Options -Indexes
-    php_flag engine off
-    AddType text/plain .php .phtml .php3 .php4 .php5 .pl .py .cgi
-</Directory>
-
-# Set PHP settings for security
-php_flag display_errors off
-php_flag log_errors on
-php_value error_log /path/to/error.log
-php_value max_execution_time 30
-php_value memory_limit 128M
-php_value upload_max_filesize 10M
-php_value post_max_size 10M
-php_value max_input_vars 1000
-php_value session.cookie_httponly On
-php_value session.cookie_samesite Strict
-php_value session.use_strict_mode On
-php_value session.cookie_secure On
-
-# Block PHP errors from being displayed
-php_flag display_startup_errors off
-
-# Prevent information disclosure
-php_flag expose_php off
-
-# File upload restrictions
-php_value file_uploads On
-php_value upload_tmp_dir /tmp
-php_value max_file_uploads 20
+# Additional directory protection with .htaccess files
+# This is an alternative method you can use if the RewriteRules above don't work as expected
+# You would need to create a separate .htaccess file in each directory with:
+# Deny from all
