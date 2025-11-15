@@ -25,10 +25,6 @@ header("Expires: 0");
  $success = '';
  $twoFactorRequired = false;
 
-// reCAPTCHA configuration
- $recaptchaSiteKey = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
- $recaptchaSecretKey = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
-
 // Initialize session variables
 if (!isset($_SESSION['login_attempts'])) {
     $_SESSION['login_attempts'] = 0;
@@ -38,27 +34,6 @@ if (!isset($_SESSION['login_attempts'])) {
 // Generate CSRF token
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-
-// Function to verify reCAPTCHA response
-function verifyRecaptcha($response, $secretKey) {
-    $url = 'https://www.google.com/recaptcha/api/siteverify';
-    $data = [
-        'secret' => $secretKey,
-        'response' => $response
-    ];
-    
-    $options = [
-        'http' => [
-            'header' => "Content-type: application/x-www-form-urlencoded\r\n",
-            'method' => 'POST',
-            'content' => http_build_query($data)
-        ]
-    ];
-    
-    $context = stream_context_create($options);
-    $result = file_get_contents($url, false, $context);
-    return json_decode($result, true);
 }
 
 // Check and create location_details column if it doesn't exist
@@ -238,86 +213,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         $error = "Security token invalid. Please refresh the page.";
     } else {
-        // Verify reCAPTCHA
-        $recaptchaResponse = $_POST['recaptcha_response'] ?? '';
-        $recaptchaResult = verifyRecaptcha($recaptchaResponse, $recaptchaSecretKey);
-        
-        if (!$recaptchaResult['success'] || ($recaptchaResult['score'] ?? 0) < 0.5) {
-            $error = "reCAPTCHA verification failed. Please try again.";
-            error_log("reCAPTCHA verification failed: " . print_r($recaptchaResult, true));
+        // Check if location permission was granted
+        if (!isset($_POST['location_granted']) || $_POST['location_granted'] !== 'true') {
+            $error = "Location permission is required for secure login. Please allow location access and try again.";
         } else {
-            // Check if location permission was granted
-            if (!isset($_POST['location_granted']) || $_POST['location_granted'] !== 'true') {
-                $error = "Location permission is required for secure login. Please allow location access and try again.";
+            // Check lockout
+            if ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime) {
+                $remainingTime = $lockoutTime - (time() - $_SESSION['lockout_time']);
+                $error = "Too many failed attempts. Please wait " . $remainingTime . " seconds before trying again.";
             } else {
-                // Check lockout
-                if ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime) {
-                    $remainingTime = $lockoutTime - (time() - $_SESSION['lockout_time']);
-                    $error = "Too many failed attempts. Please wait " . $remainingTime . " seconds before trying again.";
-                } else {
-                    // Reset attempts if lockout expired
-                    if ((time() - $_SESSION['lockout_time']) >= $lockoutTime && $_SESSION['login_attempts'] >= $maxAttempts) {
-                        $_SESSION['login_attempts'] = 0;
-                        $_SESSION['lockout_time'] = 0;
-                    }
+                // Reset attempts if lockout expired
+                if ((time() - $_SESSION['lockout_time']) >= $lockoutTime && $_SESSION['login_attempts'] >= $maxAttempts) {
+                    $_SESSION['login_attempts'] = 0;
+                    $_SESSION['lockout_time'] = 0;
+                }
 
-                    $username = trim($_POST['username']);
-                    $password = trim($_POST['password']);
-                    
-                    // Input validation
-                    if (empty($username) || empty($password)) {
-                        $error = "Please enter both username and password.";
-                    } elseif (strlen($username) > 50 || strlen($password) > 255) {
-                        $error = "Invalid input length.";
-                    } else {
-                        try {
-                            $stmt = $db->prepare("SELECT * FROM user WHERE username = ?");
-                            if (!$stmt) {
-                                throw new Exception("Database error");
-                            }
+                $username = trim($_POST['username']);
+                $password = trim($_POST['password']);
+                
+                // Input validation
+                if (empty($username) || empty($password)) {
+                    $error = "Please enter both username and password.";
+                } elseif (strlen($username) > 50 || strlen($password) > 255) {
+                    $error = "Invalid input length.";
+                } else {
+                    try {
+                        $stmt = $db->prepare("SELECT * FROM user WHERE username = ?");
+                        if (!$stmt) {
+                            throw new Exception("Database error");
+                        }
+                        
+                        $stmt->bind_param("s", $username);
+                        $stmt->execute();
+                        $result = $stmt->get_result();
+                        
+                        if ($result->num_rows > 0) {
+                            $user = $result->fetch_assoc();
                             
-                            $stmt->bind_param("s", $username);
-                            $stmt->execute();
-                            $result = $stmt->get_result();
-                            
-                            if ($result->num_rows > 0) {
-                                $user = $result->fetch_assoc();
+                            if (password_verify($password, $user['password'])) {
+                                // Log successful login
+                                logAccessAttempt($user['id'], $user['username'], 'Login', 'success');
                                 
-                                if (password_verify($password, $user['password'])) {
-                                    // Log successful login
-                                    logAccessAttempt($user['id'], $user['username'], 'Login', 'success');
-                                    
-                                    // Reset login attempts
-                                    $_SESSION['login_attempts'] = 0;
-                                    $_SESSION['lockout_time'] = 0;
-                                    
-                                    // Store user info in session for 2FA verification
-                                    $_SESSION['temp_user_id'] = $user['id'];
-                                    $_SESSION['temp_username'] = $user['username'];
-                                    $_SESSION['temp_email'] = $user['email'];
-                                    $_SESSION['password_verified'] = true;
-                                    
-                                    // Generate and send 2FA code
-                                    $verificationCode = generate2FACode($user['id'], $user['email']);
-                                    
-                                    if ($verificationCode) {
-                                        $twoFactorRequired = true;
-                                        $success = "Verification code sent to your email.";
-                                    } else {
-                                        $error = "Failed to send verification code. Please try again.";
-                                    }
+                                // Reset login attempts
+                                $_SESSION['login_attempts'] = 0;
+                                $_SESSION['lockout_time'] = 0;
+                                
+                                // Store user info in session for 2FA verification
+                                $_SESSION['temp_user_id'] = $user['id'];
+                                $_SESSION['temp_username'] = $user['username'];
+                                $_SESSION['temp_email'] = $user['email'];
+                                $_SESSION['password_verified'] = true;
+                                
+                                // Generate and send 2FA code
+                                $verificationCode = generate2FACode($user['id'], $user['email']);
+                                
+                                if ($verificationCode) {
+                                    $twoFactorRequired = true;
+                                    $success = "Verification code sent to your email.";
                                 } else {
-                                    // Log failed login attempt
-                                    logAccessAttempt(0, $username, 'Failed Login', 'failed');
-                                    
-                                    $_SESSION['login_attempts']++;
-                                    $attemptsLeft = $maxAttempts - $_SESSION['login_attempts'];
-                                    if ($attemptsLeft > 0) {
-                                        $error = "Invalid username or password. Attempts remaining: " . $attemptsLeft;
-                                    } else {
-                                        $_SESSION['lockout_time'] = time();
-                                        $error = "Too many failed attempts. Please wait 30 seconds before trying again.";
-                                    }
+                                    $error = "Failed to send verification code. Please try again.";
                                 }
                             } else {
                                 // Log failed login attempt
@@ -332,10 +286,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                                     $error = "Too many failed attempts. Please wait 30 seconds before trying again.";
                                 }
                             }
-                        } catch (Exception $e) {
-                            error_log("Login error: " . $e->getMessage());
-                            $error = "Database error. Please try again.";
+                        } else {
+                            // Log failed login attempt
+                            logAccessAttempt(0, $username, 'Failed Login', 'failed');
+                            
+                            $_SESSION['login_attempts']++;
+                            $attemptsLeft = $maxAttempts - $_SESSION['login_attempts'];
+                            if ($attemptsLeft > 0) {
+                                $error = "Invalid username or password. Attempts remaining: " . $attemptsLeft;
+                            } else {
+                                $_SESSION['lockout_time'] = time();
+                                $error = "Too many failed attempts. Please wait 30 seconds before trying again.";
+                            }
                         }
+                    } catch (Exception $e) {
+                        error_log("Login error: " . $e->getMessage());
+                        $error = "Database error. Please try again.";
                     }
                 }
             }
@@ -599,7 +565,7 @@ function send2FACodeEmail($email, $verificationCode) {
     <title>Admin Login - RFID System</title>
     
     <!-- Security Meta Tags -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.google.com/recaptcha/; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://nominatim.openstreetmap.org https://www.google.com/recaptcha/; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://nominatim.openstreetmap.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
     <meta http-equiv="X-Frame-Options" content="DENY">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -1047,14 +1013,6 @@ function send2FACodeEmail($email, $verificationCode) {
             display: none;
         }
         
-        .recaptcha-badge {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            z-index: 1000;
-            opacity: 0.8;
-        }
-        
         @media (max-width: 576px) {
             .login-container {
                 max-width: 100%;
@@ -1145,7 +1103,6 @@ function send2FACodeEmail($email, $verificationCode) {
                 <input type="hidden" name="user_lat" id="user_lat" value="">
                 <input type="hidden" name="user_lon" id="user_lon" value="">
                 <input type="hidden" name="user_accuracy" id="user_accuracy" value="">
-                <input type="hidden" id="recaptchaResponse" name="recaptcha_response">
 
                 <div class="form-group">
                     <label for="username" class="form-label"><i class="fas fa-user"></i>Username</label>
@@ -1284,12 +1241,8 @@ function send2FACodeEmail($email, $verificationCode) {
         </div>
     </div>
 
-    <div class="recaptcha-badge">
-    </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://www.google.com/recaptcha/api.js?render=<?php echo $recaptchaSiteKey; ?>"></script>
     
     <script>
         // Toggle password visibility
@@ -1360,33 +1313,10 @@ function send2FACodeEmail($email, $verificationCode) {
                         locationSpinner.style.display = 'none';
                         
                         // Update button text
-                        loginText.textContent = 'Verifying...';
+                        loginText.textContent = 'Authenticating...';
                         
-                        // Execute reCAPTCHA
-                        grecaptcha.ready(function() {
-                            grecaptcha.execute('<?php echo $recaptchaSiteKey; ?>', {action: 'login'}).then(function(token) {
-                                // Set the reCAPTCHA response token
-                                document.getElementById('recaptchaResponse').value = token;
-                                
-                                // Update button text
-                                loginText.textContent = 'Authenticating...';
-                                
-                                // Submit the form
-                                form.submit();
-                            }).catch(function(error) {
-                                console.error('reCAPTCHA error:', error);
-                                loginText.textContent = 'reCAPTCHA Error';
-                                loginSpinner.classList.add('d-none');
-                                loginBtn.disabled = false;
-                                
-                                Swal.fire({
-                                    title: 'Verification Error',
-                                    text: 'Unable to verify with reCAPTCHA. Please try again.',
-                                    icon: 'error',
-                                    confirmButtonColor: '#e74a3b'
-                                });
-                            });
-                        });
+                        // Submit the form
+                        form.submit();
                     },
                     // ERROR: User denied permission or location failed
                     function(error) {
