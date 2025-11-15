@@ -1,5 +1,6 @@
+
 <?php
-// Enable error reporting for debugging
+// INSTRUCTOR
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -22,13 +23,38 @@ if (!isset($_SESSION['csrf_token'])) {
 }
 
 // Login configuration
-$maxAttempts = 3;
-$lockoutTime = 30;
-$errorMessage = '';
+ $maxAttempts = 3;
+ $lockoutTime = 30;
+ $errorMessage = '';
+
+// reCAPTCHA configuration
+ $recaptchaSiteKey = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
+ $recaptchaSecretKey = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
 
 // Check if user is currently locked out
-$isLockedOut = ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime);
-$remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lockout_time'])) : 0;
+ $isLockedOut = ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime);
+ $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lockout_time'])) : 0;
+
+// Function to verify reCAPTCHA response
+function verifyRecaptcha($response, $secretKey) {
+    $url = 'https://www.google.com/recaptcha/api/siteverify';
+    $data = [
+        'secret' => $secretKey,
+        'response' => $response
+    ];
+    
+    $options = [
+        'http' => [
+            'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+            'method' => 'POST',
+            'content' => http_build_query($data)
+        ]
+    ];
+    
+    $context = stream_context_create($options);
+    $result = file_get_contents($url, false, $context);
+    return json_decode($result, true);
+}
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
@@ -37,77 +63,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
         $errorMessage = "Invalid request. Please try again.";
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     } else {
-        // Check if user is currently locked out
-        if ($isLockedOut) {
-            $errorMessage = "Too many failed attempts. Please wait " . $remainingLockoutTime . " seconds before trying again.";
+        // Verify reCAPTCHA
+        $recaptchaResponse = $_POST['recaptcha_response'] ?? '';
+        $recaptchaResult = verifyRecaptcha($recaptchaResponse, $recaptchaSecretKey);
+        
+        if (!$recaptchaResult['success'] || ($recaptchaResult['score'] ?? 0) < 0.5) {
+            $errorMessage = "reCAPTCHA verification failed. Please try again.";
+            error_log("reCAPTCHA verification failed: " . print_r($recaptchaResult, true));
         } else {
-            // Reset attempts if lockout period has expired
-            if ((time() - $_SESSION['lockout_time']) >= $lockoutTime && $_SESSION['login_attempts'] >= $maxAttempts) {
-                $_SESSION['login_attempts'] = 0;
-                $_SESSION['lockout_time'] = 0;
-            }
-
-            // Validate inputs
-            $username = htmlspecialchars(trim($_POST['username']), ENT_QUOTES, 'UTF-8');
-            $password = trim($_POST['password']);
-
-            if (empty($username) || empty($password)) {
-                $errorMessage = "Please enter both username and password.";
-            } elseif (strlen($username) > 50 || strlen($password) > 255) {
-                $errorMessage = "Invalid input length.";
-            } elseif (!$db) {
-                $errorMessage = "Database connection error. Please try again later.";
+            // Check if user is currently locked out
+            if ($isLockedOut) {
+                $errorMessage = "Too many failed attempts. Please wait " . $remainingLockoutTime . " seconds before trying again.";
             } else {
-                // Query to verify instructor credentials
-                $stmt = $db->prepare("
-                    SELECT ia.*, i.fullname, i.department_id, d.department_name 
-                    FROM instructor_accounts ia 
-                    INNER JOIN instructor i ON ia.instructor_id = i.id 
-                    LEFT JOIN department d ON i.department_id = d.department_id 
-                    WHERE ia.username = ?
-                ");
-                
-                if ($stmt) {
-                    $stmt->bind_param("s", $username);
-                    $stmt->execute();
-                    $result = $stmt->get_result();
+                // Reset attempts if lockout period has expired
+                if ((time() - $_SESSION['lockout_time']) >= $lockoutTime && $_SESSION['login_attempts'] >= $maxAttempts) {
+                    $_SESSION['login_attempts'] = 0;
+                    $_SESSION['lockout_time'] = 0;
+                }
 
-                    if ($result->num_rows > 0) {
-                        $user = $result->fetch_assoc();
+                // Validate inputs
+                $username = htmlspecialchars(trim($_POST['username']), ENT_QUOTES, 'UTF-8');
+                $password = trim($_POST['password']);
 
-                        // Verify password
-                        if (password_verify($password, $user['password'])) {
-                            // Successful login - SET ALL SESSION VARIABLES
-                            $_SESSION['login_attempts'] = 0;
-                            $_SESSION['lockout_time'] = 0;
+                if (empty($username) || empty($password)) {
+                    $errorMessage = "Please enter both username and password.";
+                } elseif (strlen($username) > 50 || strlen($password) > 255) {
+                    $errorMessage = "Invalid input length.";
+                } elseif (!$db) {
+                    $errorMessage = "Database connection error. Please try again later.";
+                } else {
+                    // Query to verify instructor credentials
+                    $stmt = $db->prepare("
+                        SELECT ia.*, i.fullname, i.department_id, d.department_name 
+                        FROM instructor_accounts ia 
+                        INNER JOIN instructor i ON ia.instructor_id = i.id 
+                        LEFT JOIN department d ON i.department_id = d.department_id 
+                        WHERE ia.username = ?
+                    ");
+                    
+                    if ($stmt) {
+                        $stmt->bind_param("s", $username);
+                        $stmt->execute();
+                        $result = $stmt->get_result();
 
-                            // Store ALL required session data
-                            $_SESSION['username'] = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
-                            $_SESSION['instructor_id'] = (int)$user['instructor_id'];
-                            $_SESSION['fullname'] = htmlspecialchars($user['fullname'], ENT_QUOTES, 'UTF-8');
-                            $_SESSION['department'] = htmlspecialchars($user['department_name'] ?? 'Not Assigned', ENT_QUOTES, 'UTF-8');
-                            $_SESSION['role'] = 'instructor';
-                            $_SESSION['logged_in'] = true;
-                            $_SESSION['last_activity'] = time();
-                            $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'];
+                        if ($result->num_rows > 0) {
+                            $user = $result->fetch_assoc();
 
-                            // Update last login timestamp
-                            $updateStmt = $db->prepare("UPDATE instructor_accounts SET last_login = NOW() WHERE instructor_id = ?");
-                            $updateStmt->bind_param("i", $user['instructor_id']);
-                            $updateStmt->execute();
-                            $updateStmt->close();
+                            // Verify password
+                            if (password_verify($password, $user['password'])) {
+                                // Successful login - SET ALL SESSION VARIABLES
+                                $_SESSION['login_attempts'] = 0;
+                                $_SESSION['lockout_time'] = 0;
 
-                            // Debug: Log successful login
-                            error_log("SUCCESSFUL LOGIN - Instructor ID: " . $user['instructor_id'] . ", Username: " . $username);
-                            
-                            // Regenerate session ID and redirect
-                            session_regenerate_id(true);
-                            
-                            // Verify session data before redirect
-                            error_log("SESSION BEFORE REDIRECT: " . print_r($_SESSION, true));
-                            
-                            header("Location: dashboard.php");
-                            exit();
+                                // Store ALL required session data
+                                $_SESSION['username'] = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
+                                $_SESSION['instructor_id'] = (int)$user['instructor_id'];
+                                $_SESSION['fullname'] = htmlspecialchars($user['fullname'], ENT_QUOTES, 'UTF-8');
+                                $_SESSION['department'] = htmlspecialchars($user['department_name'] ?? 'Not Assigned', ENT_QUOTES, 'UTF-8');
+                                $_SESSION['role'] = 'instructor';
+                                $_SESSION['logged_in'] = true;
+                                $_SESSION['last_activity'] = time();
+                                $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'];
+
+                                // Update last login timestamp
+                                $updateStmt = $db->prepare("UPDATE instructor_accounts SET last_login = NOW() WHERE instructor_id = ?");
+                                $updateStmt->bind_param("i", $user['instructor_id']);
+                                $updateStmt->execute();
+                                $updateStmt->close();
+
+                                // Debug: Log successful login
+                                error_log("SUCCESSFUL LOGIN - Instructor ID: " . $user['instructor_id'] . ", Username: " . $username);
+                                
+                                // Regenerate session ID and redirect
+                                session_regenerate_id(true);
+                                
+                                // Verify session data before redirect
+                                error_log("SESSION BEFORE REDIRECT: " . print_r($_SESSION, true));
+                                
+                                header("Location: dashboard.php");
+                                exit();
+                            } else {
+                                $_SESSION['login_attempts']++;
+                                $attemptsLeft = $maxAttempts - $_SESSION['login_attempts'];
+                                if ($attemptsLeft > 0) {
+                                    $errorMessage = "Invalid username or password. Attempts remaining: " . $attemptsLeft;
+                                } else {
+                                    $_SESSION['lockout_time'] = time();
+                                    $errorMessage = "Too many failed attempts. Please wait 30 seconds before trying again.";
+                                }
+                            }
                         } else {
                             $_SESSION['login_attempts']++;
                             $attemptsLeft = $maxAttempts - $_SESSION['login_attempts'];
@@ -118,20 +162,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                                 $errorMessage = "Too many failed attempts. Please wait 30 seconds before trying again.";
                             }
                         }
+                        $stmt->close();
                     } else {
-                        $_SESSION['login_attempts']++;
-                        $attemptsLeft = $maxAttempts - $_SESSION['login_attempts'];
-                        if ($attemptsLeft > 0) {
-                            $errorMessage = "Invalid username or password. Attempts remaining: " . $attemptsLeft;
-                        } else {
-                            $_SESSION['lockout_time'] = time();
-                            $errorMessage = "Too many failed attempts. Please wait 30 seconds before trying again.";
-                        }
+                        $errorMessage = "Database error. Please try again later.";
+                        error_log("Login prepare failed: " . $db->error);
                     }
-                    $stmt->close();
-                } else {
-                    $errorMessage = "Database error. Please try again later.";
-                    error_log("Login prepare failed: " . $db->error);
                 }
             }
         }
@@ -405,6 +440,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             padding: 3px;
         }
 
+        .recaptcha-badge {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            z-index: 1000;
+            opacity: 0.8;
+        }
+
         @media (max-width: 576px) {
             .login-container {
                 max-width: 100%;
@@ -469,6 +512,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             <form method="POST" id="loginForm" autocomplete="on">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                 <input type="hidden" name="login" value="1">
+                <input type="hidden" id="recaptchaResponse" name="recaptcha_response">
 
                 <div class="form-group">
                     <label for="username" class="form-label"><i class="fas fa-user"></i>Username</label>
@@ -512,9 +556,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
         </div>
     </div>
 
+    <div class="recaptcha-badge">
+        This site is protected by reCAPTCHA and the Google
+        <a href="https://policies.google.com/privacy">Privacy Policy</a> and
+        <a href="https://policies.google.com/terms">Terms of Service</a> apply.
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://www.google.com/recaptcha/api.js?render=6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_"></script>
+    <script src="https://www.google.com/recaptcha/api.js?render=<?php echo $recaptchaSiteKey; ?>"></script>
     <script>
         function togglePassword() {
             const passwordField = document.getElementById('password');
@@ -533,7 +583,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             }
         }
 
-        // Form submission handling
+        // Form submission handling with reCAPTCHA
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             const isLockedOut = <?php echo $isLockedOut ? 'true' : 'false'; ?>;
             
@@ -542,14 +592,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                 return;
             }
             
+            e.preventDefault();
+            
             // Show loading state
             const loginBtn = document.getElementById('loginBtn');
             const loginText = document.getElementById('loginText');
             const loginSpinner = document.getElementById('loginSpinner');
             
-            loginText.textContent = 'Authenticating...';
+            loginText.textContent = 'Verifying...';
             loginSpinner.classList.remove('d-none');
             loginBtn.disabled = true;
+            
+            // Execute reCAPTCHA
+            grecaptcha.ready(function() {
+                grecaptcha.execute('<?php echo $recaptchaSiteKey; ?>', {action: 'login'}).then(function(token) {
+                    // Set the reCAPTCHA response token
+                    document.getElementById('recaptchaResponse').value = token;
+                    
+                    // Update UI
+                    loginText.textContent = 'Authenticating...';
+                    
+                    // Submit the form
+                    document.getElementById('loginForm').submit();
+                }).catch(function(error) {
+                    console.error('reCAPTCHA error:', error);
+                    loginText.textContent = 'reCAPTCHA Error';
+                    loginSpinner.classList.add('d-none');
+                    loginBtn.disabled = false;
+                    
+                    Swal.fire({
+                        title: 'Verification Error',
+                        text: 'Unable to verify with reCAPTCHA. Please try again.',
+                        icon: 'error',
+                        confirmButtonColor: '#e74a3b'
+                    });
+                });
+            });
         });
 
         // Countdown timer for lockout
