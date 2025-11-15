@@ -114,7 +114,3 @@ RewriteRule ^(.*)$ - [F,L]
 # Force HTTPS (uncomment if you have SSL certificate)
 # RewriteCond %{HTTPS} off
 # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-# Add trailing slash to directories (prevents duplicate content)
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_URI} !(.*)/$ RewriteCond %{REQUEST_URI} !(.*)\.(css|js|png|jpg|jpeg|gif|ico)$ RewriteRule ^(.*)$ /$1/ [L,R=301]
