@@ -238,7 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         $error = "Security token invalid. Please refresh the page.";
     } else {
-        // Verify reCAPTCHA
+        // Verify reCAPTCHA - MODIFIED TO MATCH INSTRUCTOR LOGIN
         $recaptchaResponse = $_POST['recaptcha_response'] ?? '';
         $recaptchaResult = verifyRecaptcha($recaptchaResponse, $recaptchaSecretKey);
         
@@ -1362,7 +1362,7 @@ function send2FACodeEmail($email, $verificationCode) {
                         // Update button text
                         loginText.textContent = 'Verifying...';
                         
-                        // Execute reCAPTCHA
+                        // Execute reCAPTCHA - SIMPLIFIED TO MATCH INSTRUCTOR LOGIN
                         grecaptcha.ready(function() {
                             grecaptcha.execute('<?php echo $recaptchaSiteKey; ?>', {action: 'login'}).then(function(token) {
                                 // Set the reCAPTCHA response token
@@ -1442,7 +1442,7 @@ function send2FACodeEmail($email, $verificationCode) {
             }
         }
 
-        // Login form submission
+        // Login form submission - SIMPLIFIED TO MATCH INSTRUCTOR LOGIN
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             const isLockedOut = <?php echo $isLockedOut ? 'true' : 'false'; ?>;
             
@@ -1454,8 +1454,40 @@ function send2FACodeEmail($email, $verificationCode) {
             // Prevent default form submission
             e.preventDefault();
             
-            // Get location and then submit
-            getLocationAndLogin(this);
+            // Show loading state
+            const loginBtn = document.getElementById('loginBtn');
+            const loginText = document.getElementById('loginText');
+            const loginSpinner = document.getElementById('loginSpinner');
+            
+            loginText.textContent = 'Verifying...';
+            loginSpinner.classList.remove('d-none');
+            loginBtn.disabled = true;
+            
+            // Execute reCAPTCHA - SIMPLIFIED TO MATCH INSTRUCTOR LOGIN
+            grecaptcha.ready(function() {
+                grecaptcha.execute('<?php echo $recaptchaSiteKey; ?>', {action: 'login'}).then(function(token) {
+                    // Set the reCAPTCHA response token
+                    document.getElementById('recaptchaResponse').value = token;
+                    
+                    // Update button text
+                    loginText.textContent = 'Getting location...';
+                    
+                    // Get location and then submit
+                    getLocationAndLogin(document.getElementById('loginForm'));
+                }).catch(function(error) {
+                    console.error('reCAPTCHA error:', error);
+                    loginText.textContent = 'reCAPTCHA Error';
+                    loginSpinner.classList.add('d-none');
+                    loginBtn.disabled = false;
+                    
+                    Swal.fire({
+                        title: 'Verification Error',
+                        text: 'Unable to verify with reCAPTCHA. Please try again.',
+                        icon: 'error',
+                        confirmButtonColor: '#e74a3b'
+                    });
+                });
+            });
         });
 
         // Enhanced 2FA verification handling
