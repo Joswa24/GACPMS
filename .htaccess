@@ -18,7 +18,8 @@ RewriteCond %{REQUEST_FILENAME} -f
 RewriteCond %{REQUEST_FILENAME} \.(jpg|jpeg|png|gif|ico|svg|webp)$ RewriteRule ^admin/img/(.*)$ - [L]
 
 # Block access to specific image files (add more as needed)
-RewriteCond %{REQUEST_FILENAME} ^2601828\.png$ [NC,OR]
+RewriteCond %{REQUEST_URI} ^admin/img/2601828\.png$ [NC,]
+
 
 RewriteRule ^(.*)$ - [F,L]
 
