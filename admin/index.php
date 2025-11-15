@@ -1,22 +1,22 @@
 <?php
-// admin/index.php
-session_start();
+//  admin/index.php
 include '../connection.php';
-// include '../security-headers.php';
+include '../security-headers.php';
+session_start();
 
-// // Additional security headers
-// header("X-Frame-Options: DENY");
-// header("X-Content-Type-Options: nosniff");
-// header("X-XSS-Protection: 1; mode=block");
-// header("Referrer-Policy: strict-origin-when-cross-origin");
-// header("Permissions-Policy: geolocation=(self), microphone=(), camera=()");
-// header("X-Permitted-Cross-Domain-Policies: none");
-// header("Cross-Origin-Embedder-Policy: require-corp");
-// header("Cross-Origin-Opener-Policy: same-origin");
-// header("Cross-Origin-Resource-Policy: same-origin");
-// header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
-// header("Pragma: no-cache");
-// header("Expires: 0");
+// Additional security headers
+header("X-Frame-Options: DENY");
+header("X-Content-Type-Options: nosniff");
+header("X-XSS-Protection: 1; mode=block");
+header("Referrer-Policy: strict-origin-when-cross-origin");
+header("Permissions-Policy: geolocation=(self), microphone=(), camera=()");
+header("X-Permitted-Cross-Domain-Policies: none");
+header("Cross-Origin-Embedder-Policy: require-corp");
+header("Cross-Origin-Opener-Policy: same-origin");
+header("Cross-Origin-Resource-Policy: same-origin");
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: 0");
 
 // Initialize variables
  $maxAttempts = 3;
@@ -238,7 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         $error = "Security token invalid. Please refresh the page.";
     } else {
-        // Verify reCAPTCHA - MODIFIED TO MATCH INSTRUCTOR LOGIN
+        // Verify reCAPTCHA
         $recaptchaResponse = $_POST['recaptcha_response'] ?? '';
         $recaptchaResult = verifyRecaptcha($recaptchaResponse, $recaptchaSecretKey);
         
@@ -1362,7 +1362,7 @@ function send2FACodeEmail($email, $verificationCode) {
                         // Update button text
                         loginText.textContent = 'Verifying...';
                         
-                        // Execute reCAPTCHA - SIMPLIFIED TO MATCH INSTRUCTOR LOGIN
+                        // Execute reCAPTCHA
                         grecaptcha.ready(function() {
                             grecaptcha.execute('<?php echo $recaptchaSiteKey; ?>', {action: 'login'}).then(function(token) {
                                 // Set the reCAPTCHA response token
@@ -1442,7 +1442,7 @@ function send2FACodeEmail($email, $verificationCode) {
             }
         }
 
-        // Login form submission - SIMPLIFIED TO MATCH INSTRUCTOR LOGIN
+        // Login form submission
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             const isLockedOut = <?php echo $isLockedOut ? 'true' : 'false'; ?>;
             
@@ -1454,40 +1454,8 @@ function send2FACodeEmail($email, $verificationCode) {
             // Prevent default form submission
             e.preventDefault();
             
-            // Show loading state
-            const loginBtn = document.getElementById('loginBtn');
-            const loginText = document.getElementById('loginText');
-            const loginSpinner = document.getElementById('loginSpinner');
-            
-            loginText.textContent = 'Verifying...';
-            loginSpinner.classList.remove('d-none');
-            loginBtn.disabled = true;
-            
-            // Execute reCAPTCHA - SIMPLIFIED TO MATCH INSTRUCTOR LOGIN
-            grecaptcha.ready(function() {
-                grecaptcha.execute('<?php echo $recaptchaSiteKey; ?>', {action: 'login'}).then(function(token) {
-                    // Set the reCAPTCHA response token
-                    document.getElementById('recaptchaResponse').value = token;
-                    
-                    // Update button text
-                    loginText.textContent = 'Getting location...';
-                    
-                    // Get location and then submit
-                    getLocationAndLogin(document.getElementById('loginForm'));
-                }).catch(function(error) {
-                    console.error('reCAPTCHA error:', error);
-                    loginText.textContent = 'reCAPTCHA Error';
-                    loginSpinner.classList.add('d-none');
-                    loginBtn.disabled = false;
-                    
-                    Swal.fire({
-                        title: 'Verification Error',
-                        text: 'Unable to verify with reCAPTCHA. Please try again.',
-                        icon: 'error',
-                        confirmButtonColor: '#e74a3b'
-                    });
-                });
-            });
+            // Get location and then submit
+            getLocationAndLogin(this);
         });
 
         // Enhanced 2FA verification handling

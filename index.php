@@ -9,49 +9,6 @@ include 'connection.php';
 
 // Start session first
 session_start();
-
-// Initialize session variables for login attempts
-if (!isset($_SESSION['login_attempts'])) {
-    $_SESSION['login_attempts'] = 0;
-    $_SESSION['lockout_time'] = 0;
-}
-
-// Generate CSRF token if not exists
-if (!isset($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-
-// Login configuration
-$maxAttempts = 5;
-$lockoutTime = 30; // seconds
-$isLockedOut = ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime);
-$remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lockout_time'])) : 0;
-
-// reCAPTCHA configuration
-$recaptchaSiteKey = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
-$recaptchaSecretKey = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
-
-// Function to verify reCAPTCHA response
-function verifyRecaptcha($response, $secretKey) {
-    $url = 'https://www.google.com/recaptcha/api/siteverify';
-    $data = [
-        'secret' => $secretKey,
-        'response' => $response
-    ];
-    
-    $options = [
-        'http' => [
-            'header' => "Content-type: application/x-www-form-urlencoded\r\n",
-            'method' => 'POST',
-            'content' => http_build_query($data)
-        ]
-    ];
-    
-    $context = stream_context_create($options);
-    $result = file_get_contents($url, false, $context);
-    return json_decode($result, true);
-}
-
 // Clear any existing output
 if (ob_get_level() > 0) {
     ob_clean();
@@ -246,7 +203,6 @@ function validateOtherPersonnel($db, $id_number, $room, $authorizedPersonnel) {
         'room_data' => $room
     ];
 }
-
 function getSubjectDetails($db, $subject, $room) {
     $stmt = $db->prepare("SELECT year_level, section FROM room_schedules WHERE subject = ? AND room_name = ? LIMIT 1");
     $stmt->bind_param("ss", $subject, $room);
@@ -254,40 +210,10 @@ function getSubjectDetails($db, $subject, $room) {
     $result = $stmt->get_result();
     return $result->fetch_assoc() ?? ['year_level' => '1st Year', 'section' => 'A'];
 }
-
 // =====================================================================
 // MAIN LOGIN PROCESSING
 // =====================================================================
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Validate CSRF token
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        die(json_encode(['status' => 'error', 'message' => "Invalid request. Please try again."]));
-    }
-
-    // Verify reCAPTCHA for login attempts
-    if ($_SESSION['login_attempts'] >= 2) { // Require reCAPTCHA after 2 attempts
-        $recaptchaResponse = $_POST['recaptcha_response'] ?? '';
-        $recaptchaResult = verifyRecaptcha($recaptchaResponse, $recaptchaSecretKey);
-        
-        if (!$recaptchaResult['success'] || ($recaptchaResult['score'] ?? 0) < 0.5) {
-            http_response_code(400);
-            header('Content-Type: application/json');
-            die(json_encode(['status' => 'error', 'message' => "reCAPTCHA verification failed. Please try again."]));
-        }
-    }
-
-    // Check if user is currently locked out
-    if ($isLockedOut) {
-        http_response_code(429);
-        header('Content-Type: application/json');
-        die(json_encode([
-            'status' => 'error', 
-            'message' => "Too many failed attempts. Please wait " . $remainingLockoutTime . " seconds before trying again."
-        ]));
-    }
-
     // Sanitize inputs
     $department = sanitizeInput($_POST['roomdpt'] ?? '');
     $location = sanitizeInput($_POST['location'] ?? '');
@@ -304,7 +230,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($id_number)) $errors[] = "ID number is required";
     
     if (!empty($errors)) {
-        $_SESSION['login_attempts']++;
         http_response_code(400);
         header('Content-Type: application/json');
         die(json_encode(['status' => 'error', 'message' => implode("<br>", $errors)]));
@@ -314,13 +239,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $validationResult = validateRoomPassword($db, $department, $location, $password, $id_number);
     
     if (!$validationResult['success']) {
-        $_SESSION['login_attempts']++;
-        
-        // Check if should lockout
-        if ($_SESSION['login_attempts'] >= $maxAttempts) {
-            $_SESSION['lockout_time'] = time();
-        }
-        
         sleep(2); // Rate limiting
         http_response_code(401);
         header('Content-Type: application/json');
@@ -330,11 +248,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         ]));
     }
 
-    // Login successful - reset attempts
-    $_SESSION['login_attempts'] = 0;
-    $_SESSION['lockout_time'] = 0;
-
-    // Set session data based on user type
+    // Login successful - set session data based on user type
     $userType = $validationResult['user_type'];
     $userData = $validationResult['user_data'];
     $roomData = $validationResult['room_data'];
@@ -402,19 +316,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     header('X-Content-Type-Options: nosniff');
 
     // Return success response
+    // In the login success section of index.php, update the response:
     echo json_encode([
         'status' => 'success',
         'redirect' => $redirectUrl,
         'message' => 'Login successful',
         'user_type' => $userType,
-        'instructor_id' => $userData['id'],
-        'instructor_name' => $userData['fullname']
+        'instructor_id' => $userData['id'], // Add this
+        'instructor_name' => $userData['fullname'] // Add this
     ]);
     exit;
 }
 
-// Regenerate CSRF token for the form
-$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 ?>
 
 <!DOCTYPE html>
@@ -428,11 +341,11 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     
     <!-- CORRECTED Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; 
-    script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com https://www.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval'; 
+    script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com 'unsafe-inline' 'unsafe-eval'; 
     style-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; 
     font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.gstatic.com; 
     img-src 'self' data: https:; 
-    connect-src 'self' https://www.google.com; 
+    connect-src 'self'; 
     frame-ancestors 'none';">
     
     <!-- Security Meta Tags -->
@@ -971,15 +884,6 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
             margin-top: 1rem;
         }
 
-        /* Lockout Alert */
-        .lockout-alert {
-            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
-            border-left: 4px solid var(--warning-color);
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-        }
-
         /* Responsive adjustments */
         @media (max-width: 576px) {
             .login-container {
@@ -1078,14 +982,6 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             color: var(--accent-color);
         }
-
-        .recaptcha-badge {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            z-index: 1000;
-            opacity: 0.8;
-        }
     </style>
 </head>
 <body>
@@ -1100,32 +996,12 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         </div>
         
         <div class="card-body">
-            <!-- Lockout Alert -->
-            <div class="lockout-alert <?php echo $isLockedOut ? '' : 'd-none'; ?>" id="lockoutAlert">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-clock me-3 fs-4 text-warning"></i>
-                    <div>
-                        <strong>Account Temporarily Locked</strong>
-                        <div class="countdown-timer" id="countdown">
-                            <?php echo $remainingLockoutTime; ?> seconds
-                        </div>
-                        <div class="attempts-warning">
-                            <i class="fas fa-exclamation-triangle me-1"></i>
-                            Too many failed login attempts. Please wait until the timer expires.
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <form id="logform" method="POST" novalidate autocomplete="on">
-                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-                <input type="hidden" id="recaptchaResponse" name="recaptcha_response">
-                
                 <div id="alert-container" class="alert alert-danger d-none" role="alert"></div>
                 
                 <div class="form-group">
                     <label for="roomdpt" class="form-label"><i class="fas fa-building"></i>Department</label>
-                    <select class="form-select" name="roomdpt" id="roomdpt" required autocomplete="organization" <?php echo $isLockedOut ? 'disabled' : ''; ?>>
+                    <select class="form-select" name="roomdpt" id="roomdpt" required autocomplete="organization">
                         <option value="Main" selected>Main</option>
                         <?php
                         $sql = "SELECT department_name FROM department WHERE department_name != 'Main'";
@@ -1141,7 +1017,7 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 
                 <div class="form-group">
                     <label for="location" class="form-label"><i class="fas fa-map-marker-alt"></i>Location</label>
-                    <select class="form-select" name="location" id="location" required autocomplete="organization-title" <?php echo $isLockedOut ? 'disabled' : ''; ?>>
+                    <select class="form-select" name="location" id="location" required autocomplete="organization-title">
                         <option value="Gate" selected>Gate</option>
                     </select>
                 </div>
@@ -1150,35 +1026,29 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                     <label for="password" class="form-label"><i class="fas fa-lock"></i>Password</label>
                     <div class="input-group password-field">
                         <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                        <input type="password" class="form-control" id="password" name="Ppassword" required autocomplete="current-password" <?php echo $isLockedOut ? 'disabled' : ''; ?>>
-                        <button class="password-toggle" type="button" id="togglePassword" <?php echo $isLockedOut ? 'disabled' : ''; ?>>
+                        <input type="password" class="form-control" id="password" name="Ppassword" required autocomplete="current-password">
+                        <button class="password-toggle" type="button" id="togglePassword">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
                 </div>
                 
-                <!-- Attempts Counter -->
-                <div class="attempts-counter mb-3 text-center">
-                    <small class="text-muted">
-                        <i class="fas fa-shield-alt me-1"></i>
-                        Attempts: <span id="attemptsCount"><?php echo $_SESSION['login_attempts']; ?></span>/<?php echo $maxAttempts; ?>
-                    </small>
-                </div>
-
+                <!-- ID Input Mode Toggle - REMOVED since we only want Scan Only -->
+                
                 <!-- Option 2: Scan Only -->
                 <div class="form-group" id="scanInputGroup">
                     <label class="form-label"><i class="fas fa-barcode"></i>Scan ID Card</label>
                     
                     <!-- Scanner Box - This is where users click and scan -->
-                    <div class="scanner-container" id="scannerBox" <?php echo $isLockedOut ? 'style="opacity: 0.6; pointer-events: none;"' : ''; ?>>
+                    <div class="scanner-container" id="scannerBox">
                         <div class="scanner-icon">
                             <i class="fas fa-barcode"></i>
                         </div>
                         <div class="scanner-title" id="scannerTitle">
-                            <?php echo $isLockedOut ? 'Scanner Locked' : 'Click to Activate Scanner'; ?>
+                            Click to Activate Scanner
                         </div>
                         <div class="scanner-instruction" id="scannerInstruction">
-                            <?php echo $isLockedOut ? 'Account temporarily locked' : 'Click this box then scan your ID card'; ?>
+                            Click this box then scan your ID card
                         </div>
                         
                         <!-- Barcode Display Area -->
@@ -1189,8 +1059,7 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                     </div>
 
                     <div class="scan-indicator scan-animation" id="scanIndicator">
-                        <i class="fas fa-rss me-2"></i>
-                        <?php echo $isLockedOut ? 'Scanner Locked - Please wait' : 'Scanner Ready - Click the box above to start scanning'; ?>
+                        <i class="fas fa-rss me-2"></i>Scanner Ready - Click the box above to start scanning
                     </div>
                 </div>
                 
@@ -1210,10 +1079,8 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 <input type="hidden" name="selected_room" id="selected_room" value="">
                 <input type="hidden" name="selected_time" id="selected_time" value="">
                 
-                <button type="submit" class="btn btn-primary mb-3" id="loginButton" <?php echo $isLockedOut ? 'disabled' : ''; ?>>
-                    <i class="fas fa-sign-in-alt me-2"></i>
-                    <span id="loginText"><?php echo $isLockedOut ? 'Account Locked' : 'Login'; ?></span>
-                    <span id="loginSpinner" class="spinner-border spinner-border-sm d-none ms-2" role="status"></span>
+                <button type="submit" class="btn btn-primary mb-3" id="loginButton">
+                    <i class="fas fa-sign-in-alt me-2"></i>Login
                 </button>
                 
                 <div class="login-footer">
@@ -1266,15 +1133,11 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         </div>
     </div>
 
-    <div class="recaptcha-badge"></div>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="admin/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- SweetAlert JS -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- reCAPTCHA API -->
-    <script src="https://www.google.com/recaptcha/api.js?render=<?php echo $recaptchaSiteKey; ?>"></script>
     
     <script>
     // Security: Prevent console access in production
@@ -1326,11 +1189,6 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         $('#logform').on('submit', function(e) {
             e.preventDefault();
             
-            const isLockedOut = <?php echo $isLockedOut ? 'true' : 'false'; ?>;
-            if (isLockedOut) {
-                return;
-            }
-            
             const idNumber = $('#scan-id-input').val();
             const password = $('#password').val();
             const department = $('#roomdpt').val();
@@ -1351,55 +1209,24 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
             
             console.log('🔄 Proceeding with login logic...');
             
-            // Show loading state
-            $('#loginButton').prop('disabled', true);
-            $('#loginText').text('Verifying...');
-            $('#loginSpinner').removeClass('d-none');
-            
-            // Execute reCAPTCHA if needed (after 2 attempts)
-            const attempts = <?php echo $_SESSION['login_attempts']; ?>;
-            if (attempts >= 2) {
-                grecaptcha.ready(function() {
-                    grecaptcha.execute('<?php echo $recaptchaSiteKey; ?>', {action: 'login'}).then(function(token) {
-                        $('#recaptchaResponse').val(token);
-                        validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
-                    }).catch(function(error) {
-                        console.error('reCAPTCHA error:', error);
-                        $('#loginButton').prop('disabled', false);
-                        $('#loginText').text('Login');
-                        $('#loginSpinner').addClass('d-none');
-                        
-                        Swal.fire({
-                            title: 'Verification Error',
-                            text: 'Unable to verify with reCAPTCHA. Please try again.',
-                            icon: 'error',
-                            confirmButtonColor: '#e74a3b'
-                        });
-                    });
-                });
-            } else {
-                // No reCAPTCHA needed yet
-                validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
-            }
+            // FIRST validate password for the room, THEN handle subject selection
+            validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
         });
 
         // NEW FUNCTION: Validate password BEFORE showing subject modal
         function validateRoomPasswordBeforeSubject(department, location, password, idNumber) {
+            // Show loading state
+            $('#loginButton').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Validating...');
+            $('#loginButton').prop('disabled', true);
+            
             // Create a minimal form data for password validation
             const formData = {
                 roomdpt: department,
                 location: location,
                 Ppassword: password,
                 Pid_number: idNumber,
-                csrf_token: '<?php echo $_SESSION['csrf_token']; ?>',
-                validate_only: 'true'
+                validate_only: 'true' // Add a flag to indicate this is just password validation
             };
-            
-            // Add reCAPTCHA response if exists
-            const recaptchaResponse = $('#recaptchaResponse').val();
-            if (recaptchaResponse) {
-                formData.recaptcha_response = recaptchaResponse;
-            }
             
             $.ajax({
                 url: '', // same PHP page
@@ -1408,9 +1235,8 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 dataType: 'json',
                 success: function(response) {
                     // Reset button state
+                    $('#loginButton').html('<i class="fas fa-sign-in-alt me-2"></i>Login');
                     $('#loginButton').prop('disabled', false);
-                    $('#loginText').text('Login');
-                    $('#loginSpinner').addClass('d-none');
                     
                     if (response.status === 'success') {
                         // Password is valid, now check if we need subject selection
@@ -1431,22 +1257,12 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                             title: 'Login Failed',
                             text: response.message || 'Invalid password or credentials'
                         });
-                        
-                        // Update attempts counter
-                        $('#attemptsCount').text(<?php echo $_SESSION['login_attempts']; ?> + 1);
-                        
-                        // Show lockout warning if approaching limit
-                        const attempts = <?php echo $_SESSION['login_attempts']; ?>;
-                        if (attempts >= <?php echo $maxAttempts - 1; ?>) {
-                            $('#lockoutAlert').removeClass('d-none');
-                        }
                     }
                 },
                 error: function(xhr, status, error) {
                     // Reset button state
+                    $('#loginButton').html('<i class="fas fa-sign-in-alt me-2"></i>Login');
                     $('#loginButton').prop('disabled', false);
-                    $('#loginText').text('Login');
-                    $('#loginSpinner').addClass('d-none');
                     
                     let errorMessage = 'Password validation failed. Please try again.';
                     
@@ -1886,11 +1702,6 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         setTimeout(function() {
             activateScanner();
         }, 300);
-
-        // Initialize lockout countdown if needed
-        <?php if ($isLockedOut): ?>
-            startCountdown(<?php echo $remainingLockoutTime; ?>);
-        <?php endif; ?>
     });
 
     // =====================================================================
@@ -1902,8 +1713,7 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
         // Click on scanner box to activate
         scannerBox.addEventListener('click', function() {
-            const isLockedOut = <?php echo $isLockedOut ? 'true' : 'false'; ?>;
-            if (!isLockedOut && !isScannerActive) {
+            if (!isScannerActive) {
                 activateScanner();
             }
         });
@@ -1952,9 +1762,6 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
     // Handle key presses for scanner input - FIXED VERSION
     function handleKeyPress(e) {
-        const isLockedOut = <?php echo $isLockedOut ? 'true' : 'false'; ?>;
-        if (isLockedOut) return;
-
         // Only process scanner input if scanner is active AND we're not in a form field
         if (!isScannerActive || isTypingInFormField(e)) {
             return;
@@ -2094,87 +1901,6 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         // Deactivate scanner
         deactivateScanner();
     }
-
-    // Countdown timer for lockout
-    function startCountdown(duration) {
-        const countdownElement = document.getElementById('countdown');
-        const loginForm = document.getElementById('logform');
-        const inputs = loginForm.querySelectorAll('input, button, select');
-        const lockoutAlert = document.getElementById('lockoutAlert');
-        const loginBtn = document.getElementById('loginButton');
-        const loginText = document.getElementById('loginText');
-        const scannerBox = document.getElementById('scannerBox');
-        
-        // Show lockout alert
-        lockoutAlert.classList.remove('d-none');
-        
-        // Disable form elements
-        inputs.forEach(input => {
-            if (input.type !== 'hidden') {
-                input.disabled = true;
-            }
-        });
-        
-        loginBtn.disabled = true;
-        loginText.textContent = 'Account Locked';
-        scannerBox.style.opacity = '0.6';
-        scannerBox.style.pointerEvents = 'none';
-        
-        let timer = duration;
-        
-        const interval = setInterval(() => {
-            countdownElement.textContent = timer + ' seconds';
-            
-            if (--timer < 0) {
-                clearInterval(interval);
-                lockoutAlert.classList.add('d-none');
-                
-                // Enable form elements
-                inputs.forEach(input => {
-                    if (input.type !== 'hidden') {
-                        input.disabled = false;
-                    }
-                });
-                
-                loginBtn.disabled = false;
-                loginText.textContent = 'Login';
-                scannerBox.style.opacity = '';
-                scannerBox.style.pointerEvents = '';
-                
-                // Reset attempts counter display
-                document.getElementById('attemptsCount').textContent = '0';
-                
-                // Show success message
-                Swal.fire({
-                    title: 'Ready to Try Again',
-                    text: 'You can now attempt to login again.',
-                    icon: 'success',
-                    timer: 3000,
-                    showConfirmButton: false
-                });
-            }
-        }, 1000);
-    }
-
-    // Security: Disable right-click and developer tools
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
-        
-    document.onkeydown = function(e) {
-        if (e.keyCode === 123 || // F12
-            (e.ctrlKey && e.shiftKey && e.keyCode === 73) || // Ctrl+Shift+I
-            (e.ctrlKey && e.shiftKey && e.keyCode === 74) || // Ctrl+Shift+J
-            (e.ctrlKey && e.shiftKey && e.keyCode === 67) || // Ctrl+Shift+C
-            (e.ctrlKey && e.keyCode === 85)) { // Ctrl+U
-            e.preventDefault();
-            Swal.fire({
-                title: 'Restricted Action',
-                text: 'This action is not allowed.',
-                icon: 'warning',
-                timer: 2000,
-                showConfirmButton: false
-            });
-        }
-    };
     </script>
 </body>
 </html>
