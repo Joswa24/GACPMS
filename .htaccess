@@ -15,7 +15,7 @@ RewriteRule ^admin/(img)/ - [F,L,NC]
 
 # Allow access to images in admin/img directory but not other admin subdirectories
 RewriteCond %{REQUEST_FILENAME} -f
-RewriteCond %{REQUEST_FILENAME} \.(jpg|jpeg|png|gif|ico|svg|webp)$ RewriteRule ^admin/uploads/(.*)$ - [L]
+RewriteCond %{REQUEST_FILENAME} \.(jpg|jpeg|png|gif|ico|svg|webp)$ RewriteRule ^admin/img/(.*)$ - [L]
 
 # Block access to sensitive files and directories
 RewriteRule ^(config|\.env|\.htaccess|composer\.(json|lock)|\.git) - [F,L,NC]
