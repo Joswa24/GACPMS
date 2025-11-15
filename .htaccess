@@ -14,27 +14,7 @@ RewriteRule ^admin/img/ - [F,L,NC]
 RewriteRule ^admin/admin/uploads - [F,L,NC]
 RewriteRule ^admin/uploads/ - [F,L,NC]
 
-# Block access to sensitive files and directories
-RewriteRule ^(config|\.env|\.htaccess|composer\.(json|lock)|\.git) - [F,L,NC]
-RewriteRule ^\.(git|svn|hg)/ - [F,L,NC]
-RewriteRule ^admin/(config|logs|tmp|cache)/ - [F,L,NC]
 
-# Block common attack patterns
-RewriteCond %{QUERY_STRING} (eval\(|base64_encode|javascript:|document\.cookie) [NC,OR]
-RewriteCond %{QUERY_STRING} (<script|onload=|onerror=) [NC,OR]
-RewriteCond %{QUERY_STRING} (union.*select|insert.*into|drop.*table|update.*set|delete.*from) [NC,OR]
-RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC,OR]
-RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider|scraper) [NC]
-RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK|DEBUG|OPTIONS) [NC]
-RewriteRule ^(.*)$ - [F,L]
-
-# Force HTTPS (uncomment if you have SSL certificate)
-# RewriteCond %{HTTPS} off
-# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-# Add trailing slash to directories (prevents duplicate content)
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_URI} !(.*)/$ RewriteCond %{REQUEST_URI} !(.*)\.(css|js|png|jpg|jpeg|gif|ico)$ RewriteRule ^(.*)$ /$1/ [L,R=301]
 # ======= SECURITY HEADERS & PROTECTION =======
 
 # Enable HSTS Header
@@ -96,21 +76,4 @@ Header always set X-XSS-Protection "1; mode=block"
 # Additional directory protection with .htaccess files
 # This is an alternative method you can use if the RewriteRules above don't work as expected
 # You would need to create a separate .htaccess file in each directory with:
-# Deny from 
-# Block access to sensitive files and directories
-RewriteRule ^(config|\.env|\.htaccess|composer\.(json|lock)|\.git) - [F,L,NC]
-RewriteRule ^\.(git|svn|hg)/ - [F,L,NC]
-RewriteRule ^admin/(config|logs|tmp|cache)/ - [F,L,NC]
-
-# Block common attack patterns
-RewriteCond %{QUERY_STRING} (eval\(|base64_encode|javascript:|document\.cookie) [NC,OR]
-RewriteCond %{QUERY_STRING} (<script|onload=|onerror=) [NC,OR]
-RewriteCond %{QUERY_STRING} (union.*select|insert.*into|drop.*table|update.*set|delete.*from) [NC,OR]
-RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC,OR]
-RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider|scraper) [NC]
-RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK|DEBUG|OPTIONS) [NC]
-RewriteRule ^(.*)$ - [F,L]
-
-# Force HTTPS (uncomment if you have SSL certificate)
-# RewriteCond %{HTTPS} off
-# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# Deny from all
