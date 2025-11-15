@@ -13,6 +13,8 @@ RewriteRule ^(.*)$ $1.php [L]
 ; RewriteRule ^(assets|backup|uploads)/ - [F,L,NC]
 ; RewriteRule ^admin/admin/(uploads|imgs)/ - [F,L,NC]
 RewriteRule ^admin/img/ - [F,L,NC]
+RewriteRule ^admin/admin/uploads - [F,L,NC]
+
 
 # ======= SECURITY HEADERS & PROTECTION =======
 
