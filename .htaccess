@@ -8,7 +8,7 @@ RewriteRule ^index\.php$ / [R=301,L]
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^(.*)$ $1.php [L]
-RewriteRule ^instructor(.*)$ $1.php [L]
+
 
 # Block direct access to specific directories
 ; RewriteRule ^(assets|backup|uploads)/ - [F,L,NC]
