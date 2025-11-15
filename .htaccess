@@ -14,8 +14,8 @@ RewriteRule ^(.*)$ $1.php [L]
 ; RewriteRule ^admin/(img)/ - [F,L,NC]
 
 # Allow access to images in admin/img directory but not other admin subdirectories
-RewriteCond %{REQUEST_FILENAME} -f
-RewriteCond %{REQUEST_FILENAME} \.(jpg|jpeg|png|gif|ico|svg|webp)$ RewriteRule ^admin/img/(.*)$ - [L]
+; RewriteCond %{REQUEST_FILENAME} -f
+; RewriteCond %{REQUEST_FILENAME} \.(jpg|jpeg|png|gif|ico|svg|webp)$ RewriteRule ^admin/img/(.*)$ - [L]
 
 # Block access to specific image files
 RewriteCond %{REQUEST_URI} ^/admin/img/2601828\.png$ [NC]
@@ -109,18 +109,18 @@ Header always set X-XSS-Protection "1; mode=block"
 </Directory>
 
 # Set PHP settings for security
-php_flag display_errors off
-php_flag log_errors on
-php_value error_log /path/to/error.log
-php_value max_execution_time 30
-php_value memory_limit 128M
-php_value upload_max_filesize 10M
-php_value post_max_size 10M
-php_value max_input_vars 1000
-php_value session.cookie_httponly On
-php_value session.cookie_samesite Strict
-php_value session.use_strict_mode On
-php_value session.cookie_secure On
+; php_flag display_errors off
+; php_flag log_errors on
+; php_value error_log /path/to/error.log
+; php_value max_execution_time 30
+; php_value memory_limit 128M
+; php_value upload_max_filesize 10M
+; php_value post_max_size 10M
+; php_value max_input_vars 1000
+; php_value session.cookie_httponly On
+; php_value session.cookie_samesite Strict
+; php_value session.use_strict_mode On
+; php_value session.cookie_secure On
 
 # Block PHP errors from being displayed
 php_flag display_startup_errors off
