@@ -1,11 +1,16 @@
 <?php
-
+// Start session first
+session_start();
+// Clear any existing output
+if (ob_get_level() > 0) {
+    ob_clean();
+}
 // Simple error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // Include required files
-//include 'security-headers.php';
+include 'security-headers.php';
 include 'connection.php';
 
 // reCAPTCHA configuration
@@ -33,12 +38,7 @@ function verifyRecaptcha($response, $secretKey) {
     return json_decode($result, true);
 }
 
-// Start session first
-session_start();
-// Clear any existing output
-if (ob_get_level() > 0) {
-    ob_clean();
-}
+
 
 // =====================================================================
 // HELPER FUNCTION - Improved Sanitization
@@ -1188,6 +1188,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     <!-- reCAPTCHA Badge -->
     <div class="recaptcha-badge">
+        This site is protected by reCAPTCHA and the Google
+        <a href="https://policies.google.com/privacy">Privacy Policy</a> and
+        <a href="https://policies.google.com/terms">Terms of Service</a> apply.
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
