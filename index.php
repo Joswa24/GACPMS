@@ -5,7 +5,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // Include required files
-//include 'security-headers.php';
+include 'security-headers.php';
 include 'connection.php';
 
 // Start session first
@@ -428,13 +428,13 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     <meta name="robots" content="noindex, nofollow">
     
     <!-- CORRECTED Content Security Policy -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; 
+    <!-- <meta http-equiv="Content-Security-Policy" content="default-src 'self'; 
     script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com https://www.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval'; 
     style-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; 
     font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.gstatic.com; 
     img-src 'self' data: https:; 
     connect-src 'self' https://www.google.com; 
-    frame-ancestors 'none';">
+    frame-ancestors 'none';"> -->
     
     <!-- Security Meta Tags -->
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
