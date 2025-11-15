@@ -1,22 +1,22 @@
 <?php
 // admin/index.php
-include '../connection.php';
-//include '../security-headers.php';
 session_start();
+include '../connection.php';
+include '../security-headers.php';
 
 // Additional security headers
-// header("X-Frame-Options: DENY");
-// header("X-Content-Type-Options: nosniff");
-// header("X-XSS-Protection: 1; mode=block");
-// header("Referrer-Policy: strict-origin-when-cross-origin");
-// header("Permissions-Policy: geolocation=(self), microphone=(), camera=()");
-// header("X-Permitted-Cross-Domain-Policies: none");
-// header("Cross-Origin-Embedder-Policy: require-corp");
-// header("Cross-Origin-Opener-Policy: same-origin");
-// header("Cross-Origin-Resource-Policy: same-origin");
-// header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
-// header("Pragma: no-cache");
-// header("Expires: 0");
+header("X-Frame-Options: DENY");
+header("X-Content-Type-Options: nosniff");
+header("X-XSS-Protection: 1; mode=block");
+header("Referrer-Policy: strict-origin-when-cross-origin");
+header("Permissions-Policy: geolocation=(self), microphone=(), camera=()");
+header("X-Permitted-Cross-Domain-Policies: none");
+header("Cross-Origin-Embedder-Policy: require-corp");
+header("Cross-Origin-Opener-Policy: same-origin");
+header("Cross-Origin-Resource-Policy: same-origin");
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: 0");
 
 // Initialize variables
  $maxAttempts = 3;
@@ -1289,7 +1289,7 @@ function send2FACodeEmail($email, $verificationCode) {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://www.google.com/recaptcha/api.js?render=6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_"></script>
+    <script src="https://www.google.com/recaptcha/api.js?render=<?php echo $recaptchaSiteKey; ?>"></script>
     
     <script>
         // Toggle password visibility

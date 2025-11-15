@@ -1,4 +1,5 @@
 <?php
+session_start();
 // Simple error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -6,6 +7,31 @@ ini_set('display_errors', 1);
 // Include required files
 include 'security-headers.php';
 include 'connection.php';
+
+// reCAPTCHA configuration
+ $recaptchaSiteKey = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
+ $recaptchaSecretKey = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
+
+// Function to verify reCAPTCHA response
+function verifyRecaptcha($response, $secretKey) {
+    $url = 'https://www.google.com/recaptcha/api/siteverify';
+    $data = [
+        'secret' => $secretKey,
+        'response' => $response
+    ];
+    
+    $options = [
+        'http' => [
+            'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+            'method' => 'POST',
+            'content' => http_build_query($data)
+        ]
+    ];
+    
+    $context = stream_context_create($options);
+    $result = file_get_contents($url, false, $context);
+    return json_decode($result, true);
+}
 
 // Start session first
 session_start();
@@ -229,6 +255,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($password)) $errors[] = "Password is required";
     if (empty($id_number)) $errors[] = "ID number is required";
     
+    // Verify reCAPTCHA if not just validating password
+    if (!isset($_POST['validate_only'])) {
+        $recaptchaResponse = $_POST['recaptcha_response'] ?? '';
+        $recaptchaResult = verifyRecaptcha($recaptchaResponse, $recaptchaSecretKey);
+        
+        if (!$recaptchaResult['success'] || ($recaptchaResult['score'] ?? 0) < 0.5) {
+            $errors[] = "reCAPTCHA verification failed. Please try again.";
+            error_log("reCAPTCHA verification failed: " . print_r($recaptchaResult, true));
+        }
+    }
+    
     if (!empty($errors)) {
         http_response_code(400);
         header('Content-Type: application/json');
@@ -280,7 +317,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $_SESSION['instructor_login_time'] = $currentTime;
         $_SESSION['instructor_session_started'] = true;
 
-        // Get year_level and section from the selected subject
+        // Get year_level and section from selected subject
         $subjectDetails = getSubjectDetails($db, $selected_subject, $selected_room);
         $yearLevel = $subjectDetails['year_level'] ?? "1st Year";
         $section = $subjectDetails['section'] ?? "A";
@@ -316,7 +353,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     header('X-Content-Type-Options: nosniff');
 
     // Return success response
-    // In the login success section of index.php, update the response:
+    // In login success section of index.php, update response:
     echo json_encode([
         'status' => 'success',
         'redirect' => $redirectUrl,
@@ -341,11 +378,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     
     <!-- CORRECTED Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; 
-    script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com 'unsafe-inline' 'unsafe-eval'; 
+    script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://ajax.googleapis.com https://fonts.googleapis.com https://www.google.com/recaptcha/ 'unsafe-inline' 'unsafe-eval'; 
     style-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; 
     font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.gstatic.com; 
     img-src 'self' data: https:; 
-    connect-src 'self'; 
+    connect-src 'self' https://www.google.com/recaptcha/; 
     frame-ancestors 'none';">
     
     <!-- Security Meta Tags -->
@@ -884,6 +921,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             margin-top: 1rem;
         }
 
+        .recaptcha-badge {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            z-index: 1000;
+            opacity: 0.8;
+            background: white;
+            padding: 5px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: 12px;
+        }
+
         /* Responsive adjustments */
         @media (max-width: 576px) {
             .login-container {
@@ -1059,12 +1109,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     </div>
 
                     <div class="scan-indicator scan-animation" id="scanIndicator">
-                        <i class="fas fa-rss me-2"></i>Scanner Ready - Click the box above to start scanning
+                        <i class="fas fa-rss me-2"></i>Scanner Ready - Click box above to start scanning
                     </div>
                 </div>
                 
                 <!-- Hidden field for scan mode -->
                 <input type="text" class="hidden-field" id="scan-id-input" name="Pid_number" required>
+                
+                <!-- Hidden field for reCAPTCHA -->
+                <input type="hidden" id="recaptchaResponse" name="recaptcha_response">
                 
                 <!-- Gate access information -->
                 <div id="gateAccessInfo" class="gate-access-info d-none">
@@ -1102,7 +1155,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <div class="modal-body">
                     <div class="alert alert-info mb-3">
                         <i class="fas fa-info-circle me-2"></i>
-                        Please select the subject you're currently teaching in this room and click "Confirm Selection".
+                        Please select subject you're currently teaching in this room and click "Confirm Selection".
                     </div>
                     <div class="table-responsive">
                         <table class="table subject-table" id="subjectTable">
@@ -1133,11 +1186,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
     </div>
 
+    <!-- reCAPTCHA Badge -->
+    <div class="recaptcha-badge">
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="admin/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- SweetAlert JS -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Google reCAPTCHA v3 -->
+    <script src="https://www.google.com/recaptcha/api.js?render=<?php echo $recaptchaSiteKey; ?>"></script>
     
     <script>
     // Security: Prevent console access in production
@@ -1209,16 +1268,44 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             
             console.log('🔄 Proceeding with login logic...');
             
-            // FIRST validate password for the room, THEN handle subject selection
-            validateRoomPasswordBeforeSubject(department, selectedRoom, password, idNumber);
+            // Execute reCAPTCHA before proceeding
+            executeRecaptchaAndLogin(department, selectedRoom, password, idNumber);
         });
+
+        // NEW FUNCTION: Execute reCAPTCHA and then login
+        function executeRecaptchaAndLogin(department, location, password, idNumber) {
+            // Show loading state
+            $('#loginButton').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Verifying...');
+            $('#loginButton').prop('disabled', true);
+            
+            // Execute reCAPTCHA
+            grecaptcha.ready(function() {
+                grecaptcha.execute('<?php echo $recaptchaSiteKey; ?>', {action: 'login'}).then(function(token) {
+                    // Set the reCAPTCHA response token
+                    $('#recaptchaResponse').val(token);
+                    
+                    // Update button text
+                    $('#loginButton').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Authenticating...');
+                    
+                    // FIRST validate password for room, THEN handle subject selection
+                    validateRoomPasswordBeforeSubject(department, location, password, idNumber);
+                }).catch(function(error) {
+                    console.error('reCAPTCHA error:', error);
+                    $('#loginButton').html('<i class="fas fa-sign-in-alt me-2"></i>Login');
+                    $('#loginButton').prop('disabled', false);
+                    
+                    Swal.fire({
+                        title: 'Verification Error',
+                        text: 'Unable to verify with reCAPTCHA. Please try again.',
+                        icon: 'error',
+                        confirmButtonColor: '#e74a3b'
+                    });
+                });
+            });
+        }
 
         // NEW FUNCTION: Validate password BEFORE showing subject modal
         function validateRoomPasswordBeforeSubject(department, location, password, idNumber) {
-            // Show loading state
-            $('#loginButton').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Validating...');
-            $('#loginButton').prop('disabled', true);
-            
             // Create a minimal form data for password validation
             const formData = {
                 roomdpt: department,
@@ -1319,7 +1406,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // Load subjects for instructor with enhanced error handling
         function loadInstructorSubjects(idNumber, selectedRoom) {
-            // Clean the ID number by removing hyphens
+            // Clean ID number by removing hyphens
             const cleanId = idNumber.replace(/-/g, '');
             
             console.log('🔍 Loading subjects for:', {
@@ -1372,7 +1459,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         return;
                     }
                     
-                    // Now handle the parsed JSON
+                    // Now handle parsed JSON
                     if (data.status === 'success') {
                         if (data.data && data.data.length > 0) {
                             displaySubjects(data.data, selectedRoom);
@@ -1452,7 +1539,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             `);
         }
 
-        // Display subjects in the modal table - FIXED VERSION
+        // Display subjects in modal table - FIXED VERSION
         function displaySubjects(schedules, selectedRoom) {
             let html = '';
             const now = new Date();
@@ -1650,7 +1737,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 error: function(xhr, status, error) {
                     Swal.close();
                     
-                    // Try to parse the response as text first to see what's coming back
+                    // Try to parse response as text first to see what's coming back
                     let errorMessage = 'Login request failed. Please try again.';
                     
                     try {
@@ -1658,7 +1745,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         const response = JSON.parse(xhr.responseText);
                         errorMessage = response.message || errorMessage;
                     } catch (e) {
-                        // If it's not JSON, show the raw response for debugging
+                        // If it's not JSON, show raw response for debugging
                         errorMessage = xhr.responseText || errorMessage;
                         if (errorMessage.length > 100) {
                             errorMessage = errorMessage.substring(0, 100) + '...';
@@ -1735,7 +1822,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         scannerBox.classList.add('scanning');
         scannerBox.classList.remove('scanned');
         scannerTitle.textContent = 'Scanner Active - Scan Now';
-        scannerInstruction.textContent = 'Point your barcode scanner and scan the ID card';
+        scannerInstruction.textContent = 'Point your barcode scanner and scan ID card';
         scanIndicator.innerHTML = '<i class="fas fa-barcode me-2"></i>Scanner Active - Ready to receive scan';
         scanIndicator.style.color = 'var(--accent-color)';
         scannerIcon.className = 'fas fa-barcode';
@@ -1754,7 +1841,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         const scanIndicator = document.getElementById('scanIndicator');
 
         scannerBox.classList.remove('scanning');
-        scanIndicator.innerHTML = '<i class="fas fa-rss me-2"></i>Scanner Ready - Click the box to scan again';
+        scanIndicator.innerHTML = '<i class="fas fa-rss me-2"></i>Scanner Ready - Click box to scan again';
         scanIndicator.style.color = 'var(--accent-color)';
 
         console.log('Scanner deactivated');
@@ -1770,7 +1857,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Clear buffer if it's been too long between keystrokes
         clearTimeout(scanTimeout);
 
-        // If Enter key is pressed, process the scan
+        // If Enter key is pressed, process scan
         if (e.key === 'Enter') {
             e.preventDefault();
             processScan(scanBuffer);
@@ -1819,16 +1906,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         return cleaned;
     }
 
-    // Process the scanned data
+    // Process scanned data
     function processScan(data) {
         if (data.trim().length > 0) {
-            // Format the scanned data as 0000-0000
+            // Format scanned data as 0000-0000
             const formattedValue = formatIdNumber(data.trim());
             
             console.log('Raw scan data:', data);
             console.log('Formatted ID:', formattedValue);
             
-            // Update the hidden input field
+            // Update hidden input field
             $('#scan-id-input').val(formattedValue);
             
             // Update barcode display
@@ -1847,7 +1934,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             scanIndicator.innerHTML = '<i class="fas fa-check-circle me-2"></i>Barcode scanned successfully!';
             scanIndicator.style.color = 'var(--success-color)';
             
-            // Auto-submit the form after a short delay
+            // Auto-submit form after a short delay
             setTimeout(() => {
                 console.log('Auto-validating scanned ID:', formattedValue);
                 // Trigger form validation
@@ -1892,7 +1979,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         scannerBox.classList.remove('scanning', 'scanned');
         scannerTitle.textContent = 'Click to Activate Scanner';
         scannerInstruction.textContent = 'Click this box then scan your ID card';
-        scanIndicator.innerHTML = '<i class="fas fa-rss me-2"></i>Scanner Ready - Click the box above to start scanning';
+        scanIndicator.innerHTML = '<i class="fas fa-rss me-2"></i>Scanner Ready - Click box above to start scanning';
         scanIndicator.style.color = 'var(--accent-color)';
         barcodePlaceholder.classList.remove('d-none');
         barcodeValue.classList.add('d-none');
