@@ -79,7 +79,6 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && isset($_
 }
 
 // Function to reverse geocode coordinates to get specific location
-// Function to reverse geocode coordinates to get specific location
 function reverseGeocode($lat, $lon) {
     // Using OpenStreetMap's Nominatim API (free, no API key required)
     $url = "https://nominatim.openstreetmap.org/reverse?format=json&lat={$lat}&lon={$lon}&zoom=16&addressdetails=1";
@@ -103,13 +102,24 @@ function reverseGeocode($lat, $lon) {
     if (isset($data['address'])) {
         $address = $data['address'];
         
-        // Extract specific location parts
-        $barangay = $address['suburb'] ?? $address['village'] ?? $address['hamlet'] ?? '';
+        // Extract Philippine administrative divisions
+        $barangay = $address['suburb'] ?? $address['village'] ?? $address['hamlet'] ?? $address['neighbourhood'] ?? '';
         $municipality = $address['town'] ?? $address['municipality'] ?? $address['city_district'] ?? '';
         $cityProvince = $address['city'] ?? $address['state'] ?? $address['province'] ?? '';
         $country = $address['country'] ?? '';
         
-        // Build location string in the requested format
+        // Special handling for Philippine addresses
+        // If city is present and it's a highly urbanized city, it serves as both city and province
+        if (isset($address['city']) && isset($address['state'])) {
+            // Check if city and state are different (e.g., Cebu City, Cebu Province)
+            if ($address['city'] !== $address['state']) {
+                $cityProvince = $address['city'] . ', ' . $address['state'];
+            } else {
+                $cityProvince = $address['city'];
+            }
+        }
+        
+        // Build location string in the requested format: Barangay, Municipality, City/Province, Country
         $parts = [];
         if (!empty($barangay)) $parts[] = $barangay;
         if (!empty($municipality)) $parts[] = $municipality;
@@ -123,7 +133,13 @@ function reverseGeocode($lat, $lon) {
             'barangay' => $barangay,
             'municipality' => $municipality,
             'city_province' => $cityProvince,
-            'country' => $country
+            'country' => $country,
+            'formatted_address' => [
+                'barangay' => $barangay,
+                'municipality' => $municipality,
+                'city_province' => $cityProvince,
+                'country' => $country
+            ]
         ];
     }
     
@@ -411,7 +427,7 @@ function logAccessAttempt($userId, $username, $activity, $status) {
             $geoData = reverseGeocode($lat, $lon);
             
             if ($geoData) {
-                $location = $geoData['specific_location']; // e.g., "Poblacion, Santa Fe, Cebu, Philippines"
+                $location = $geoData['specific_location']; // e.g., "Pooc, Sta. Fe, Cebu, Philippines"
                 $locationSource = 'GPS';
                 $locationJson = json_encode([
                     'source' => 'GPS',
@@ -419,7 +435,8 @@ function logAccessAttempt($userId, $username, $activity, $status) {
                     'lon' => $lon,
                     'accuracy_meters' => $accuracy,
                     'address' => $geoData['address'],
-                    'display_name' => $geoData['display_name']
+                    'display_name' => $geoData['display_name'],
+                    'formatted_address' => $geoData['formatted_address'] // Store the formatted parts
                 ]);
             } else {
                 // Fallback if reverse geocoding fails
@@ -440,8 +457,19 @@ function logAccessAttempt($userId, $username, $activity, $status) {
                 if ($ipData) {
                     $ipInfo = json_decode($ipData);
                     if ($ipInfo && $ipInfo->status === 'success') {
+                        // Format IP location in the same structure
+                        $formattedLocation = [
+                            'barangay' => '',
+                            'municipality' => $ipInfo->city ?? '',
+                            'city_province' => $ipInfo->regionName ?? '',
+                            'country' => $ipInfo->country ?? ''
+                        ];
+                        
                         $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
-                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
+                        $locationJson = json_encode([
+                            'source' => 'IP',
+                            'formatted_address' => $formattedLocation
+                        ] + (array)$ipInfo);
                     }
                 }
             }
