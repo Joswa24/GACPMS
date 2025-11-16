@@ -96,6 +96,72 @@ try {
     error_log("Failed to create admin_access_logs table: " . $e->getMessage());
 }
 
+// Handle clear all logs request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'clear_all_logs') {
+    // Verify CSRF token
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $response = ['status' => 'error', 'message' => 'Invalid request. Please try again.'];
+        echo json_encode($response);
+        exit();
+    }
+    
+    try {
+        $stmt = $db->prepare("DELETE FROM admin_access_logs");
+        $stmt->execute();
+        
+        $deletedRows = $stmt->affected_rows;
+        
+        // Log the current user's session immediately after clearing
+        if (isset($_SESSION['user_id']) && isset($_SESSION['username'])) {
+            $userId = $_SESSION['user_id'];
+            $username = $_SESSION['username'];
+            $ipAddress = $_SERVER['REMOTE_ADDR'];
+            $userAgent = $_SERVER['HTTP_USER_AGENT'];
+            
+            // Get location data if available
+            $location = 'Unknown';
+            $locationJson = null;
+            
+            // Try to get IP-based location
+            if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
+                $context = stream_context_create([
+                    'http' => [
+                        'timeout' => 3,
+                        'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    ]
+                ]);
+                
+                $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
+                if ($ipData) {
+                    $ipInfo = json_decode($ipData);
+                    if ($ipInfo && $ipInfo->status === 'success') {
+                        $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
+                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
+                    }
+                }
+            }
+            
+            // Insert current session log
+            $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
+            $activity = "Login with 2FA (Logs Cleared)";
+            $status = "success";
+            $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
+            $stmt->execute();
+        }
+        
+        $response = [
+            'status' => 'success', 
+            'message' => "Successfully deleted {$deletedRows} log entries and preserved current session."
+        ];
+        echo json_encode($response);
+        exit();
+    } catch (Exception $e) {
+        $response = ['status' => 'error', 'message' => 'Failed to clear logs: ' . $e->getMessage()];
+        echo json_encode($response);
+        exit();
+    }
+}
+
 // Handle clear old logs request
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'clear_old_logs') {
     // Verify CSRF token
@@ -127,8 +193,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
-// Fetch admin access logs
- $logs = [];
+// Handle regenerate sample logs request (for testing)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'regenerate_sample_logs') {
+    // Verify CSRF token
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $response = ['status' => 'error', 'message' => 'Invalid request. Please try again.'];
+        echo json_encode($response);
+        exit();
+    }
+    
+    try {
+        // Clear existing logs first
+        $db->query("DELETE FROM admin_access_logs");
+        
+        // Get current user info
+        $userId = $_SESSION['user_id'];
+        $username = $_SESSION['username'];
+        $ipAddress = $_SERVER['REMOTE_ADDR'];
+        $userAgent = $_SERVER['HTTP_USER_AGENT'];
+        
+        // Sample GPS locations (real coordinates)
+        $sampleLocations = [
+            [
+                'lat' => 14.5995, 'lon' => 120.9842, // Manila, Philippines
+                'address' => 'Manila, Metro Manila, Philippines'
+            ],
+            [
+                'lat' => 10.3157, 'lon' => 123.8854, // Cebu City, Philippines
+                'address' => 'Cebu City, Cebu, Philippines'
+            ],
+            [
+                'lat' => 14.6760, 'lon' => 121.0437, // Quezon City, Philippines
+                'address' => 'Quezon City, Metro Manila, Philippines'
+            ],
+            [
+                'lat' => 7.1907, 'lon' => 125.4553, // Davao City, Philippines
+                'address' => 'Davao City, Davao del Sur, Philippines'
+            ]
+        ];
+        
+        // Generate sample logs for the last 7 days
+        for ($i = 0; $i < 20; $i++) {
+            $daysAgo = rand(0, 7);
+            $hoursAgo = rand(0, 23);
+            $minutesAgo = rand(0, 59);
+            
+            $loginTime = date('Y-m-d H:i:s', strtotime("-$daysAgo days -$hoursAgo hours -$minutesAgo minutes"));
+            
+            // Randomly decide if this log has GPS data
+            $hasGPS = rand(0, 1);
+            $locationData = $sampleLocations[array_rand($sampleLocations)];
+            
+            if ($hasGPS) {
+                $location = $locationData['address'];
+                $locationJson = json_encode([
+                    'source' => 'GPS',
+                    'lat' => $locationData['lat'],
+                    'lon' => $locationData['lon'],
+                    'accuracy_meters' => rand(5, 50),
+                    'address' => [
+                        'city' => explode(',', $locationData['address'])[0],
+                        'state' => explode(',', $locationData['address'])[1] ?? '',
+                        'country' => 'Philippines'
+                    ],
+                    'display_name' => $locationData['address']
+                ]);
+            } else {
+                $location = 'IP Based Location';
+                $locationJson = json_encode([
+                    'source' => 'IP',
+                    'city' => 'Sample City',
+                    'region' => 'Sample Region',
+                    'country' => 'Philippines'
+                ]);
+            }
+            
+            $activity = "Login with 2FA";
+            $status = "success";
+            
+            $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("issssssss", $userId, $username, $loginTime, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
+            $stmt->execute();
+        }
+        
+        $response = [
+            'status' => 'success', 
+            'message' => "Successfully generated 20 sample log entries with mixed GPS and IP locations."
+        ];
+        echo json_encode($response);
+        exit();
+    } catch (Exception $e) {
+        $response = ['status' => 'error', 'message' => 'Failed to generate sample logs: ' . $e->getMessage()];
+        echo json_encode($response);
+        exit();
+    }
+}
+
+// Fetch admin access logs with enhanced GPS data processing
+$logs = [];
 try {
     $sql = "SELECT al.*, u.username 
             FROM admin_access_logs al 
@@ -139,40 +301,63 @@ try {
     
     if ($result && $result->num_rows > 0) {
         while ($row = $result->fetch_assoc()) {
-            // Parse location details if available
+            // Enhanced location details parsing
             if (!empty($row['location_details'])) {
                 $locationDetails = json_decode($row['location_details'], true);
                 
-                // Check if this is GPS data
-                if (isset($locationDetails['source']) && $locationDetails['source'] === 'GPS') {
-                    $row['location_type'] = 'GPS';
-                    $row['latitude'] = $locationDetails['lat'];
-                    $row['longitude'] = $locationDetails['lon'];
-                    $row['accuracy'] = $locationDetails['accuracy_meters'] ?? null;
-                    $row['map_link'] = "https://www.google.com/maps?q={$locationDetails['lat']},{$locationDetails['lon']}";
-                    
-                    // Extract formatted address if available
-                    if (isset($locationDetails['address'])) {
-                        $address = $locationDetails['address'];
-                        $parts = [];
-                        if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
-                            $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
+                if (is_array($locationDetails)) {
+                    // Check if this is GPS data
+                    if (isset($locationDetails['source']) && $locationDetails['source'] === 'GPS') {
+                        $row['location_type'] = 'GPS';
+                        $row['latitude'] = $locationDetails['lat'] ?? null;
+                        $row['longitude'] = $locationDetails['lon'] ?? null;
+                        $row['accuracy'] = $locationDetails['accuracy_meters'] ?? null;
+                        
+                        // Create map link
+                        if ($row['latitude'] && $row['longitude']) {
+                            $row['map_link'] = "https://www.google.com/maps?q={$row['latitude']},{$row['longitude']}";
                         }
-                        if (isset($address['city']) || isset($address['city_district'])) {
-                            $parts[] = $address['city'] ?? $address['city_district'];
+                        
+                        // Extract formatted address
+                        if (isset($locationDetails['address']) && is_array($locationDetails['address'])) {
+                            $address = $locationDetails['address'];
+                            $parts = [];
+                            
+                            if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
+                                $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
+                            }
+                            if (isset($address['city']) || isset($address['city_district'])) {
+                                $parts[] = $address['city'] ?? $address['city_district'];
+                            }
+                            if (isset($address['state']) || isset($address['province'])) {
+                                $parts[] = $address['state'] ?? $address['province'];
+                            }
+                            if (isset($address['country'])) {
+                                $parts[] = $address['country'];
+                            }
+                            
+                            $row['formatted_address'] = !empty($parts) ? implode(', ', $parts) : $row['location'];
+                        } else {
+                            $row['formatted_address'] = $row['location'];
                         }
-                        if (isset($address['state']) || isset($address['province'])) {
-                            $parts[] = $address['state'] ?? $address['province'];
+                        
+                        // Ensure we have coordinates for map display
+                        if (!$row['latitude'] || !$row['longitude']) {
+                            $row['location_type'] = 'IP'; // Fallback to IP if coordinates missing
                         }
-                        if (isset($address['country'])) {
-                            $parts[] = $address['country'];
-                        }
-                        $row['formatted_address'] = implode(', ', $parts);
+                    } else {
+                        $row['location_type'] = 'IP';
+                        $row['formatted_address'] = $row['location'];
                     }
                 } else {
                     $row['location_type'] = 'IP';
+                    $row['formatted_address'] = $row['location'];
                 }
+            } else {
+                $row['location_type'] = 'IP';
+                $row['formatted_address'] = $row['location'];
             }
+            
             $logs[] = $row;
         }
     }
@@ -251,7 +436,7 @@ try {
 
         .table-responsive {
             border-radius: var(--border-radius);
-            overflow-x: hidden; /* Remove horizontal scrolling */
+            overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: thin;
             scrollbar-color: var(--icon-color) #f1f1f1;
@@ -261,7 +446,7 @@ try {
             border-collapse: separate;
             border-spacing: 0;
             width: 100%;
-            table-layout: fixed; /* Fixed layout to control column widths */
+            table-layout: fixed;
         }
 
         .modern-table thead th {
@@ -269,7 +454,7 @@ try {
             color: white;
             font-weight: 600;
             border: none;
-            padding: 12px 8px; /* Reduced padding */
+            padding: 12px 8px;
             text-align: left;
             position: sticky;
             top: 0;
@@ -277,7 +462,7 @@ try {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            font-size: 0.85rem; /* Smaller font size */
+            font-size: 0.85rem;
         }
 
         .modern-table thead th:first-child {
@@ -308,40 +493,40 @@ try {
         }
 
         .modern-table td {
-            padding: 10px 8px; /* Reduced padding */
+            padding: 10px 8px;
             border: none;
             vertical-align: middle;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            font-size: 0.85rem; /* Smaller font size */
+            font-size: 0.85rem;
         }
 
-        /* Optimized column widths to fit all columns */
-        .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 4%; } /* ID */
-        .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 9%; } /* Username */
-        .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; } /* Login Time */
-        .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; } /* Logout Time */
-        .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 18%; } /* IP Address */
-        .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; } /* Location */
-        .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; } /* Activity */
-        .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 8%; } /* Status */
-        .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 10%; } /* Duration */
+        /* Optimized column widths */
+        .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 4%; }
+        .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 9%; }
+        .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; }
+        .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; }
+        .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 18%; }
+        .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; }
+        .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
+        .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 8%; }
+        .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 10%; }
 
         .badge {
-            font-size: 0.75em; /* Smaller badge */
+            font-size: 0.75em;
             border-radius: 8px;
-            padding: 0.4em 0.6em; /* Smaller padding */
+            padding: 0.4em 0.6em;
             font-weight: 500;
         }
 
-        /* Modern Button Styles */
+        /* Button Styles */
         .btn {
             border-radius: 10px;
             font-weight: 500;
             transition: var(--transition);
             border: none;
-            padding: 8px 15px; /* Smaller padding */
+            padding: 8px 15px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -349,7 +534,7 @@ try {
             position: relative;
             overflow: hidden;
             z-index: 1;
-            font-size: 0.85rem; /* Smaller font */
+            font-size: 0.85rem;
         }
 
         .btn::before {
@@ -369,7 +554,7 @@ try {
         }
 
         .btn i {
-            font-size: 0.8rem; /* Smaller icon */
+            font-size: 0.8rem;
         }
 
         /* Clear Button */
@@ -382,6 +567,19 @@ try {
         .btn-clear:hover {
             transform: translateY(-3px);
             box-shadow: 0 6px 20px rgba(231, 74, 59, 0.4);
+            color: white;
+        }
+
+        /* Sample Logs Button */
+        .btn-sample {
+            background: linear-gradient(135deg, var(--success-color), #17a673);
+            color: white;
+            box-shadow: 0 4px 15px rgba(28, 200, 138, 0.3);
+        }
+
+        .btn-sample:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(28, 200, 138, 0.4);
             color: white;
         }
 
@@ -422,10 +620,10 @@ try {
         .form-control, .form-select {
             border-radius: 8px;
             border: 1.5px solid #e3e6f0;
-            padding: 10px 12px; /* Smaller padding */
+            padding: 10px 12px;
             transition: var(--transition);
             background-color: var(--light-bg);
-            font-size: 0.85rem; /* Smaller font */
+            font-size: 0.85rem;
         }
 
         .form-control:focus, .form-select:focus {
@@ -437,8 +635,8 @@ try {
         .form-label {
             font-weight: 600;
             color: var(--dark-text);
-            margin-bottom: 6px; /* Smaller margin */
-            font-size: 0.85rem; /* Smaller font */
+            margin-bottom: 6px;
+            font-size: 0.85rem;
         }
 
         /* Card Header */
@@ -447,36 +645,7 @@ try {
             color: white;
             border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
             border: none;
-            padding: 15px 20px; /* Smaller padding */
-        }
-
-        /* Back to Top Button */
-        .back-to-top {
-            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color)) !important;
-            border: none;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--box-shadow);
-            transition: var(--transition);
-        }
-
-        .back-to-top:hover {
-            transform: translateY(-3px);
-        }
-
-        /* SweetAlert customization */
-        .swal2-popup {
-            border-radius: var(--border-radius) !important;
-        }
-
-        /* Loading Spinner */
-        .spinner-border-sm {
-            width: 1rem;
-            height: 1rem;
+            padding: 15px 20px;
         }
 
         /* Status Badge Colors */
@@ -498,11 +667,6 @@ try {
 
         .badge-secondary {
             background: linear-gradient(135deg, #6c757d, #5a6268);
-        }
-
-        /* Empty State */
-        .text-center.text-muted {
-            padding: 2rem;
         }
 
         /* Location link style */
@@ -620,9 +784,9 @@ try {
             background: linear-gradient(135deg, var(--info-color), #2c9faf);
             color: white;
             border: none;
-            border-radius: 6px; /* Smaller border radius */
-            padding: 0.3em 0.6em; /* Smaller padding */
-            font-size: 0.75em; /* Smaller font */
+            border-radius: 6px;
+            padding: 0.3em 0.6em;
+            font-size: 0.75em;
             transition: var(--transition);
         }
         
@@ -633,11 +797,11 @@ try {
         
         /* Location modal styles */
         #locationModal .modal-dialog {
-            max-width: 90%; /* Make modal wider for full map view */
+            max-width: 90%;
         }
         
         #locationMap {
-            height: 500px; /* Increase map height */
+            height: 500px;
             width: 100%;
             border-radius: 8px;
             overflow: hidden;
@@ -661,6 +825,24 @@ try {
             color: var(--info-color);
             margin-top: 3px;
         }
+
+        /* Action buttons container */
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 576px) {
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .action-buttons .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
     </style>
 </head>
 
@@ -677,19 +859,28 @@ try {
             <div class="container-fluid pt-4 px-4">
                 <div class="col-sm-12 col-xl-12">
                     <div class="bg-light rounded h-100 p-4 modern-card">
-                        <div class="row">
-                            <div class="col-9">
-                                <h6 class="mb-4">Admin Access Log</h6>
+                        <div class="row mb-4">
+                            <div class="col-6">
+                                <h6 class="mb-0">Admin Access Log</h6>
+                                <p class="text-muted mb-0">Enhanced GPS tracking and reliable logging system</p>
                             </div>
-                            <div class="col-3 d-flex justify-content-end">
-                                <button class="btn btn-sm btn-clear" onclick="clearOldLogs()">
-                                    <i class="fas fa-trash"></i> Clear Old Logs
-                                </button>
+                            <div class="col-6 d-flex justify-content-end">
+                                <div class="action-buttons">
+                                    <button class="btn btn-sm btn-sample" onclick="regenerateSampleLogs()">
+                                        <i class="fas fa-database"></i> Generate Sample Logs
+                                    </button>
+                                    <button class="btn btn-sm btn-clear" onclick="clearAllLogs()">
+                                        <i class="fas fa-trash"></i> Clear All Logs
+                                    </button>
+                                    <button class="btn btn-sm btn-warning" onclick="clearOldLogs()">
+                                        <i class="fas fa-broom"></i> Clear Old Logs
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <hr>
                         
-                        <!-- Filters -->
+                        <!-- Enhanced Filters -->
                         <div class="row mb-4">
                             <div class="col-md-3">
                                 <label for="dateFilter" class="form-label">Date Range</label>
@@ -717,7 +908,7 @@ try {
                             </div>
                         </div>
 
-                        <!-- Statistics Cards -->
+                        <!-- Enhanced Statistics Cards -->
                         <div class="row mb-4">
                             <div class="col-md-3">
                                 <div class="card bg-primary text-white stats-card">
@@ -812,6 +1003,9 @@ try {
                                                             <i class="fas fa-clipboard-list fa-3x mb-3 text-muted"></i>
                                                             <h5>No access logs found</h5>
                                                             <p class="text-muted">There are no access logs to display at this time.</p>
+                                                            <button class="btn btn-sample mt-2" onclick="regenerateSampleLogs()">
+                                                                <i class="fas fa-database"></i> Generate Sample Logs
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -857,11 +1051,11 @@ try {
                                                     
                                                         <td>
                                                             <?php 
-                                                            $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
+                                                            $summaryLocation = htmlspecialchars($log['formatted_address'] ?? $log['location'] ?? 'Unknown Location');
                                                             $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
 
                                                             // Check if location details are available and valid
-                                                            if (isset($log['location_type']) && $log['location_type'] === 'GPS') {
+                                                            if (isset($log['location_type']) && $log['location_type'] === 'GPS' && isset($log['latitude']) && isset($log['longitude'])) {
                                                                 echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
                                                                 echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
                                                                 echo '<i class="fas fa-map-marked-alt"></i> View Map';
@@ -994,6 +1188,138 @@ try {
             });
         }
 
+        // Clear all logs function
+        window.clearAllLogs = function() {
+            Swal.fire({
+                title: 'Clear All Logs',
+                html: `
+                    <p class="text-danger"><strong>Warning:</strong> This will delete ALL access logs except your current session!</p>
+                    <p>Are you sure you want to proceed?</p>
+                `,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, Clear All Logs',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading state
+                    Swal.fire({
+                        title: 'Clearing all logs...',
+                        html: 'Please wait while we clear all log entries',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    $.ajax({
+                        url: window.location.href,
+                        type: 'POST',
+                        data: { 
+                            action: 'clear_all_logs',
+                            csrf_token: '<?php echo $_SESSION['csrf_token']; ?>'
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.status === 'success') {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Success!',
+                                    text: response.message,
+                                    confirmButtonText: 'OK'
+                                }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Error!',
+                                    text: response.message,
+                                    confirmButtonText: 'OK'
+                                });
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error!',
+                                text: 'Failed to clear logs. Please try again.',
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    });
+                }
+            });
+        }
+
+        // Regenerate sample logs function
+        window.regenerateSampleLogs = function() {
+            Swal.fire({
+                title: 'Generate Sample Logs',
+                html: `
+                    <p>This will generate 20 sample log entries with mixed GPS and IP locations for testing.</p>
+                    <p class="text-warning">Existing logs will be cleared first!</p>
+                `,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Generate Sample Data',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading state
+                    Swal.fire({
+                        title: 'Generating sample logs...',
+                        html: 'Please wait while we create sample data',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    $.ajax({
+                        url: window.location.href,
+                        type: 'POST',
+                        data: { 
+                            action: 'regenerate_sample_logs',
+                            csrf_token: '<?php echo $_SESSION['csrf_token']; ?>'
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.status === 'success') {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Success!',
+                                    text: response.message,
+                                    confirmButtonText: 'OK'
+                                }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Error!',
+                                    text: response.message,
+                                    confirmButtonText: 'OK'
+                                });
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error!',
+                                text: 'Failed to generate sample logs. Please try again.',
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    });
+                }
+            });
+        }
+
         // Clear old logs (older than specified days)
         window.clearOldLogs = function() {
             Swal.fire({
@@ -1074,10 +1400,15 @@ try {
             });
         }
 
-        // Update showLocationModal function
+        // Enhanced showLocationModal function with better error handling
         window.showLocationModal = function(locationJson) {
             try {
                 const data = JSON.parse(locationJson);
+
+                // Check if we have valid coordinates
+                if (!data.lat || !data.lon) {
+                    throw new Error('Invalid coordinates');
+                }
 
                 // Initialize Leaflet map
                 const map = L.map('locationMap').setView([data.lat, data.lon], 15);
@@ -1092,7 +1423,9 @@ try {
                 const marker = L.marker([data.lat, data.lon]).addTo(map);
                 
                 // Add a popup to the marker with location details
-                if (data.address) {
+                let popupContent = `<div style="font-family: Arial, sans-serif;"><h5>Location Details</h5>`;
+                
+                if (data.address && typeof data.address === 'object') {
                     const address = data.address;
                     const locationParts = [];
                     
@@ -1110,18 +1443,19 @@ try {
                     }
                     
                     const formattedLocation = locationParts.length > 0 ? locationParts.join(', ') : 'Unknown Location';
-                    
-                    const popupContent = `
-                        <div style="font-family: Arial, sans-serif;">
-                            <h5>Location Details</h5>
-                            <p><strong>Address:</strong> ${formattedLocation}</p>
-                            <p><strong>Coordinates:</strong> ${data.lat}, ${data.lon}</p>
-                            ${data.accuracy_meters ? `<p><strong>Accuracy:</strong> ±${data.accuracy_meters} meters</p>` : ''}
-                            <p><strong>Source:</strong> GPS</p>
-                        </div>
-                    `;
-                    marker.bindPopup(popupContent);
+                    popupContent += `<p><strong>Address:</strong> ${formattedLocation}</p>`;
                 }
+                
+                popupContent += `<p><strong>Coordinates:</strong> ${data.lat.toFixed(6)}, ${data.lon.toFixed(6)}</p>`;
+                
+                if (data.accuracy_meters) {
+                    popupContent += `<p><strong>Accuracy:</strong> ±${data.accuracy_meters} meters</p>`;
+                }
+                
+                popupContent += `<p><strong>Source:</strong> ${data.source || 'GPS'}</p>`;
+                popupContent += `</div>`;
+                
+                marker.bindPopup(popupContent).openPopup();
                 
                 // Generate Google Maps link
                 const mapsLink = `https://www.google.com/maps?q=${data.lat},${data.lon}`;
@@ -1136,29 +1470,18 @@ try {
                 Swal.fire({
                     icon: 'error',
                     title: 'Data Error',
-                    text: 'Could not display location details.'
+                    text: 'Could not display location details. The location data may be incomplete or corrupted.'
                 });
             }
         }
         
         // Auto-refresh logs every 30 seconds
         setInterval(() => {
-            $.ajax({
-                url: window.location.href,
-                type: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    if (response.status === 'success') {
-                        // You can implement dynamic update here if needed
-                        console.log('Logs updated');
-                    }
-                },
-                error: function() {
-                    console.log('Failed to update logs');
-                }
-            });
+            // You can implement dynamic update here if needed
+            console.log('Log monitoring active');
         }, 30000);
     });
+
     // IP Address toggle function
     $(document).on('click', '.toggle-ip', function() {
         const button = $(this);
@@ -1175,7 +1498,7 @@ try {
             icon.removeClass('fa-eye').addClass('fa-eye-slash');
             button.addClass('btn-warning').removeClass('ip-toggle');
             
-            // Auto hide after 10 seconds (longer than password for better readability)
+            // Auto hide after 10 seconds
             setTimeout(() => {
                 if (ipSpan.hasClass('actual-ip')) {
                     ipSpan.removeClass('actual-ip')
