@@ -166,7 +166,7 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
                     <div class="day-header">
                         <?php echo $day; ?>
                         <?php if ($day === $today_day): ?>
-                            <span style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">TODAY</span>
+                            <span style="background: #28a745; color: white; padding: 2px 8px; border-radius:4px; font-size: 12px;">TODAY</span>
                         <?php endif; ?>
                     </div>
                     <?php foreach ($schedule_by_day[$day] as $class): ?>
@@ -827,6 +827,35 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
             margin-right: 5px;
         }
 
+        /* Back to Top Button */
+        .back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color)) !important;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--box-shadow);
+            transition: var(--transition);
+            z-index: 997;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .back-to-top.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .back-to-top:hover {
+            transform: translateY(-3px);
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
@@ -875,7 +904,7 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="sidebar-logo">
-                <img src="../uploads/it.png" alt="Institution Logo" class="header-logo me-3" style="width: 80px; height: 80px; border-radius: 10px; border: 3px solid rgba(255,255,255,0.3);">
+                <i class="fas fa-calendar-alt"></i>
             </div>
             <h5 class="sidebar-title">Instructor Portal</h5>
             <p class="sidebar-subtitle">RFID Attendance System</p>
@@ -1058,14 +1087,14 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
                                             </a>
                                         </div>
                                         
+                                        <?php if (!empty($schedule_data)): ?>
                                         <div class="d-flex gap-2">
-                                            <a href="schedule.php?week=<?php echo $week_offset - 1; ?><?php echo !empty($_GET) ? '&' . http_build_query($_GET, '', '&') : ''; ?>" class="btn btn-outline-primary btn-sm">
-                                                <i class="fas fa-chevron-left me-1"></i>Previous Week
-                                            </a>
-                                            <a href="schedule.php?week=<?php echo $week_offset + 1; ?><?php echo !empty($_GET) ? '&' . http_build_query($_GET, '', '&') : ''; ?>" class="btn btn-outline-primary btn-sm">
-                                                Next Week<i class="fas fa-chevron-right ms-1"></i>
-                                            </a>
+                                            <span class="filter-badge bg-success">
+                                                <i class="fas fa-check-circle me-1"></i>
+                                                <?php echo count($schedule_data); ?> Classes Found
+                                            </span>
                                         </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
 
@@ -1102,13 +1131,6 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
                                             <span class="filter-badge">
                                                 <i class="fas fa-graduation-cap me-1"></i>
                                                 Year: <?php echo htmlspecialchars($filter_year); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        
-                                        <?php if (!empty($schedule_data)): ?>
-                                            <span class="filter-badge bg-success">
-                                                <i class="fas fa-check-circle me-1"></i>
-                                                <?php echo count($schedule_data); ?> Classes Found
                                             </span>
                                         <?php endif; ?>
                                     </div>
@@ -1270,6 +1292,11 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
         </div>
     </div>
 
+    <!-- Back to Top Button -->
+    <a href="#" class="btn btn-lg btn-warning btn-lg-square back-to-top" id="backToTop">
+        <i class="fas fa-arrow-up"></i>
+    </a>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Update current time every second
@@ -1304,6 +1331,27 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
         document.getElementById('sidebarOverlay').addEventListener('click', function() {
             document.getElementById('sidebar').classList.remove('active');
             document.getElementById('sidebarOverlay').classList.remove('active');
+        });
+
+        // Back to Top Button functionality
+        const backToTopButton = document.getElementById('backToTop');
+        
+        // Show/hide button based on scroll position
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > 300) {
+                backToTopButton.classList.add('show');
+            } else {
+                backToTopButton.classList.remove('show');
+            }
+        });
+        
+        // Smooth scroll to top when button is clicked
+        backToTopButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
         });
 
         // Add interactive features
