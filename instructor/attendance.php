@@ -169,148 +169,174 @@ if ($filter_year && $filter_section) {
 }
 
 // If print view is requested, show simplified printable version
-if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) {
-    header('Content-Type: text/html; charset=utf-8');
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Attendance Report - Print View</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .print-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 15px; }
-            .print-header h1 { margin: 0; color: #333; }
-            .print-header .subtitle { color: #666; margin: 5px 0; }
-            .session-info { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
-            .stats-summary { display: flex; justify-content: space-around; margin: 20px 0; text-align: center; }
-            .stat-item { padding: 10px; }
-            .stat-number { font-size: 24px; font-weight: bold; }
-            .table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            .table th { background-color: #333; color: white; padding: 10px; text-align: left; }
-            .table td { padding: 8px; border-bottom: 1px solid #ddd; }
-            .present { color: #28a745; }
-            .absent { color: #dc3545; }
-            .print-footer { margin-top: 30px; text-align: center; color: #666; font-size: 12px; }
-            @media print {
-                body { margin: 0; }
-                .no-print { display: none; }
-                .table { page-break-inside: avoid; }
-            }
-        </style>
-    </head>
-    <body>
-        <div class="print-header">
-            <h1>ATTENDANCE REPORT</h1>
-            <div class="subtitle">Class: <?php echo htmlspecialchars($filter_year . ' - ' . $filter_section); ?></div>
-            <?php if ($filter_subject): ?>
-                <div class="subtitle">Subject: <?php echo htmlspecialchars($filter_subject); ?></div>
-            <?php endif; ?>
-            <?php if ($filter_date): ?>
-                <div class="subtitle">Date: <?php echo date('F j, Y', strtotime($filter_date)); ?></div>
-            <?php endif; ?>
-            <div class="subtitle">Generated on: <?php echo date('F j, Y g:i A'); ?></div>
-        </div>
-
-        <?php 
-        $summary_key = $filter_year . '-' . $filter_section . '-' . $filter_date;
-        $current_summary = $summary_data[$summary_key] ?? null;
+    if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) {
+        header('Content-Type: text/html; charset=utf-8');
         ?>
-        
-        <?php if ($current_summary): ?>
-        <div class="session-info">
-            <strong>Session Summary:</strong><br>
-            Instructor: <?php echo htmlspecialchars($current_summary['instructor_name']); ?> | 
-            Time: <?php echo date('g:i A', strtotime($current_summary['time_in'])); ?> - <?php echo date('g:i A', strtotime($current_summary['time_out'])); ?> | 
-            Attendance Rate: <?php echo $current_summary['attendance_rate']; ?>%
-        </div>
-        <?php endif; ?>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Attendance Report - Print View</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .print-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 15px; }
+                .print-header h1 { margin: 0; color: #333; }
+                .print-header .subtitle { color: #666; margin: 5px 0; }
+                .session-info { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
+                .stats-summary { display: flex; justify-content: space-around; margin: 20px 0; text-align: center; }
+                .stat-item { padding: 10px; }
+                .stat-number { font-size: 24px; font-weight: bold; }
+                .table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                .table th { background-color: #333; color: white; padding: 10px; text-align: left; }
+                .table td { padding: 8px; border-bottom: 1px solid #ddd; }
+                .present { color: #28a745; }
+                .absent { color: #dc3545; }
+                .print-footer { margin-top: 30px; text-align: center; color: #666; font-size: 12px; }
+                @media print {
+                    body { margin: 0; }
+                    .no-print { display: none; }
+                    .table { page-break-inside: avoid; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="print-header">
+                <h1>ATTENDANCE REPORT</h1>
+                <div class="subtitle">Class: <?php echo htmlspecialchars($filter_year . ' - ' . $filter_section); ?></div>
+                <?php if ($filter_subject): ?>
+                    <div class="subtitle">Subject: <?php echo htmlspecialchars($filter_subject); ?></div>
+                <?php endif; ?>
+                <?php if ($filter_date): ?>
+                    <div class="subtitle">Date: <?php echo date('F j, Y', strtotime($filter_date)); ?></div>
+                <?php endif; ?>
+                <div class="subtitle">Generated on: <?php echo date('F j, Y g:i A'); ?></div>
+            </div>
 
-        <div class="stats-summary">
-            <?php
-            $present_count = 0;
-            $absent_count = 0;
-            foreach ($attendance_data as $record) {
-                if (strtolower($record['status']) == 'present') $present_count++;
-                else $absent_count++;
-            }
-            $total_count = count($attendance_data);
+            <?php 
+            $summary_key = $filter_year . '-' . $filter_section . '-' . $filter_date;
+            $current_summary = $summary_data[$summary_key] ?? null;
             ?>
-            <div class="stat-item">
-                <div class="stat-number"><?php echo $present_count; ?></div>
-                <div>Present</div>
+            
+            <?php if ($current_summary): ?>
+            <div class="session-info">
+                <strong>Session Summary:</strong><br>
+                Instructor: <?php echo htmlspecialchars($current_summary['instructor_name']); ?> | 
+                Time: <?php echo date('g:i A', strtotime($current_summary['time_in'])); ?> - <?php echo date('g:i A', strtotime($current_summary['time_out'])); ?> | 
+                Attendance Rate: <?php echo $current_summary['attendance_rate']; ?>%
             </div>
-            <div class="stat-item">
-                <div class="stat-number"><?php echo $absent_count; ?></div>
-                <div>Absent</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number"><?php echo $total_count; ?></div>
-                <div>Total</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number"><?php echo $total_count > 0 ? round(($present_count / $total_count) * 100, 1) : 0; ?>%</div>
-                <div>Rate</div>
-            </div>
-        </div>
+            <?php endif; ?>
 
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>ID Number</th>
-                    <th>Student Name</th>
-                    <th>Time In</th>
-                    <th>Time Out</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($attendance_data as $index => $record): ?>
+            <div class="stats-summary">
+                <?php
+                $present_count = 0;
+                $absent_count = 0;
+                foreach ($attendance_data as $record) {
+                    if (strtolower($record['status']) == 'present') $present_count++;
+                    else $absent_count++;
+                }
+                $total_count = count($attendance_data);
+                ?>
+                <div class="stat-item">
+                    <div class="stat-number"><?php echo $present_count; ?></div>
+                    <div>Present</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number"><?php echo $absent_count; ?></div>
+                    <div>Absent</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number"><?php echo $total_count; ?></div>
+                    <div>Total</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number"><?php echo $total_count > 0 ? round(($present_count / $total_count) * 100, 1) : 0; ?>%</div>
+                    <div>Rate</div>
+                </div>
+            </div>
+
+            <table class="table">
+                <thead>
                     <tr>
-                        <td><?php echo $index + 1; ?></td>
-                        <td><?php echo htmlspecialchars($record['id_number']); ?></td>
-                        <td><?php echo htmlspecialchars($record['student_name']); ?></td>
-                        <td>
-                            <?php if ($record['time_in']): ?>
-                                <?php echo date('M j, Y g:i A', strtotime($record['time_in'])); ?>
-                            <?php else: ?>
-                                -
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php if ($record['time_out']): ?>
-                                <?php echo date('M j, Y g:i A', strtotime($record['time_out'])); ?>
-                            <?php else: ?>
-                                -
-                            <?php endif; ?>
-                        </td>
-                        <td class="<?php echo strtolower($record['status']); ?>">
-                            <strong><?php echo htmlspecialchars($record['status']); ?></strong>
-                        </td>
+                        <th>#</th>
+                        <th>ID Number</th>
+                        <th>Student Name</th>
+                        <th>Time In</th>
+                        <th>Time Out</th>
+                        <th>Status</th>
                     </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    <?php foreach ($attendance_data as $index => $record): ?>
+                        <tr>
+                            <td><?php echo $index + 1; ?></td>
+                            <td><?php echo htmlspecialchars($record['id_number']); ?></td>
+                            <td><?php echo htmlspecialchars($record['student_name']); ?></td>
+                            <td>
+                                <?php if ($record['time_in']): ?>
+                                    <?php echo date('M j, Y g:i A', strtotime($record['time_in'])); ?>
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($record['time_out']): ?>
+                                    <?php echo date('M j, Y g:i A', strtotime($record['time_out'])); ?>
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </td>
+                            <td class="<?php echo strtolower($record['status']); ?>">
+                                <strong><?php echo htmlspecialchars($record['status']); ?></strong>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
 
-        <div class="print-footer">
-            Generated by Class Checker System | <?php echo date('Y'); ?>
-        </div>
+            <div class="print-footer">
+                Generated by Class Checker System | <?php echo date('Y'); ?>
+            </div>
 
-        <script>
-            window.onload = function() {
-                window.print();
-                setTimeout(function() {
-                    window.close();
-                }, 500);
-            };
-        </script>
-    </body>
-    </html>
-    <?php
-    exit();
-}
+            <script>
+                window.onload = function() {
+                    window.print();
+                    setTimeout(function() {
+                        window.close();
+                    }, 500);
+                };
+            </script>
+        </body>
+        </html>
+        <?php
+        exit();
+    }
+    // --- FETCH INSTRUCTOR ATTENDANCE RECORDS ---
+
+// Get the instructor's name from the existing summary data.
+// This is the key we will use to fetch their records.
+ $instructor_name = $current_summary['instructor_name'];
+
+// Prepare the SQL query to prevent SQL injection.
+// We select time_in and time_out, and order by the most recent date first.
+ $sql = "SELECT time_in, time_out FROM instructor_attendance_admin WHERE instructor_name = ? ORDER BY time_in DESC";
+
+ $stmt = mysqli_prepare($db_connection, $sql);
+
+// Bind the instructor's name to the query.
+mysqli_stmt_bind_param($stmt, "s", $instructor_name);
+
+// Execute the query.
+mysqli_stmt_execute($stmt);
+
+// Get the result set.
+ $result = mysqli_stmt_get_result($stmt);
+
+// Fetch all records into an associative array.
+ $attendance_records = mysqli_fetch_all($result, MYSQLI_ASSOC);
+
+// Close the statement.
+mysqli_stmt_close($stmt);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1386,15 +1412,42 @@ if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) 
                                         <div class="col-md-6">
                                             <h6><i class="fas fa-info-circle me-2"></i>Session Summary</h6>
                                             <div class="attendance-timeline mt-3">
-                                                <div class="timeline-item">
-                                                    <strong>Instructor:</strong> <?php echo htmlspecialchars($current_summary['instructor_name']); ?>
-                                                </div>
-                                                <div class="timeline-item">
-                                                    <strong>Time:</strong> <?php echo date('g:i A', strtotime($current_summary['time_in'])); ?> - <?php echo date('g:i A', strtotime($current_summary['time_out'])); ?>
-                                                </div>
-                                                <div class="timeline-item">
-                                                    <strong>Date:</strong> <?php echo date('F j, Y', strtotime($current_summary['date'])); ?>
-                                                </div>
+                                            <div class="timeline-item">
+                                                <strong>Instructor:</strong> <?php echo htmlspecialchars($current_summary['instructor_name']); ?>
+                                            </div>
+                                            
+                                            <!-- This section dynamically lists all attendance records for the instructor -->
+                                            <div class="timeline-item">
+                                                <strong>Attendance Records:</strong>
+                                                <?php if (!empty($attendance_records)): ?>
+                                                    <ul class="list-unstyled mb-0 mt-2">
+                                                        <?php foreach ($attendance_records as $record): ?>
+                                                            <li class="mb-1">
+                                                                <?php
+                                                                    // Format the date and time for each record
+                                                                    $date_in = date('M j, Y', strtotime($record['time_in']));
+                                                                    $time_in = date('g:i A', strtotime($record['time_in']));
+                                                                    
+                                                                    // Handle cases where the instructor hasn't clocked out yet
+                                                                    $time_out = !empty($record['time_out']) ? date('g:i A', strtotime($record['time_out'])) : 'Not clocked out';
+                                                                ?>
+                                                                <span class="text-muted"><?php echo $date_in; ?>:</span> <?php echo $time_in; ?> - <?php echo $time_out; ?>
+                                                            </li>
+                                                        <?php endforeach; ?>
+                                                    </ul>
+                                                <?php else: ?>
+                                                    <span class="text-muted mt-2 d-block">No attendance records found for this instructor.</span>
+                                                <?php endif; ?>
+                                            </div>
+
+                                            <!-- 
+                                                MODIFIED LINE:
+                                                The key 'date' has been changed to 'session_date' to pull the date from the correct column.
+                                            -->
+                                            <div class="timeline-item">
+                                                <strong>Session Date:</strong> <?php echo date('F j, Y', strtotime($current_summary['session_date'])); ?>
+                                            </div>
+                                        </div>
                                             </div>
                                         </div>
                                         <div class="col-md-6">
