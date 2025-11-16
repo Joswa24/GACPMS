@@ -1252,12 +1252,6 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
                                                             Year <?php echo htmlspecialchars($class['year_level']); ?>
                                                         </span>
                                                     </div>
-                                                    <div>
-                                                        <a href="attendance.php?year=<?php echo urlencode($class['year_level']); ?>&section=<?php echo urlencode($class['section']); ?>&subject=<?php echo urlencode($class['subject']); ?>" 
-                                                           class="btn btn-sm btn-outline-primary">
-                                                            <i class="fas fa-clipboard-check me-1"></i>View Attendance
-                                                        </a>
-                                                    </div>
                                                 </div>
                                             </div>
                                         <?php endforeach; ?>
