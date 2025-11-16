@@ -2,18 +2,11 @@
 // Include connection
 include '../connection.php';
 session_start();
+
 // Add this at the top of settings.php for debugging
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-if (isset($_SESSION['success_message'])) {
-    echo '<div class="alert alert-success">' . $_SESSION['success_message'] . '</div>';
-    unset($_SESSION['success_message']);
-}
-if (isset($_SESSION['error_message'])) {
-    echo '<div class="alert alert-danger">' . $_SESSION['error_message'] . '</div>';
-    unset($_SESSION['error_message']);
-}
 
 // Check if user is logged in and 2FA verified
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
@@ -22,45 +15,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     exit();
 }
 
-// Function to get geolocation data from IP address
-function getGeolocation($ip) {
-    // Use ip-api.com for geolocation (free tier)
-    $url = "http://ip-api.com/json/{$ip}?fields=status,message,country,regionName,city,zip,lat,lon,timezone,query";
-    
-    // Initialize cURL session
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    if ($httpCode !== 200) {
-        return null;
-    }
-    
-    $data = json_decode($response, true);
-    
-    if ($data['status'] === 'success') {
-        return [
-            'country' => $data['country'],
-            'region' => $data['regionName'],
-            'city' => $data['city'],
-            'zip' => $data['zip'],
-            'lat' => $data['lat'],
-            'lon' => $data['lon'],
-            'timezone' => $data['timezone'],
-            'ip' => $data['query']
-        ];
-    }
-    
-    return null;
-}
-
-// Function to reverse geocode coordinates to get specific location
+// Function to reverse geocode coordinates to get specific location (updated to match index.php)
 function reverseGeocode($lat, $lon) {
     // Using OpenStreetMap's Nominatim API (free, no API key required)
     $url = "https://nominatim.openstreetmap.org/reverse?format=json&lat={$lat}&lon={$lon}&zoom=16&addressdetails=1";
@@ -84,109 +39,29 @@ function reverseGeocode($lat, $lon) {
     if (isset($data['address'])) {
         $address = $data['address'];
         
-        // Extract Philippine administrative divisions
-        $barangay = $address['suburb'] ?? $address['village'] ?? $address['hamlet'] ?? $address['neighbourhood'] ?? '';
-        $municipality = $address['town'] ?? $address['municipality'] ?? $address['city_district'] ?? '';
-        $cityProvince = $address['city'] ?? $address['state'] ?? $address['province'] ?? '';
-        $country = $address['country'] ?? '';
-        
-        // Special handling for Philippine addresses
-        // If city is present and it's a highly urbanized city, it serves as both city and province
-        if (isset($address['city']) && isset($address['state'])) {
-            // Check if city and state are different (e.g., Cebu City, Cebu Province)
-            if ($address['city'] !== $address['state']) {
-                $cityProvince = $address['city'] . ', ' . $address['state'];
-            } else {
-                $cityProvince = $address['city'];
-            }
-        }
-        
-        // Build location string in the requested format: Barangay, Municipality, City/Province, Country
+        // Try to build a specific location string
         $parts = [];
-        if (!empty($barangay)) $parts[] = $barangay;
-        if (!empty($municipality)) $parts[] = $municipality;
-        if (!empty($cityProvince)) $parts[] = $cityProvince;
-        if (!empty($country)) $parts[] = $country;
+        if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
+            $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
+        }
+        if (isset($address['city']) || isset($address['city_district'])) {
+            $parts[] = $address['city'] ?? $address['city_district'];
+        }
+        if (isset($address['state']) || isset($address['province'])) {
+            $parts[] = $address['state'] ?? $address['province'];
+        }
+        if (isset($address['country'])) {
+            $parts[] = $address['country'];
+        }
         
         return [
             'display_name' => $data['display_name'],
             'address' => $address,
-            'specific_location' => implode(', ', $parts),
-            'barangay' => $barangay,
-            'municipality' => $municipality,
-            'city_province' => $cityProvince,
-            'country' => $country,
-            'formatted_address' => [
-                'barangay' => $barangay,
-                'municipality' => $municipality,
-                'city_province' => $cityProvince,
-                'country' => $country
-            ]
+            'specific_location' => implode(', ', $parts)
         ];
     }
     
     return null;
-}
-
-// Function to log admin access with geolocation
-function logAdminAccess($db, $adminId, $username, $status = 'success', $activity = 'Login') {
-    $ipAddress = $_SERVER['REMOTE_ADDR'];
-    $userAgent = $_SERVER['HTTP_USER_AGENT'];
-    
-    // Get geolocation data
-    $geoData = getGeolocation($ipAddress);
-    $location = 'Unknown';
-    $locationJson = null;
-    
-    if ($geoData) {
-        // Format IP location in the same structure as GPS location
-        $formattedLocation = [
-            'barangay' => '',
-            'municipality' => $geoData['city'] ?? '',
-            'city_province' => $geoData['region'] ?? '',
-            'country' => $geoData['country'] ?? ''
-        ];
-        
-        $location = $geoData['city'] . ', ' . $geoData['region'] . ', ' . $geoData['country'];
-        $locationJson = json_encode([
-            'source' => 'IP',
-            'formatted_address' => $formattedLocation
-        ] + $geoData);
-    } else {
-        $locationJson = json_encode(['error' => 'Unable to fetch location']);
-    }
-    
-    $loginTime = date('Y-m-d H:i:s');
-    
-    try {
-        $stmt = $db->prepare("INSERT INTO admin_access_logs 
-            (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        
-        $stmt->bind_param("issssssss", 
-            $adminId, 
-            $username, 
-            $loginTime, 
-            $ipAddress, 
-            $userAgent, 
-            $location, 
-            $locationJson,
-            $activity, 
-            $status
-        );
-        
-        $stmt->execute();
-        return $db->insert_id;
-    } catch (Exception $e) {
-        error_log("Failed to log admin access: " . $e->getMessage());
-        return false;
-    }
-}
-
-// Check if user is logged in
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header('Location: index.php');
-    exit();
 }
 
 // Generate CSRF token if not exists
@@ -219,12 +94,6 @@ try {
     }
 } catch (Exception $e) {
     error_log("Failed to create admin_access_logs table: " . $e->getMessage());
-}
-
-// Log current access if not already logged for this session
-if (!isset($_SESSION['access_logged'])) {
-    logAdminAccess($db, $_SESSION['user_id'], $_SESSION['username'], 'success', 'Dashboard Access');
-    $_SESSION['access_logged'] = true;
 }
 
 // Handle clear old logs request
@@ -273,8 +142,35 @@ try {
             // Parse location details if available
             if (!empty($row['location_details'])) {
                 $locationDetails = json_decode($row['location_details'], true);
-                if (isset($locationDetails['lat']) && isset($locationDetails['lon'])) {
+                
+                // Check if this is GPS data
+                if (isset($locationDetails['source']) && $locationDetails['source'] === 'GPS') {
+                    $row['location_type'] = 'GPS';
+                    $row['latitude'] = $locationDetails['lat'];
+                    $row['longitude'] = $locationDetails['lon'];
+                    $row['accuracy'] = $locationDetails['accuracy_meters'] ?? null;
                     $row['map_link'] = "https://www.google.com/maps?q={$locationDetails['lat']},{$locationDetails['lon']}";
+                    
+                    // Extract formatted address if available
+                    if (isset($locationDetails['address'])) {
+                        $address = $locationDetails['address'];
+                        $parts = [];
+                        if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
+                            $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
+                        }
+                        if (isset($address['city']) || isset($address['city_district'])) {
+                            $parts[] = $address['city'] ?? $address['city_district'];
+                        }
+                        if (isset($address['state']) || isset($address['province'])) {
+                            $parts[] = $address['state'] ?? $address['province'];
+                        }
+                        if (isset($address['country'])) {
+                            $parts[] = $address['country'];
+                        }
+                        $row['formatted_address'] = implode(', ', $parts);
+                    }
+                } else {
+                    $row['location_type'] = 'IP';
                 }
             }
             $logs[] = $row;
@@ -740,12 +636,30 @@ try {
             max-width: 90%; /* Make modal wider for full map view */
         }
         
-
         #locationMap {
             height: 500px; /* Increase map height */
             width: 100%;
             border-radius: 8px;
             overflow: hidden;
+        }
+        
+        /* GPS indicator styling */
+        .gps-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.8em;
+            color: var(--success-color);
+            margin-top: 3px;
+        }
+        
+        .ip-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.8em;
+            color: var(--info-color);
+            margin-top: 3px;
         }
     </style>
 </head>
@@ -794,8 +708,12 @@ try {
                                 </select>
                             </div>
                             <div class="col-md-3">
-                                <label for="activityFilter" class="form-label">Activity</label>
-                                <input type="text" class="form-control" id="activityFilter" placeholder="Filter by activity" onkeyup="filterLogs()">
+                                <label for="locationTypeFilter" class="form-label">Location Type</label>
+                                <select class="form-control" id="locationTypeFilter" onchange="filterLogs()">
+                                    <option value="">All Locations</option>
+                                    <option value="GPS">GPS Location</option>
+                                    <option value="IP">IP Location</option>
+                                </select>
                             </div>
                         </div>
 
@@ -832,22 +750,22 @@ try {
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="card bg-danger text-white stats-card">
+                                <div class="card bg-info text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div>
-                                                <h6 class="mb-0">Failed</h6>
-                                                <h4 class="mb-0"><?php echo count(array_filter($logs, function($log) { return $log['status'] === 'failed'; })); ?></h4>
+                                                <h6 class="mb-0">GPS Logins</h6>
+                                                <h4 class="mb-0"><?php echo count(array_filter($logs, function($log) { return isset($log['location_type']) && $log['location_type'] === 'GPS'; })); ?></h4>
                                             </div>
                                             <div class="fs-1 opacity-50">
-                                                <i class="fas fa-times-circle"></i>
+                                                <i class="fas fa-satellite-dish"></i>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <div class="card bg-info text-white stats-card">
+                                <div class="card bg-warning text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div>
@@ -869,7 +787,6 @@ try {
                         </div>
 
                         <!-- Modern Logs Table -->
-                        
                         <div class="modern-table-container">
                             <div class="table-wrapper">
                                 <div class="table-responsive">
@@ -891,8 +808,8 @@ try {
                                             <?php if (empty($logs)): ?>
                                                 <tr>
                                                     <td colspan="9">
-                                                        <div class="empty-state">
-                                                            <i class="fas fa-clipboard-list"></i>
+                                                        <div class="empty-state text-center">
+                                                            <i class="fas fa-clipboard-list fa-3x mb-3 text-muted"></i>
                                                             <h5>No access logs found</h5>
                                                             <p class="text-muted">There are no access logs to display at this time.</p>
                                                         </div>
@@ -904,7 +821,7 @@ try {
                                                         data-date="<?php echo date('Y-m-d', strtotime($log['login_time'])); ?>" 
                                                         data-username="<?php echo strtolower(htmlspecialchars($log['username'] ?? '')); ?>" 
                                                         data-status="<?php echo $log['status']; ?>" 
-                                                        data-activity="<?php echo strtolower(htmlspecialchars($log['activity'] ?? '')); ?>">
+                                                        data-location-type="<?php echo isset($log['location_type']) ? $log['location_type'] : ''; ?>">
                                                         <td class="text-center fw-bold"><?php echo $index + 1; ?></td>
                                                         <td>
                                                             <span class="fw-medium"><?php echo htmlspecialchars($log['username'] ?? 'N/A'); ?></span>
@@ -944,18 +861,19 @@ try {
                                                             $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
 
                                                             // Check if location details are available and valid
-                                                            $locationData = json_decode($log['location_details'], true);
-                                                            if ($locationData && isset($locationData['source']) && $locationData['source'] === 'GPS') {
+                                                            if (isset($log['location_type']) && $log['location_type'] === 'GPS') {
                                                                 echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
                                                                 echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
                                                                 echo '<i class="fas fa-map-marked-alt"></i> View Map';
                                                                 echo '</button>';
-                                                                echo '<div class="mt-1"><small class="text-success"><i class="fas fa-satellite-dish"></i> GPS Location</small></div>';
+                                                                echo '<div class="gps-indicator"><i class="fas fa-satellite-dish"></i> GPS Location';
+                                                                if (isset($log['accuracy'])) {
+                                                                    echo ' (±' . round($log['accuracy']) . 'm)';
+                                                                }
+                                                                echo '</div>';
                                                             } else {
                                                                 echo '<div class="table-cell-truncate">' . $summaryLocation . '</div>';
-                                                                if ($locationData && isset($locationData['source'])) {
-                                                                    echo '<div class="mt-1"><small class="text-muted"><i class="fas fa-wifi"></i> IP Location</small></div>';
-                                                                }
+                                                                echo '<div class="ip-indicator"><i class="fas fa-wifi"></i> IP Location</div>';
                                                             }
                                                             ?>
                                                         </td>
@@ -1041,7 +959,7 @@ try {
             const dateFilter = document.getElementById('dateFilter').value;
             const userFilter = document.getElementById('userFilter').value.toLowerCase();
             const statusFilter = document.getElementById('statusFilter').value;
-            const activityFilter = document.getElementById('activityFilter').value.toLowerCase();
+            const locationTypeFilter = document.getElementById('locationTypeFilter').value;
             
             const rows = document.querySelectorAll('#accessLogsTable tbody tr');
             
@@ -1052,7 +970,7 @@ try {
                 const dateValue = row.getAttribute('data-date');
                 const usernameValue = row.getAttribute('data-username');
                 const statusValue = row.getAttribute('data-status');
-                const activityValue = row.getAttribute('data-activity');
+                const locationTypeValue = row.getAttribute('data-location-type');
                 
                 let showRow = true;
                 
@@ -1068,7 +986,7 @@ try {
                     showRow = false;
                 }
                 
-                if (activityFilter && !activityValue.includes(activityFilter)) {
+                if (locationTypeFilter && locationTypeValue !== locationTypeFilter) {
                     showRow = false;
                 }
                 
@@ -1174,14 +1092,22 @@ try {
                 const marker = L.marker([data.lat, data.lon]).addTo(map);
                 
                 // Add a popup to the marker with location details
-                if (data.formatted_address) {
-                    const { barangay, municipality, city_province, country } = data.formatted_address;
-                    
+                if (data.address) {
+                    const address = data.address;
                     const locationParts = [];
-                    if (barangay) locationParts.push(barangay);
-                    if (municipality) locationParts.push(municipality);
-                    if (city_province) locationParts.push(city_province);
-                    if (country) locationParts.push(country);
+                    
+                    if (address.suburb || address.town || address.village) {
+                        locationParts.push(address.suburb || address.town || address.village);
+                    }
+                    if (address.city || address.city_district) {
+                        locationParts.push(address.city || address.city_district);
+                    }
+                    if (address.state || address.province) {
+                        locationParts.push(address.state || address.province);
+                    }
+                    if (address.country) {
+                        locationParts.push(address.country);
+                    }
                     
                     const formattedLocation = locationParts.length > 0 ? locationParts.join(', ') : 'Unknown Location';
                     
@@ -1191,6 +1117,7 @@ try {
                             <p><strong>Address:</strong> ${formattedLocation}</p>
                             <p><strong>Coordinates:</strong> ${data.lat}, ${data.lon}</p>
                             ${data.accuracy_meters ? `<p><strong>Accuracy:</strong> ±${data.accuracy_meters} meters</p>` : ''}
+                            <p><strong>Source:</strong> GPS</p>
                         </div>
                     `;
                     marker.bindPopup(popupContent);
