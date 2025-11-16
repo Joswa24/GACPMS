@@ -347,7 +347,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 }
 
 // Function to complete login process - UPDATED FOR PROPER REDIRECTION
-// Function to complete login process - UPDATED FOR PROPER REDIRECTION
 function completeLoginProcess($userId, $username, $email) {
     // Set session variables
     $_SESSION['user_id'] = $userId;
@@ -362,10 +361,6 @@ function completeLoginProcess($userId, $username, $email) {
     unset($_SESSION['temp_username']);
     unset($_SESSION['temp_email']);
     unset($_SESSION['password_verified']);
-    
-    // Clear access log tracking variables to prevent issues with future logins
-    unset($_SESSION['last_access_log_id']);
-    unset($_SESSION['last_access_log_time']);
     
     // Regenerate session ID to prevent session fixation
     session_regenerate_id(true);
