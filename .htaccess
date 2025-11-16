@@ -1,5 +1,4 @@
 
-
 # Remove duplicate RewriteEngine and fix index.php redirect
 RewriteRule ^index\.php$ / [R=301,L]
 
