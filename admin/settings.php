@@ -1131,18 +1131,43 @@ try {
                                                         </td>
                                                         <td>
                                                             <?php 
-                                                            $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
                                                             $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
-
-                                                            // Check if location details are available and valid
                                                             $locationData = json_decode($log['location_details'], true);
+                                                            
                                                             if ($locationData && isset($locationData['source']) && $locationData['source'] === 'GPS') {
-                                                                echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
+                                                                // Extract location parts from the stored data
+                                                                $barangay = $locationData['address']['barangay'] ?? 
+                                                                        $locationData['address']['suburb'] ?? 
+                                                                        $locationData['address']['village'] ?? 
+                                                                        $locationData['address']['hamlet'] ?? '';
+                                                                
+                                                                $municipality = $locationData['address']['municipality'] ?? 
+                                                                            $locationData['address']['town'] ?? 
+                                                                            $locationData['address']['city_district'] ?? '';
+                                                                
+                                                                $cityProvince = $locationData['address']['city_province'] ?? 
+                                                                            $locationData['address']['city'] ?? 
+                                                                            $locationData['address']['state'] ?? 
+                                                                            $locationData['address']['province'] ?? '';
+                                                                
+                                                                $country = $locationData['address']['country'] ?? '';
+                                                                
+                                                                // Build location string in the requested format
+                                                                $locationParts = [];
+                                                                if (!empty($barangay)) $locationParts[] = $barangay;
+                                                                if (!empty($municipality)) $locationParts[] = $municipality;
+                                                                if (!empty($cityProvince)) $locationParts[] = $cityProvince;
+                                                                if (!empty($country)) $locationParts[] = $country;
+                                                                
+                                                                $formattedLocation = !empty($locationParts) ? implode(', ', $locationParts) : 'Unknown Location';
+                                                                
+                                                                echo '<div class="table-cell-truncate mb-1">' . htmlspecialchars($formattedLocation) . '</div>';
                                                                 echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
                                                                 echo '<i class="fas fa-map-marked-alt"></i> View Details';
                                                                 echo '</button>';
                                                                 echo '<div class="mt-1"><small class="text-success"><i class="fas fa-satellite-dish"></i> GPS Location</small></div>';
                                                             } else {
+                                                                $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
                                                                 echo '<div class="table-cell-truncate">' . $summaryLocation . '</div>';
                                                                 if ($locationData && isset($locationData['source'])) {
                                                                     echo '<div class="mt-1"><small class="text-muted"><i class="fas fa-wifi"></i> IP Location</small></div>';
@@ -1381,7 +1406,6 @@ try {
             });
         }
 
-        // Show location modal function
         window.showLocationModal = function(locationJson) {
             try {
                 const data = JSON.parse(locationJson);
@@ -1410,12 +1434,27 @@ try {
                     // Add a marker for the location
                     const marker = L.marker([data.lat, data.lon]).addTo(map);
                     
-                    // Add a popup to the marker
+                    // Add a popup to the marker with formatted location
                     if (data.address) {
+                        // Extract location parts
+                        const barangay = data.address.barangay || data.address.suburb || data.address.village || data.address.hamlet || '';
+                        const municipality = data.address.municipality || data.address.town || data.address.city_district || '';
+                        const cityProvince = data.address.city_province || data.address.city || data.address.state || data.address.province || '';
+                        const country = data.address.country || '';
+                        
+                        // Build location string in the requested format
+                        const locationParts = [];
+                        if (barangay) locationParts.push(barangay);
+                        if (municipality) locationParts.push(municipality);
+                        if (cityProvince) locationParts.push(cityProvince);
+                        if (country) locationParts.push(country);
+                        
+                        const formattedLocation = locationParts.length > 0 ? locationParts.join(', ') : 'Unknown Location';
+                        
                         const popupContent = `
                             <div style="font-family: Arial, sans-serif;">
                                 <h5>Location Details</h5>
-                                <p><strong>Address:</strong> ${data.display_name || 'N/A'}</p>
+                                <p><strong>Address:</strong> ${formattedLocation}</p>
                                 <p><strong>Coordinates:</strong> ${data.lat}, ${data.lon}</p>
                             </div>
                         `;
@@ -1436,13 +1475,50 @@ try {
                 
                 if (data.address) {
                     const addr = data.address;
-                    document.getElementById('modalCountry').textContent = addr.country || 'N/A';
-                    document.getElementById('modalRegion').textContent = addr.state || addr.province || 'N/A';
-                    document.getElementById('modalCity').textContent = addr.city || addr.town || 'N/A';
+                    
+                    // Extract and display in the requested format
+                    const barangay = addr.barangay || addr.suburb || addr.village || addr.hamlet || 'N/A';
+                    const municipality = addr.municipality || addr.town || addr.city_district || 'N/A';
+                    const cityProvince = addr.city_province || addr.city || addr.state || addr.province || 'N/A';
+                    const country = addr.country || 'N/A';
+                    
+                    document.getElementById('modalCountry').textContent = country;
+                    document.getElementById('modalRegion').textContent = cityProvince;
+                    document.getElementById('modalCity').textContent = municipality;
+                    
+                    // Add a new field for barangay
+                    const barangayElement = document.getElementById('modalBarangay');
+                    if (!barangayElement) {
+                        const detailsContainer = document.querySelector('.location-details-container');
+                        const barangayItem = document.createElement('div');
+                        barangayItem.className = 'location-detail-item';
+                        barangayItem.innerHTML = `
+                            <div class="location-detail-label">Barangay:</div>
+                            <div class="location-detail-value" id="modalBarangay">${barangay}</div>
+                        `;
+                        detailsContainer.insertBefore(barangayItem, detailsContainer.firstChild);
+                    } else {
+                        barangayElement.textContent = barangay;
+                    }
                 } else {
                     document.getElementById('modalCountry').textContent = 'N/A';
                     document.getElementById('modalRegion').textContent = 'N/A';
                     document.getElementById('modalCity').textContent = 'N/A';
+                    
+                    // Add barangay field if it doesn't exist
+                    const barangayElement = document.getElementById('modalBarangay');
+                    if (!barangayElement) {
+                        const detailsContainer = document.querySelector('.location-details-container');
+                        const barangayItem = document.createElement('div');
+                        barangayItem.className = 'location-detail-item';
+                        barangayItem.innerHTML = `
+                            <div class="location-detail-label">Barangay:</div>
+                            <div class="location-detail-value" id="modalBarangay">N/A</div>
+                        `;
+                        detailsContainer.insertBefore(barangayItem, detailsContainer.firstChild);
+                    } else {
+                        barangayElement.textContent = 'N/A';
+                    }
                 }
 
                 // Show the modal

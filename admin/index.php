@@ -79,6 +79,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && isset($_
 }
 
 // Function to reverse geocode coordinates to get specific location
+// Function to reverse geocode coordinates to get specific location
 function reverseGeocode($lat, $lon) {
     // Using OpenStreetMap's Nominatim API (free, no API key required)
     $url = "https://nominatim.openstreetmap.org/reverse?format=json&lat={$lat}&lon={$lon}&zoom=16&addressdetails=1";
@@ -102,25 +103,27 @@ function reverseGeocode($lat, $lon) {
     if (isset($data['address'])) {
         $address = $data['address'];
         
-        // Try to build a specific location string
+        // Extract specific location parts
+        $barangay = $address['suburb'] ?? $address['village'] ?? $address['hamlet'] ?? '';
+        $municipality = $address['town'] ?? $address['municipality'] ?? $address['city_district'] ?? '';
+        $cityProvince = $address['city'] ?? $address['state'] ?? $address['province'] ?? '';
+        $country = $address['country'] ?? '';
+        
+        // Build location string in the requested format
         $parts = [];
-        if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
-            $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
-        }
-        if (isset($address['city']) || isset($address['city_district'])) {
-            $parts[] = $address['city'] ?? $address['city_district'];
-        }
-        if (isset($address['state']) || isset($address['province'])) {
-            $parts[] = $address['state'] ?? $address['province'];
-        }
-        if (isset($address['country'])) {
-            $parts[] = $address['country'];
-        }
+        if (!empty($barangay)) $parts[] = $barangay;
+        if (!empty($municipality)) $parts[] = $municipality;
+        if (!empty($cityProvince)) $parts[] = $cityProvince;
+        if (!empty($country)) $parts[] = $country;
         
         return [
             'display_name' => $data['display_name'],
             'address' => $address,
-            'specific_location' => implode(', ', $parts)
+            'specific_location' => implode(', ', $parts),
+            'barangay' => $barangay,
+            'municipality' => $municipality,
+            'city_province' => $cityProvince,
+            'country' => $country
         ];
     }
     
