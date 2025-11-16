@@ -1220,9 +1220,6 @@ if ($filter_year && $filter_section) {
                                             <a href="attendance" class="btn btn-secondary">
                                                 <i class="fas fa-refresh me-2"></i>Reset
                                             </a>
-                                            <button type="button" class="btn btn-outline-info" id="quickToday">
-                                                <i class="fas fa-calendar-day me-2"></i>Today's Records
-                                            </button>
                                         </div>
                                         
                                         <?php if ($filter_year && $filter_section && !empty($attendance_data)): ?>
