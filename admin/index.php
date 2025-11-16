@@ -74,7 +74,7 @@ try {
 
 // Redirect if already logged in
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && isset($_SESSION['2fa_verified']) && $_SESSION['2fa_verified'] === true) {
-    header('Location: dashboard.php');
+    header('Location: dashboard');
     exit();
 }
 
