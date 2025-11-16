@@ -390,72 +390,52 @@ function completeLoginProcess($userId, $username, $email) {
     exit();
 }
 
-// Function to log access attempts - UPDATED TO HANDLE LOCATION DATA
-function logAccessAttempt($userId, $username, $activity, $status) {
-    global $db;
-    
-    try {
-        $ipAddress = $_SERVER['REMOTE_ADDR'];
-        $userAgent = $_SERVER['HTTP_USER_AGENT'];
-        $location = 'Unknown';
-        $locationJson = null;
-        $locationSource = 'IP'; // Track the source of the location data
-
-        // Check for client-side location data
-        if (!empty($_POST['user_lat']) && !empty($_POST['user_lon'])) {
-            $lat = floatval($_POST['user_lat']);
-            $lon = floatval($_POST['user_lon']);
-            $accuracy = isset($_POST['user_accuracy']) ? floatval($_POST['user_accuracy']) : null;
-
-            // Get specific address from coordinates
-            $geoData = reverseGeocode($lat, $lon);
-            
-            if ($geoData) {
-                $location = $geoData['specific_location']; // e.g., "Poblacion, Santa Fe, Cebu, Philippines"
-                $locationSource = 'GPS';
-                $locationJson = json_encode([
-                    'source' => 'GPS',
-                    'lat' => $lat,
-                    'lon' => $lon,
-                    'accuracy_meters' => $accuracy,
-                    'address' => $geoData['address'],
-                    'display_name' => $geoData['display_name']
-                ]);
-            } else {
-                // Fallback if reverse geocoding fails
-                $location = "Lat: {$lat}, Lon: {$lon}";
-                $locationJson = json_encode(['error' => 'Reverse geocoding failed', 'lat' => $lat, 'lon' => $lon]);
-            }
-        } else {
-            // Fallback to IP-based geolocation
-            if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
-                $context = stream_context_create([
-                    'http' => [
-                        'timeout' => 3,
-                        'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    ]
-                ]);
-                
-                $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
-                if ($ipData) {
-                    $ipInfo = json_decode($ipData);
-                    if ($ipInfo && $ipInfo->status === 'success') {
-                        $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
-                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
-                    }
-                }
-            }
-        }
+    // Function to log access attempts - UPDATED TO HANDLE LOCATION DATA
+    function logAccessAttempt($userId, $username, $activity, $status) {
+        global $db;
         
-        $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
-        if ($stmt) {
-            $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
-            $stmt->execute();
+        try {
+            $ipAddress = $_SERVER['REMOTE_ADDR'];
+            $userAgent = $_SERVER['HTTP_USER_AGENT'];
+            $location = 'Unknown';
+            $locationJson = null;
+            $locationSource = 'IP'; // Track the source of the location data
+
+            // Check for client-side location data
+            if (!empty($_POST['user_lat']) && !empty($_POST['user_lon'])) {
+                $lat = floatval($_POST['user_lat']);
+                $lon = floatval($_POST['user_lon']);
+                $accuracy = isset($_POST['user_accuracy']) ? floatval($_POST['user_accuracy']) : null;
+
+                // Get specific address from coordinates
+                $geoData = reverseGeocode($lat, $lon);
+                
+                if ($geoData) {
+                    $location = $geoData['specific_location']; // e.g., "Poblacion, Santa Fe, Cebu, Philippines"
+                    $locationSource = 'GPS';
+                    $locationJson = json_encode([
+                        'source' => 'GPS',
+                        'lat' => $lat,
+                        'lon' => $lon,
+                        'accuracy_meters' => $accuracy,
+                        'address' => $geoData['address'],
+                        'display_name' => $geoData['display_name']
+                    ]);
+                } else {
+                    // Fallback if reverse geocoding fails
+                    $location = "Lat: {$lat}, Lon: {$lon}";
+                    $locationJson = json_encode(['error' => 'Reverse geocoding failed', 'lat' => $lat, 'lon' => $lon]);
+                }
+            }            
+            $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
+            if ($stmt) {
+                $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
+                $stmt->execute();
+            }
+        } catch (Exception $e) {
+            error_log("Failed to log access attempt: " . $e->getMessage());
         }
-    } catch (Exception $e) {
-        error_log("Failed to log access attempt: " . $e->getMessage());
     }
-}
 
 // Function to generate and send 2FA code
 function generate2FACode($userId, $email) {
