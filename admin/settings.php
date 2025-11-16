@@ -259,6 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // Fetch admin access logs
+ // Fetch admin access logs
  $logs = [];
 try {
     $sql = "SELECT al.*, u.username 
@@ -276,6 +277,9 @@ try {
                 if (isset($locationDetails['lat']) && isset($locationDetails['lon'])) {
                     $row['map_link'] = "https://www.google.com/maps?q={$locationDetails['lat']},{$locationDetails['lon']}";
                 }
+                
+                // Add location source for display
+                $row['location_source'] = $locationDetails['source'] ?? 'IP';
             }
             $logs[] = $row;
         }
@@ -939,26 +943,27 @@ try {
                                                         </td>
                                                     
                                                         <td>
-                                                            <?php 
-                                                            $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
-                                                            $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
+                                                        <?php 
+                                                        $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
+                                                        $locationDetailsJson = htmlspecialchars($log['location_details'] ?? '{}');
+                                                        $locationSource = $log['location_source'] ?? 'IP';
 
-                                                            // Check if location details are available and valid
-                                                            $locationData = json_decode($log['location_details'], true);
-                                                            if ($locationData && isset($locationData['source']) && $locationData['source'] === 'GPS') {
-                                                                echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
-                                                                echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
-                                                                echo '<i class="fas fa-map-marked-alt"></i> View Map';
-                                                                echo '</button>';
-                                                                echo '<div class="mt-1"><small class="text-success"><i class="fas fa-satellite-dish"></i> GPS Location</small></div>';
-                                                            } else {
-                                                                echo '<div class="table-cell-truncate">' . $summaryLocation . '</div>';
-                                                                if ($locationData && isset($locationData['source'])) {
-                                                                    echo '<div class="mt-1"><small class="text-muted"><i class="fas fa-wifi"></i> IP Location</small></div>';
-                                                                }
+                                                        // Check if location details are available and valid
+                                                        $locationData = json_decode($log['location_details'], true);
+                                                        if ($locationData && isset($locationData['source']) && $locationData['source'] === 'GPS') {
+                                                            echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
+                                                            echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
+                                                            echo '<i class="fas fa-map-marked-alt"></i> View Map';
+                                                            echo '</button>';
+                                                            echo '<div class="mt-1"><small class="text-success"><i class="fas fa-satellite-dish"></i> GPS Location</small></div>';
+                                                        } else {
+                                                            echo '<div class="table-cell-truncate">' . $summaryLocation . '</div>';
+                                                            if ($locationData && isset($locationData['source'])) {
+                                                                echo '<div class="mt-1"><small class="text-muted"><i class="fas fa-wifi"></i> IP Location</small></div>';
                                                             }
-                                                            ?>
-                                                        </td>
+                                                        }
+                                                        ?>
+                                                    </td>
                                                         <td>
                                                             <span class="badge bg-info"><?php echo htmlspecialchars($log['activity'] ?? 'Login'); ?></span>
                                                         </td>

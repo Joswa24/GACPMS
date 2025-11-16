@@ -52,7 +52,7 @@ function reverseGeocode($lat, $lon) {
     return null;
 }
 
-// Log the logout if user is logged in
+// Log logout if user is logged in
 if (isset($_SESSION['user_id'])) {
     try {
         // Set MySQL timezone to match PHP timezone
@@ -68,7 +68,7 @@ if (isset($_SESSION['user_id'])) {
         $locationJson = null;
         $locationSource = 'IP'; // Track the source of the location data
 
-        // Check for client-side location data (if available from the login)
+        // Check for client-side location data (if available from login)
         if (!empty($_SESSION['user_lat']) && !empty($_SESSION['user_lon'])) {
             $lat = floatval($_SESSION['user_lat']);
             $lon = floatval($_SESSION['user_lon']);
@@ -144,7 +144,7 @@ if (isset($_SESSION['user_id'])) {
 session_unset();
 session_destroy();
 
-// Redirect to login page (fixed from "index" to "index.php")
+// Redirect to login page
 header('Location: index.php');
 exit();
 ?>
