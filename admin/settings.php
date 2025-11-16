@@ -21,14 +21,6 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     header('Location: index.php');
     exit();
 }
-// Log current access if not already logged for this session
-if (!isset($_SESSION['access_logged']) && !isset($_SESSION['access_log_id'])) {
-    $logId = logAdminAccess($db, $_SESSION['user_id'], $_SESSION['username'], 'success', 'Dashboard Access');
-    if ($logId) {
-        $_SESSION['access_log_id'] = $logId;
-    }
-    $_SESSION['access_logged'] = true;
-}
 
 // Function to get geolocation data from IP address
 function getGeolocation($ip) {
@@ -92,44 +84,25 @@ function reverseGeocode($lat, $lon) {
     if (isset($data['address'])) {
         $address = $data['address'];
         
-        // Extract Philippine administrative divisions
-        $barangay = $address['suburb'] ?? $address['village'] ?? $address['hamlet'] ?? $address['neighbourhood'] ?? '';
-        $municipality = $address['town'] ?? $address['municipality'] ?? $address['city_district'] ?? '';
-        $cityProvince = $address['city'] ?? $address['state'] ?? $address['province'] ?? '';
-        $country = $address['country'] ?? '';
-        
-        // Special handling for Philippine addresses
-        // If city is present and it's a highly urbanized city, it serves as both city and province
-        if (isset($address['city']) && isset($address['state'])) {
-            // Check if city and state are different (e.g., Cebu City, Cebu Province)
-            if ($address['city'] !== $address['state']) {
-                $cityProvince = $address['city'] . ', ' . $address['state'];
-            } else {
-                $cityProvince = $address['city'];
-            }
-        }
-        
-        // Build location string in the requested format: Barangay, Municipality, City/Province, Country
+        // Try to build a specific location string
         $parts = [];
-        if (!empty($barangay)) $parts[] = $barangay;
-        if (!empty($municipality)) $parts[] = $municipality;
-        if (!empty($cityProvince)) $parts[] = $cityProvince;
-        if (!empty($country)) $parts[] = $country;
+        if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
+            $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
+        }
+        if (isset($address['city']) || isset($address['city_district'])) {
+            $parts[] = $address['city'] ?? $address['city_district'];
+        }
+        if (isset($address['state']) || isset($address['province'])) {
+            $parts[] = $address['state'] ?? $address['province'];
+        }
+        if (isset($address['country'])) {
+            $parts[] = $address['country'];
+        }
         
         return [
             'display_name' => $data['display_name'],
             'address' => $address,
-            'specific_location' => implode(', ', $parts),
-            'barangay' => $barangay,
-            'municipality' => $municipality,
-            'city_province' => $cityProvince,
-            'country' => $country,
-            'formatted_address' => [
-                'barangay' => $barangay,
-                'municipality' => $municipality,
-                'city_province' => $cityProvince,
-                'country' => $country
-            ]
+            'specific_location' => implode(', ', $parts)
         ];
     }
     
@@ -137,51 +110,19 @@ function reverseGeocode($lat, $lon) {
 }
 
 // Function to log admin access with geolocation
-// Function to log admin access with geolocation - UPDATED TO PREVENT DUPLICATES
 function logAdminAccess($db, $adminId, $username, $status = 'success', $activity = 'Login') {
-    // Check if this access was already logged in index.php
-    if (isset($_SESSION['last_access_log_time']) && 
-        isset($_SESSION['last_access_log_id']) &&
-        $_SESSION['last_access_log_time'] && 
-        $_SESSION['last_access_log_id']) {
-        
-        // This access was already logged in index.php, so don't create a duplicate
-        // Instead, just update the activity if needed
-        try {
-            $stmt = $db->prepare("UPDATE admin_access_logs SET activity = ? WHERE id = ?");
-            $stmt->bind_param("si", $activity, $_SESSION['last_access_log_id']);
-            $stmt->execute();
-            
-            return $_SESSION['last_access_log_id'];
-        } catch (Exception $e) {
-            error_log("Failed to update access log: " . $e->getMessage());
-            return false;
-        }
-    }
-    
-    // If not already logged, proceed with normal logging
     $ipAddress = $_SERVER['REMOTE_ADDR'];
     $userAgent = $_SERVER['HTTP_USER_AGENT'];
     
     // Get geolocation data
     $geoData = getGeolocation($ipAddress);
     $location = 'Unknown';
-    $locationJson = null;
     
     if ($geoData) {
-        // Format IP location in the same structure as GPS location
-        $formattedLocation = [
-            'barangay' => '',
-            'municipality' => $geoData['city'] ?? '',
-            'city_province' => $geoData['region'] ?? '',
-            'country' => $geoData['country'] ?? ''
-        ];
-        
         $location = $geoData['city'] . ', ' . $geoData['region'] . ', ' . $geoData['country'];
-        $locationJson = json_encode([
-            'source' => 'IP',
-            'formatted_address' => $formattedLocation
-        ] + $geoData);
+        
+        // Store detailed geolocation in database
+        $locationJson = json_encode($geoData);
     } else {
         $locationJson = json_encode(['error' => 'Unable to fetch location']);
     }
@@ -212,6 +153,7 @@ function logAdminAccess($db, $adminId, $username, $status = 'success', $activity
         return false;
     }
 }
+
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header('Location: index.php');
@@ -311,39 +253,6 @@ try {
     }
 } catch (Exception $e) {
     error_log("Failed to fetch admin access logs: " . $e->getMessage());
-}
-
-// Get the most recent log for location display at the top
- $mostRecentLog = null;
- $locationDisplay = null;
-if (!empty($logs)) {
-    $mostRecentLog = $logs[0];
-    
-    // Extract location details for display
-    if (!empty($mostRecentLog['location_details'])) {
-        $locationDetails = json_decode($mostRecentLog['location_details'], true);
-        
-        if ($locationDetails && isset($locationDetails['formatted_address'])) {
-            $formattedAddr = $locationDetails['formatted_address'];
-            
-            $barangay = $formattedAddr['barangay'] ?? '';
-            $municipality = $formattedAddr['municipality'] ?? '';
-            $cityProvince = $formattedAddr['city_province'] ?? '';
-            $country = $formattedAddr['country'] ?? '';
-            
-            // Build location string in the requested format
-            $locationParts = [];
-            if (!empty($barangay)) $locationParts[] = $barangay;
-            if (!empty($municipality)) $locationParts[] = $municipality;
-            if (!empty($cityProvince)) $locationParts[] = $cityProvince;
-            if (!empty($country)) $locationParts[] = $country;
-            
-            $locationDisplay = !empty($locationParts) ? implode(', ', $locationParts) : 'Unknown Location';
-            $locationDisplay = '<i class="fas fa-map-marker-alt me-2"></i>' . $locationDisplay;
-        } else {
-            $locationDisplay = '<i class="fas fa-map-marker-alt me-2"></i>' . ($mostRecentLog['location'] ?? 'Unknown Location');
-        }
-    }
 }
 ?>
 
@@ -500,6 +409,7 @@ if (!empty($logs)) {
             padding: 0.4em 0.6em; /* Smaller padding */
             font-weight: 500;
         }
+2001:4454:789:3b00:24b5:1f8:3dec:2a8f	
 
         /* Modern Button Styles */
         .btn {
@@ -731,6 +641,255 @@ if (!empty($logs)) {
         }
         
         /* IP address badge styling */
+        .ip-badge {
+            font-family: 'Courier New', monospace;
+            font-size: 0.75em; /* Smaller font */
+            background: linear-gradient(135deg, #6c757d, #5a6268);
+            padding: 0.3em 0.5em; /* Smaller padding */
+        }
+        
+        /* Location button styling */
+        .location-btn {
+            background: linear-gradient(135deg, var(--info-color), #2c9faf);
+            color: white;
+            border: none;
+            border-radius: 6px; /* Smaller border radius */
+            padding: 0.3em 0.6em; /* Smaller padding */
+            font-size: 0.75em; /* Smaller font */
+            transition: var(--transition);
+        }
+        
+        .location-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(54, 185, 204, 0.3);
+        }
+        
+        /* Status badge animation */
+        .badge {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .badge::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: rgba(255, 255, 255, 0.1);
+            transform: rotate(45deg);
+            transition: all 0.5s;
+            opacity: 0;
+        }
+        
+        .badge:hover::after {
+            animation: shine 0.5s ease-in-out;
+        }
+        
+        @keyframes shine {
+            0% {
+                transform: translateX(-100%) translateY(-100%) rotate(45deg);
+                opacity: 0;
+            }
+            50% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateX(100%) translateY(100%) rotate(45deg);
+                opacity: 0;
+            }
+        }
+        
+        /* Table container fix */
+        .table-wrapper {
+            width: 100%;
+            overflow: hidden; /* Changed from overflow-x: auto */
+            margin-bottom: 1rem;
+        }
+        
+        /* Ensure table headers are always visible */
+        .modern-table thead {
+            display: table-header-group;
+        }
+        
+        .modern-table thead th {
+            visibility: visible !important;
+            display: table-cell !important;
+        }
+        
+        /* Location modal styles */
+        #locationModal .modal-dialog {
+            max-width: 800px;
+        }
+        
+        #locationMap {
+            height: 400px;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .location-detail-item {
+            display: flex;
+            margin-bottom: 8px;
+        }
+        
+        .location-detail-label {
+            font-weight: 600;
+            width: 120px;
+            color: var(--dark-text);
+            font-size: 0.85rem; /* Smaller font */
+        }
+        
+        .location-detail-value {
+            flex: 1;
+            font-size: 0.85rem; /* Smaller font */
+        }
+        
+        /* Modern card design with glassmorphism effect */
+        .modern-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+            border-radius: var(--border-radius);
+            transition: var(--transition);
+        }
+        
+        .modern-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(31, 38, 135, 0.2);
+        }
+        
+        /* Enhanced table design */
+        .enhanced-table {
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: var(--box-shadow);
+            background: white;
+            position: relative;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .enhanced-table::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--icon-color), var(--secondary-color));
+            z-index: 1;
+        }
+        
+        /* Compact table design */
+        .compact-table {
+            font-size: 0.8rem;
+        }
+        
+        .compact-table th {
+            padding: 8px 6px;
+            font-size: 0.8rem;
+        }
+        
+        .compact-table td {
+            padding: 8px 6px;
+            font-size: 0.8rem;
+        }
+        
+        /* Responsive table adjustments */
+        @media (max-width: 1200px) {
+            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 5%; }
+            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 12%; }
+            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; }
+            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; }
+            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; }
+            .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 15%; }
+            .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
+            .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 10%; }
+            .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 10%; }
+        }
+        
+        @media (max-width: 992px) {
+            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 4%; }
+            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 11%; }
+            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; }
+            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; }
+            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; }
+            .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; }
+            .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
+            .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 10%; }
+            .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 10%; }
+        }
+        
+        @media (max-width: 768px) {
+            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 4%; }
+            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 11%; }
+            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 11%; }
+            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 11%; }
+            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; }
+            .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; }
+            .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
+            .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 11%; }
+            .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 11%; }
+        }
+        
+        /* Table container with gradient border */
+        .gradient-border-table {
+            position: relative;
+            border-radius: var(--border-radius);
+            background: white;
+            padding: 2px;
+            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color));
+        }
+        
+        .gradient-border-table-inner {
+            background: white;
+            border-radius: calc(var(--border-radius) - 2px);
+            overflow: hidden;
+        }
+        
+        /* Enhanced hover effect for table rows */
+        .modern-table tbody tr {
+            position: relative;
+        }
+        
+        .modern-table tbody tr::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--icon-color), var(--secondary-color));
+            transition: width 0.3s ease;
+        }
+        
+        .modern-table tbody tr:hover::after {
+            width: 100%;
+        }
+        
+        /* Modern scrollbar */
+        .modern-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        
+        .modern-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        .modern-scrollbar::-webkit-scrollbar-thumb {
+            background: var(--icon-color);
+            border-radius: 10px;
+        }
+        
+        .modern-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: var(--secondary-color);
+        }
+        /* IP Address column styles */
         .ip-address-column {
             max-width: 150px;
         }
@@ -780,63 +939,6 @@ if (!empty($logs)) {
             background: linear-gradient(135deg, var(--warning-color), #f4b619);
             box-shadow: 0 4px 8px rgba(246, 194, 62, 0.3);
         }
-        
-        /* Location button styling */
-        .location-btn {
-            background: linear-gradient(135deg, var(--info-color), #2c9faf);
-            color: white;
-            border: none;
-            border-radius: 6px; /* Smaller border radius */
-            padding: 0.3em 0.6em; /* Smaller padding */
-            font-size: 0.75em; /* Smaller font */
-            transition: var(--transition);
-        }
-        
-        .location-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(54, 185, 204, 0.3);
-        }
-        
-        /* Gmail-like location display */
-        .location-display {
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-            padding: 8px 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            transition: var(--transition);
-        }
-
-        .location-display:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-        }
-
-        .location-display .location-text {
-            font-size: 0.9rem;
-            color: var(--dark-text);
-            margin: 0;
-        }
-
-        .location-display .location-icon {
-            color: var(--icon-color);
-            margin-right: 8px;
-        }
-        
-        /* Location modal styles */
-        #locationModal .modal-dialog {
-            max-width: 90%; /* Make modal wider for full map view */
-        }
-        
-
-        #locationMap {
-            height: 500px; /* Increase map height */
-            width: 100%;
-            border-radius: 8px;
-            overflow: hidden;
-        }
     </style>
 </head>
 
@@ -849,21 +951,6 @@ if (!empty($logs)) {
         <!-- Content Start -->
         <div class="content">
             <?php include 'navbar.php'; ?>
-
-            <!-- Gmail-like Location Display -->
-            <?php if ($locationDisplay): ?>
-            <div class="container-fluid mb-3">
-                <div class="row justify-content-end">
-                    <div class="col-md-6">
-                        <div class="location-display">
-                            <span class="location-text">
-                                <?php echo $locationDisplay; ?>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <?php endif; ?>
 
             <div class="container-fluid pt-4 px-4">
                 <div class="col-sm-12 col-xl-12">
@@ -1033,7 +1120,7 @@ if (!empty($logs)) {
                                                         <td class="ip-address-column">
                                                             <div class="d-flex align-items-center gap-2">
                                                                 <span class="ip-display encrypted-ip" id="ip-<?php echo $log['id']; ?>">
-                                                                    ••••••••••••
+                                                                    ••••••••••••••••
                                                                 </span>
                                                                 <button type="button" class="btn btn-sm ip-toggle toggle-ip" 
                                                                         data-ip="<?php echo htmlspecialchars($log['ip_address']); ?>"
@@ -1042,7 +1129,6 @@ if (!empty($logs)) {
                                                                 </button>
                                                             </div>
                                                         </td>
-                                                    
                                                         <td>
                                                             <?php 
                                                             $summaryLocation = htmlspecialchars($log['location'] ?? 'Unknown Location');
@@ -1053,7 +1139,7 @@ if (!empty($logs)) {
                                                             if ($locationData && isset($locationData['source']) && $locationData['source'] === 'GPS') {
                                                                 echo '<div class="table-cell-truncate mb-1">' . $summaryLocation . '</div>';
                                                                 echo '<button class="btn btn-sm location-btn" onclick="showLocationModal(\'' . $locationDetailsJson . '\')">';
-                                                                echo '<i class="fas fa-map-marked-alt"></i> View Map';
+                                                                echo '<i class="fas fa-map-marked-alt"></i> View Details';
                                                                 echo '</button>';
                                                                 echo '<div class="mt-1"><small class="text-success"><i class="fas fa-satellite-dish"></i> GPS Location</small></div>';
                                                             } else {
@@ -1107,12 +1193,46 @@ if (!empty($logs)) {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="locationModalLabel">
-                        <i class="fas fa-globe-americas"></i> Location Map View
+                        <i class="fas fa-globe-americas"></i> Detailed Location Information
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div id="locationMap"></div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Geolocation Details</h6>
+                            <div class="location-details-container">
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">Source:</div>
+                                    <div class="location-detail-value" id="modalSource">-</div>
+                                </div>
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">Coordinates:</div>
+                                    <div class="location-detail-value" id="modalCoords">-</div>
+                                </div>
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">Accuracy:</div>
+                                    <div class="location-detail-value" id="modalAccuracy">-</div>
+                                </div>
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">Country:</div>
+                                    <div class="location-detail-value" id="modalCountry">-</div>
+                                </div>
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">City/Province:</div>
+                                    <div class="location-detail-value" id="modalRegion">-</div>
+                                </div>
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">Municipality:</div>
+                                    <div class="location-detail-value" id="modalCity">-</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Map View</h6>
+                            <div id="locationMap"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -1151,7 +1271,7 @@ if (!empty($logs)) {
             const rows = document.querySelectorAll('#accessLogsTable tbody tr');
             
             rows.forEach(row => {
-                // Skip empty state row
+                // Skip the empty state row
                 if (row.cells.length === 1) return;
                 
                 const dateValue = row.getAttribute('data-date');
@@ -1261,49 +1381,69 @@ if (!empty($logs)) {
             });
         }
 
-        // Update showLocationModal function
+        // Show location modal function
         window.showLocationModal = function(locationJson) {
             try {
                 const data = JSON.parse(locationJson);
 
-                // Initialize Leaflet map
-                const map = L.map('locationMap').setView([data.lat, data.lon], 15);
+                // Populate the modal with data
+                document.getElementById('modalSource').textContent = data.source || 'Unknown';
                 
-                // Add OpenStreetMap tiles
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                    maxZoom: 18
-                }).addTo(map);
-                
-                // Add a marker for the location
-                const marker = L.marker([data.lat, data.lon]).addTo(map);
-                
-                // Add a popup to the marker with location details
-                if (data.formatted_address) {
-                    const { barangay, municipality, city_province, country } = data.formatted_address;
+                if (data.lat && data.lon) {
+                    document.getElementById('modalCoords').textContent = `${data.lat}, ${data.lon}`;
                     
-                    const locationParts = [];
-                    if (barangay) locationParts.push(barangay);
-                    if (municipality) locationParts.push(municipality);
-                    if (city_province) locationParts.push(city_province);
-                    if (country) locationParts.push(country);
+                    if (data.accuracy_meters) {
+                        document.getElementById('modalAccuracy').textContent = `±${data.accuracy_meters} meters`;
+                    } else {
+                        document.getElementById('modalAccuracy').textContent = 'N/A';
+                    }
                     
-                    const formattedLocation = locationParts.length > 0 ? locationParts.join(', ') : 'Unknown Location';
+                    // Initialize Leaflet map
+                    const map = L.map('locationMap').setView([data.lat, data.lon], 15);
                     
-                    const popupContent = `
-                        <div style="font-family: Arial, sans-serif;">
-                            <h5>Location Details</h5>
-                            <p><strong>Address:</strong> ${formattedLocation}</p>
-                            <p><strong>Coordinates:</strong> ${data.lat}, ${data.lon}</p>
-                            ${data.accuracy_meters ? `<p><strong>Accuracy:</strong> ±${data.accuracy_meters} meters</p>` : ''}
-                        </div>
-                    `;
-                    marker.bindPopup(popupContent);
+                    // Add OpenStreetMap tiles
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                        maxZoom: 18
+                    }).addTo(map);
+                    
+                    // Add a marker for the location
+                    const marker = L.marker([data.lat, data.lon]).addTo(map);
+                    
+                    // Add a popup to the marker
+                    if (data.address) {
+                        const popupContent = `
+                            <div style="font-family: Arial, sans-serif;">
+                                <h5>Location Details</h5>
+                                <p><strong>Address:</strong> ${data.display_name || 'N/A'}</p>
+                                <p><strong>Coordinates:</strong> ${data.lat}, ${data.lon}</p>
+                            </div>
+                        `;
+                        marker.bindPopup(popupContent);
+                    }
+                    
+                    // Generate Google Maps link
+                    const mapsLink = `https://www.google.com/maps?q=${data.lat},${data.lon}`;
+                    document.getElementById('modalMapsLink').href = mapsLink;
+                } else {
+                    document.getElementById('modalCoords').textContent = 'N/A';
+                    document.getElementById('modalAccuracy').textContent = 'N/A';
+                    document.getElementById('modalMapsLink').style.display = 'none';
+                    
+                    // Clear any existing map
+                    document.getElementById('locationMap').innerHTML = '<div class="alert alert-warning">No location coordinates available</div>';
                 }
                 
-                // Generate Google Maps link
-                const mapsLink = `https://www.google.com/maps?q=${data.lat},${data.lon}`;
-                document.getElementById('modalMapsLink').href = mapsLink;
+                if (data.address) {
+                    const addr = data.address;
+                    document.getElementById('modalCountry').textContent = addr.country || 'N/A';
+                    document.getElementById('modalRegion').textContent = addr.state || addr.province || 'N/A';
+                    document.getElementById('modalCity').textContent = addr.city || addr.town || 'N/A';
+                } else {
+                    document.getElementById('modalCountry').textContent = 'N/A';
+                    document.getElementById('modalRegion').textContent = 'N/A';
+                    document.getElementById('modalCity').textContent = 'N/A';
+                }
 
                 // Show the modal
                 const locationModal = new bootstrap.Modal(document.getElementById('locationModal'));
@@ -1358,7 +1498,7 @@ if (!empty($logs)) {
                 if (ipSpan.hasClass('actual-ip')) {
                     ipSpan.removeClass('actual-ip')
                         .addClass('encrypted-ip')
-                        .html('••••••••••••');
+                        .html('••••••••••••••••');
                     icon.removeClass('fa-eye-slash').addClass('fa-eye');
                     button.removeClass('btn-warning').addClass('ip-toggle');
                 }
@@ -1367,28 +1507,11 @@ if (!empty($logs)) {
             // Hide IP
             ipSpan.removeClass('actual-ip')
                 .addClass('encrypted-ip')
-                .html('••••••••••••');
+                .html('••••••••••••••••');
             icon.removeClass('fa-eye-slash').addClass('fa-eye');
             button.removeClass('btn-warning').addClass('ip-toggle');
         }
     });
-    // Add this to your settings.php or dashboard.php
-    function cleanupIncompleteSessions() {
-        global $db;
-        
-        try {
-            // Mark sessions without logout time as incomplete after 24 hours
-            $stmt = $db->prepare("UPDATE admin_access_logs SET activity = 'Incomplete Session', logout_time = DATE_ADD(login_time, INTERVAL 24 HOUR) WHERE logout_time IS NULL AND login_time < DATE_SUB(NOW(), INTERVAL 24 HOUR)");
-            $stmt->execute();
-            
-            error_log("Cleaned up incomplete sessions");
-        } catch (Exception $e) {
-            error_log("Failed to cleanup incomplete sessions: " . $e->getMessage());
-        }
-    }
-
-    // Call this function when dashboard loads
-    cleanupIncompleteSessions();
     </script>
 </body>
 </html>
