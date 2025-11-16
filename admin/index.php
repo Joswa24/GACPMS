@@ -79,7 +79,6 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && isset($_
 }
 
 // Function to reverse geocode coordinates to get specific location
-// Function to reverse geocode coordinates to get specific location
 function reverseGeocode($lat, $lon) {
     // Using OpenStreetMap's Nominatim API (free, no API key required)
     $url = "https://nominatim.openstreetmap.org/reverse?format=json&lat={$lat}&lon={$lon}&zoom=16&addressdetails=1";
@@ -103,27 +102,25 @@ function reverseGeocode($lat, $lon) {
     if (isset($data['address'])) {
         $address = $data['address'];
         
-        // Extract specific location parts
-        $barangay = $address['suburb'] ?? $address['village'] ?? $address['hamlet'] ?? '';
-        $municipality = $address['town'] ?? $address['municipality'] ?? $address['city_district'] ?? '';
-        $cityProvince = $address['city'] ?? $address['state'] ?? $address['province'] ?? '';
-        $country = $address['country'] ?? '';
-        
-        // Build location string in the requested format
+        // Try to build a specific location string
         $parts = [];
-        if (!empty($barangay)) $parts[] = $barangay;
-        if (!empty($municipality)) $parts[] = $municipality;
-        if (!empty($cityProvince)) $parts[] = $cityProvince;
-        if (!empty($country)) $parts[] = $country;
+        if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
+            $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
+        }
+        if (isset($address['city']) || isset($address['city_district'])) {
+            $parts[] = $address['city'] ?? $address['city_district'];
+        }
+        if (isset($address['state']) || isset($address['province'])) {
+            $parts[] = $address['state'] ?? $address['province'];
+        }
+        if (isset($address['country'])) {
+            $parts[] = $address['country'];
+        }
         
         return [
             'display_name' => $data['display_name'],
             'address' => $address,
-            'specific_location' => implode(', ', $parts),
-            'barangay' => $barangay,
-            'municipality' => $municipality,
-            'city_province' => $cityProvince,
-            'country' => $country
+            'specific_location' => implode(', ', $parts)
         ];
     }
     
@@ -390,8 +387,7 @@ function completeLoginProcess($userId, $username, $email) {
     exit();
 }
 
-    // Function to log access attempts - UPDATED TO HANDLE LOCATION DATA
-    // Function to log access attempts - UPDATED TO USE ONLY GPS LOCATION
+// Function to log access attempts - UPDATED TO HANDLE LOCATION DATA
 function logAccessAttempt($userId, $username, $activity, $status) {
     global $db;
     
@@ -400,9 +396,9 @@ function logAccessAttempt($userId, $username, $activity, $status) {
         $userAgent = $_SERVER['HTTP_USER_AGENT'];
         $location = 'Unknown';
         $locationJson = null;
-        $locationSource = 'GPS'; // Track the source of the location data
+        $locationSource = 'IP'; // Track the source of the location data
 
-        // Only use GPS location data if available
+        // Check for client-side location data
         if (!empty($_POST['user_lat']) && !empty($_POST['user_lon'])) {
             $lat = floatval($_POST['user_lat']);
             $lon = floatval($_POST['user_lon']);
@@ -413,42 +409,45 @@ function logAccessAttempt($userId, $username, $activity, $status) {
             
             if ($geoData) {
                 $location = $geoData['specific_location']; // e.g., "Poblacion, Santa Fe, Cebu, Philippines"
+                $locationSource = 'GPS';
                 $locationJson = json_encode([
                     'source' => 'GPS',
                     'lat' => $lat,
                     'lon' => $lon,
                     'accuracy_meters' => $accuracy,
                     'address' => $geoData['address'],
-                    'display_name' => $geoData['display_name'],
-                    'formatted_address' => [
-                        'barangay' => $geoData['barangay'],
-                        'municipality' => $geoData['municipality'],
-                        'city_province' => $geoData['city_province'],
-                        'country' => $geoData['country']
-                    ]
+                    'display_name' => $geoData['display_name']
                 ]);
             } else {
-                // If reverse geocoding fails, still log GPS coordinates
+                // Fallback if reverse geocoding fails
                 $location = "Lat: {$lat}, Lon: {$lon}";
-                $locationJson = json_encode([
-                    'source' => 'GPS',
-                    'lat' => $lat,
-                    'lon' => $lon,
-                    'accuracy_meters' => $accuracy,
-                    'error' => 'Reverse geocoding failed'
+                $locationJson = json_encode(['error' => 'Reverse geocoding failed', 'lat' => $lat, 'lon' => $lon]);
+            }
+        } else {
+            // Fallback to IP-based geolocation
+            if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
+                $context = stream_context_create([
+                    'http' => [
+                        'timeout' => 3,
+                        'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    ]
                 ]);
-            }
-            
-            // Only log if we have GPS location data
-            $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
-            if ($stmt) {
-                $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
-                $stmt->execute();
                 
-                // Store the log ID in session to prevent duplicate logging
-                $_SESSION['last_access_log_id'] = $db->insert_id;
-                $_SESSION['last_access_log_time'] = date('Y-m-d H:i:s');
+                $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
+                if ($ipData) {
+                    $ipInfo = json_decode($ipData);
+                    if ($ipInfo && $ipInfo->status === 'success') {
+                        $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
+                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
+                    }
+                }
             }
+        }
+        
+        $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
+        if ($stmt) {
+            $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
+            $stmt->execute();
         }
     } catch (Exception $e) {
         error_log("Failed to log access attempt: " . $e->getMessage());
