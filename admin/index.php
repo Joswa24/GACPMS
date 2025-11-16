@@ -427,7 +427,7 @@ function logAccessAttempt($userId, $username, $activity, $status) {
             $geoData = reverseGeocode($lat, $lon);
             
             if ($geoData) {
-                $location = $geoData['specific_location']; // e.g., "Pooc, Sta. Fe, Cebu, Philippines"
+                $location = $geoData['specific_location']; // e.g., "Poblacion, Santa Fe, Cebu, Philippines"
                 $locationSource = 'GPS';
                 $locationJson = json_encode([
                     'source' => 'GPS',
@@ -435,8 +435,7 @@ function logAccessAttempt($userId, $username, $activity, $status) {
                     'lon' => $lon,
                     'accuracy_meters' => $accuracy,
                     'address' => $geoData['address'],
-                    'display_name' => $geoData['display_name'],
-                    'formatted_address' => $geoData['formatted_address'] // Store the formatted parts
+                    'display_name' => $geoData['display_name']
                 ]);
             } else {
                 // Fallback if reverse geocoding fails
@@ -457,19 +456,8 @@ function logAccessAttempt($userId, $username, $activity, $status) {
                 if ($ipData) {
                     $ipInfo = json_decode($ipData);
                     if ($ipInfo && $ipInfo->status === 'success') {
-                        // Format IP location in the same structure
-                        $formattedLocation = [
-                            'barangay' => '',
-                            'municipality' => $ipInfo->city ?? '',
-                            'city_province' => $ipInfo->regionName ?? '',
-                            'country' => $ipInfo->country ?? ''
-                        ];
-                        
                         $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
-                        $locationJson = json_encode([
-                            'source' => 'IP',
-                            'formatted_address' => $formattedLocation
-                        ] + (array)$ipInfo);
+                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
                     }
                 }
             }
