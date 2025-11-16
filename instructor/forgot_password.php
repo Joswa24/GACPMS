@@ -745,7 +745,7 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
                 </button>
 
                 <div class="text-center">
-                    <a href="index.php" class="back-link">
+                    <a href="index" class="back-link">
                         <i class="fas fa-arrow-left me-2"></i>Back to Login
                     </a>
                 </div>
@@ -832,7 +832,7 @@ if (!$instructorInfo && isset($_SESSION['verified_instructor_data'])) {
                 </button>
 
                 <div class="text-center">
-                    <a href="forgot_password.php" class="back-link">
+                    <a href="forgot_password" class="back-link">
                         <i class="fas fa-arrow-left me-2"></i>Back to Scanner
                     </a>
                 </div>

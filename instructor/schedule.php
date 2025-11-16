@@ -884,13 +884,13 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
         <div class="sidebar-nav">
             <ul class="nav">
                 <li class="nav-item">
-                    <a href="dashboard.php" class="nav-link">
+                    <a href="dashboard" class="nav-link">
                         <i class="fas fa-tachometer-alt"></i>
                         <span>Dashboard</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="attendance.php" class="nav-link">
+                    <a href="attendance" class="nav-link">
                         <i class="fas fa-clipboard-check"></i>
                         <span>Attendance</span>
                     </a>
@@ -921,7 +921,7 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
                             <?php echo htmlspecialchars($_SESSION['fullname']); ?>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                            <li><a class="dropdown-item" href="logout"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
                         </ul>
                     </li>
                 </ul>
@@ -985,7 +985,7 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
                             </div>
                         </div>
                         
-                        <form method="GET" action="schedule.php" id="filterForm">
+                        <form method="GET" action="schedule" id="filterForm">
                             <div class="row g-3">
                                 <div class="col-md-3">
                                     <label for="day" class="form-label"><i class="fas fa-calendar-day me-1"></i>Day</label>
@@ -1053,7 +1053,7 @@ if (isset($_GET['print']) && $_GET['print'] == '1') {
                                             <button type="submit" class="btn btn-primary">
                                                 <i class="fas fa-search me-2"></i>Apply Filters
                                             </button>
-                                            <a href="schedule.php" class="btn btn-secondary">
+                                            <a href="schedule" class="btn btn-secondary">
                                                 <i class="fas fa-refresh me-2"></i>Reset
                                             </a>
                                         </div>

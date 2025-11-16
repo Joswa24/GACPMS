@@ -937,19 +937,19 @@ if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) 
         <div class="sidebar-nav">
             <ul class="nav">
                 <li class="nav-item">
-                    <a href="dashboard.php" class="nav-link">
+                    <a href="dashboard" class="nav-link">
                         <i class="fas fa-tachometer-alt"></i>
                         <span>Dashboard</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="attendance.php" class="nav-link active">
+                    <a href="attendance" class="nav-link active">
                         <i class="fas fa-clipboard-check"></i>
                         <span>Attendance</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="schedule.php" class="nav-link">
+                    <a href="schedule" class="nav-link">
                         <i class="fas fa-calendar-alt"></i>
                         <span>Schedule</span>
                     </a>
@@ -974,7 +974,7 @@ if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) 
                             <?php echo htmlspecialchars($_SESSION['fullname']); ?>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                            <li><a class="dropdown-item" href="logout"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
                         </ul>
                     </li>
                 </ul>
@@ -1129,7 +1129,7 @@ if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) 
                             </div>
                         </div>
                         
-                        <form method="GET" action="attendance.php" id="filterForm">
+                        <form method="GET" action="attendance" id="filterForm">
                             <!-- Hidden field to track form submission -->
                             <input type="hidden" name="form_submitted" value="1">
                             
@@ -1216,7 +1216,7 @@ if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) 
                                             <button type="submit" class="btn btn-primary">
                                                 <i class="fas fa-search me-2"></i>Apply Filters
                                             </button>
-                                            <a href="attendance.php" class="btn btn-secondary">
+                                            <a href="attendance" class="btn btn-secondary">
                                                 <i class="fas fa-refresh me-2"></i>Reset
                                             </a>
                                             <button type="button" class="btn btn-outline-info" id="quickToday">
@@ -1226,7 +1226,7 @@ if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) 
                                         
                                         <?php if ($filter_year && $filter_section && !empty($attendance_data)): ?>
                                         <div class="d-flex gap-2">
-                                            <a href="attendance.php?<?php 
+                                            <a href="attendance?<?php 
                                                 echo http_build_query([
                                                     'year' => $filter_year,
                                                     'section' => $filter_section,
@@ -1583,7 +1583,7 @@ if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) 
                                         <h4 class="text-muted">No Records Found</h4>
                                         <p class="text-muted">No attendance records match your current filters.</p>
                                         <div class="mt-3">
-                                            <a href="attendance.php" class="btn btn-primary me-2">View All Records</a>
+                                            <a href="attendance" class="btn btn-primary me-2">View All Records</a>
                                             <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
                                         </div>
                                     </div>

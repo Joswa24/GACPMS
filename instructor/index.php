@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                                 // Verify session data before redirect
                                 error_log("SESSION BEFORE REDIRECT: " . print_r($_SESSION, true));
                                 
-                                header("Location: dashboard.php");
+                                header("Location: dashboard");
                                 exit();
                             } else {
                                 $_SESSION['login_attempts']++;
@@ -549,7 +549,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                 </button>
 
                 <div class="login-footer">
-                    <a href="forgot_password.php" class="forgot-link">Forgot Password?</a>
+                    <a href="forgot_password" class="forgot-link">Forgot Password?</a>
                     <div class="text-muted">© <?php echo date('Y'); ?></div>
                 </div>
             </form>
