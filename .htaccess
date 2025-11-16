@@ -3,7 +3,10 @@
 RewriteRule ^index\.php$ / [R=301,L]
 
 #   Hide .php extensions
-
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}\.php -f
+RewriteRule ^(.*)$ $1.php [L]
+RewriteRule ^admin(/.*)?$ /$1 [R,L]
 # Block direct access to specific directories
 RewriteRule ^admin/img/ - [F,L,NC]
 RewriteRule ^admin/admin/uploads - [F,L,NC]
