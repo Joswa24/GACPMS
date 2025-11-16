@@ -60,7 +60,7 @@ function getGeolocation($ip) {
     return null;
 }
 
-// Function to reverse geocode coordinates to get specific location
+// Function to reverse geocode coordinates to get specific location (same as in index.php)
 function reverseGeocode($lat, $lon) {
     // Using OpenStreetMap's Nominatim API (free, no API key required)
     $url = "https://nominatim.openstreetmap.org/reverse?format=json&lat={$lat}&lon={$lon}&zoom=16&addressdetails=1";
@@ -84,25 +84,44 @@ function reverseGeocode($lat, $lon) {
     if (isset($data['address'])) {
         $address = $data['address'];
         
-        // Try to build a specific location string
+        // Extract Philippine administrative divisions
+        $barangay = $address['suburb'] ?? $address['village'] ?? $address['hamlet'] ?? $address['neighbourhood'] ?? '';
+        $municipality = $address['town'] ?? $address['municipality'] ?? $address['city_district'] ?? '';
+        $cityProvince = $address['city'] ?? $address['state'] ?? $address['province'] ?? '';
+        $country = $address['country'] ?? '';
+        
+        // Special handling for Philippine addresses
+        // If city is present and it's a highly urbanized city, it serves as both city and province
+        if (isset($address['city']) && isset($address['state'])) {
+            // Check if city and state are different (e.g., Cebu City, Cebu Province)
+            if ($address['city'] !== $address['state']) {
+                $cityProvince = $address['city'] . ', ' . $address['state'];
+            } else {
+                $cityProvince = $address['city'];
+            }
+        }
+        
+        // Build location string in the requested format: Barangay, Municipality, City/Province, Country
         $parts = [];
-        if (isset($address['suburb']) || isset($address['town']) || isset($address['village'])) {
-            $parts[] = $address['suburb'] ?? $address['town'] ?? $address['village'];
-        }
-        if (isset($address['city']) || isset($address['city_district'])) {
-            $parts[] = $address['city'] ?? $address['city_district'];
-        }
-        if (isset($address['state']) || isset($address['province'])) {
-            $parts[] = $address['state'] ?? $address['province'];
-        }
-        if (isset($address['country'])) {
-            $parts[] = $address['country'];
-        }
+        if (!empty($barangay)) $parts[] = $barangay;
+        if (!empty($municipality)) $parts[] = $municipality;
+        if (!empty($cityProvince)) $parts[] = $cityProvince;
+        if (!empty($country)) $parts[] = $country;
         
         return [
             'display_name' => $data['display_name'],
             'address' => $address,
-            'specific_location' => implode(', ', $parts)
+            'specific_location' => implode(', ', $parts),
+            'barangay' => $barangay,
+            'municipality' => $municipality,
+            'city_province' => $cityProvince,
+            'country' => $country,
+            'formatted_address' => [
+                'barangay' => $barangay,
+                'municipality' => $municipality,
+                'city_province' => $cityProvince,
+                'country' => $country
+            ]
         ];
     }
     
@@ -117,12 +136,22 @@ function logAdminAccess($db, $adminId, $username, $status = 'success', $activity
     // Get geolocation data
     $geoData = getGeolocation($ipAddress);
     $location = 'Unknown';
+    $locationJson = null;
     
     if ($geoData) {
-        $location = $geoData['city'] . ', ' . $geoData['region'] . ', ' . $geoData['country'];
+        // Format IP location in the same structure as GPS location
+        $formattedLocation = [
+            'barangay' => '',
+            'municipality' => $geoData['city'] ?? '',
+            'city_province' => $geoData['region'] ?? '',
+            'country' => $geoData['country'] ?? ''
+        ];
         
-        // Store detailed geolocation in database
-        $locationJson = json_encode($geoData);
+        $location = $geoData['city'] . ', ' . $geoData['region'] . ', ' . $geoData['country'];
+        $locationJson = json_encode([
+            'source' => 'IP',
+            'formatted_address' => $formattedLocation
+        ] + $geoData);
     } else {
         $locationJson = json_encode(['error' => 'Unable to fetch location']);
     }
@@ -270,6 +299,7 @@ try {
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
+        /* Your existing styles remain the same */
         :root {
             --primary-color: #e1e7f0ff;
             --secondary-color: #b0caf0ff;
@@ -409,7 +439,6 @@ try {
             padding: 0.4em 0.6em; /* Smaller padding */
             font-weight: 500;
         }
-2001:4454:789:3b00:24b5:1f8:3dec:2a8f	
 
         /* Modern Button Styles */
         .btn {
@@ -641,255 +670,6 @@ try {
         }
         
         /* IP address badge styling */
-        .ip-badge {
-            font-family: 'Courier New', monospace;
-            font-size: 0.75em; /* Smaller font */
-            background: linear-gradient(135deg, #6c757d, #5a6268);
-            padding: 0.3em 0.5em; /* Smaller padding */
-        }
-        
-        /* Location button styling */
-        .location-btn {
-            background: linear-gradient(135deg, var(--info-color), #2c9faf);
-            color: white;
-            border: none;
-            border-radius: 6px; /* Smaller border radius */
-            padding: 0.3em 0.6em; /* Smaller padding */
-            font-size: 0.75em; /* Smaller font */
-            transition: var(--transition);
-        }
-        
-        .location-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(54, 185, 204, 0.3);
-        }
-        
-        /* Status badge animation */
-        .badge {
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .badge::after {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: rgba(255, 255, 255, 0.1);
-            transform: rotate(45deg);
-            transition: all 0.5s;
-            opacity: 0;
-        }
-        
-        .badge:hover::after {
-            animation: shine 0.5s ease-in-out;
-        }
-        
-        @keyframes shine {
-            0% {
-                transform: translateX(-100%) translateY(-100%) rotate(45deg);
-                opacity: 0;
-            }
-            50% {
-                opacity: 1;
-            }
-            100% {
-                transform: translateX(100%) translateY(100%) rotate(45deg);
-                opacity: 0;
-            }
-        }
-        
-        /* Table container fix */
-        .table-wrapper {
-            width: 100%;
-            overflow: hidden; /* Changed from overflow-x: auto */
-            margin-bottom: 1rem;
-        }
-        
-        /* Ensure table headers are always visible */
-        .modern-table thead {
-            display: table-header-group;
-        }
-        
-        .modern-table thead th {
-            visibility: visible !important;
-            display: table-cell !important;
-        }
-        
-        /* Location modal styles */
-        #locationModal .modal-dialog {
-            max-width: 800px;
-        }
-        
-        #locationMap {
-            height: 400px;
-            width: 100%;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        
-        .location-detail-item {
-            display: flex;
-            margin-bottom: 8px;
-        }
-        
-        .location-detail-label {
-            font-weight: 600;
-            width: 120px;
-            color: var(--dark-text);
-            font-size: 0.85rem; /* Smaller font */
-        }
-        
-        .location-detail-value {
-            flex: 1;
-            font-size: 0.85rem; /* Smaller font */
-        }
-        
-        /* Modern card design with glassmorphism effect */
-        .modern-card {
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
-            border-radius: var(--border-radius);
-            transition: var(--transition);
-        }
-        
-        .modern-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(31, 38, 135, 0.2);
-        }
-        
-        /* Enhanced table design */
-        .enhanced-table {
-            border-radius: var(--border-radius);
-            overflow: hidden;
-            box-shadow: var(--box-shadow);
-            background: white;
-            position: relative;
-            border: 1px solid rgba(0, 0, 0, 0.05);
-        }
-        
-        .enhanced-table::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--icon-color), var(--secondary-color));
-            z-index: 1;
-        }
-        
-        /* Compact table design */
-        .compact-table {
-            font-size: 0.8rem;
-        }
-        
-        .compact-table th {
-            padding: 8px 6px;
-            font-size: 0.8rem;
-        }
-        
-        .compact-table td {
-            padding: 8px 6px;
-            font-size: 0.8rem;
-        }
-        
-        /* Responsive table adjustments */
-        @media (max-width: 1200px) {
-            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 5%; }
-            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 12%; }
-            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; }
-            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; }
-            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; }
-            .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 15%; }
-            .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
-            .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 10%; }
-            .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 10%; }
-        }
-        
-        @media (max-width: 992px) {
-            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 4%; }
-            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 11%; }
-            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 12%; }
-            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 12%; }
-            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; }
-            .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; }
-            .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
-            .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 10%; }
-            .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 10%; }
-        }
-        
-        @media (max-width: 768px) {
-            .modern-table th:nth-child(1), .modern-table td:nth-child(1) { width: 4%; }
-            .modern-table th:nth-child(2), .modern-table td:nth-child(2) { width: 11%; }
-            .modern-table th:nth-child(3), .modern-table td:nth-child(3) { width: 11%; }
-            .modern-table th:nth-child(4), .modern-table td:nth-child(4) { width: 11%; }
-            .modern-table th:nth-child(5), .modern-table td:nth-child(5) { width: 14%; }
-            .modern-table th:nth-child(6), .modern-table td:nth-child(6) { width: 17%; }
-            .modern-table th:nth-child(7), .modern-table td:nth-child(7) { width: 10%; }
-            .modern-table th:nth-child(8), .modern-table td:nth-child(8) { width: 11%; }
-            .modern-table th:nth-child(9), .modern-table td:nth-child(9) { width: 11%; }
-        }
-        
-        /* Table container with gradient border */
-        .gradient-border-table {
-            position: relative;
-            border-radius: var(--border-radius);
-            background: white;
-            padding: 2px;
-            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color));
-        }
-        
-        .gradient-border-table-inner {
-            background: white;
-            border-radius: calc(var(--border-radius) - 2px);
-            overflow: hidden;
-        }
-        
-        /* Enhanced hover effect for table rows */
-        .modern-table tbody tr {
-            position: relative;
-        }
-        
-        .modern-table tbody tr::after {
-            content: '';
-            position: absolute;
-            left: 0;
-            bottom: 0;
-            width: 0;
-            height: 2px;
-            background: linear-gradient(90deg, var(--icon-color), var(--secondary-color));
-            transition: width 0.3s ease;
-        }
-        
-        .modern-table tbody tr:hover::after {
-            width: 100%;
-        }
-        
-        /* Modern scrollbar */
-        .modern-scrollbar::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        
-        .modern-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-        
-        .modern-scrollbar::-webkit-scrollbar-thumb {
-            background: var(--icon-color);
-            border-radius: 10px;
-        }
-        
-        .modern-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: var(--secondary-color);
-        }
-        /* IP Address column styles */
         .ip-address-column {
             max-width: 150px;
         }
@@ -938,6 +718,51 @@ try {
         .ip-toggle.btn-warning:hover {
             background: linear-gradient(135deg, var(--warning-color), #f4b619);
             box-shadow: 0 4px 8px rgba(246, 194, 62, 0.3);
+        }
+        
+        /* Location button styling */
+        .location-btn {
+            background: linear-gradient(135deg, var(--info-color), #2c9faf);
+            color: white;
+            border: none;
+            border-radius: 6px; /* Smaller border radius */
+            padding: 0.3em 0.6em; /* Smaller padding */
+            font-size: 0.75em; /* Smaller font */
+            transition: var(--transition);
+        }
+        
+        .location-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(54, 185, 204, 0.3);
+        }
+        
+        /* Location modal styles */
+        #locationModal .modal-dialog {
+            max-width: 800px;
+        }
+        
+        #locationMap {
+            height: 400px;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .location-detail-item {
+            display: flex;
+            margin-bottom: 8px;
+        }
+        
+        .location-detail-label {
+            font-weight: 600;
+            width: 120px;
+            color: var(--dark-text);
+            font-size: 0.85rem; /* Smaller font */
+        }
+        
+        .location-detail-value {
+            flex: 1;
+            font-size: 0.85rem; /* Smaller font */
         }
     </style>
 </head>
@@ -1236,11 +1061,23 @@ try {
                 <div class="modal-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <h6>Geolocation Details</h6>
+                            <h6>Address Details (Philippine Format)</h6>
                             <div class="location-details-container">
                                 <div class="location-detail-item">
-                                    <div class="location-detail-label">Source:</div>
-                                    <div class="location-detail-value" id="modalSource">-</div>
+                                    <div class="location-detail-label">Barangay:</div>
+                                    <div class="location-detail-value" id="modalBarangay">-</div>
+                                </div>
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">Municipality:</div>
+                                    <div class="location-detail-value" id="modalMunicipality">-</div>
+                                </div>
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">City/Province:</div>
+                                    <div class="location-detail-value" id="modalCityProvince">-</div>
+                                </div>
+                                <div class="location-detail-item">
+                                    <div class="location-detail-label">Country:</div>
+                                    <div class="location-detail-value" id="modalCountry">-</div>
                                 </div>
                                 <div class="location-detail-item">
                                     <div class="location-detail-label">Coordinates:</div>
@@ -1249,18 +1086,6 @@ try {
                                 <div class="location-detail-item">
                                     <div class="location-detail-label">Accuracy:</div>
                                     <div class="location-detail-value" id="modalAccuracy">-</div>
-                                </div>
-                                <div class="location-detail-item">
-                                    <div class="location-detail-label">Country:</div>
-                                    <div class="location-detail-value" id="modalCountry">-</div>
-                                </div>
-                                <div class="location-detail-item">
-                                    <div class="location-detail-label">City/Province:</div>
-                                    <div class="location-detail-value" id="modalRegion">-</div>
-                                </div>
-                                <div class="location-detail-item">
-                                    <div class="location-detail-label">Municipality:</div>
-                                    <div class="location-detail-value" id="modalCity">-</div>
                                 </div>
                             </div>
                         </div>
@@ -1307,7 +1132,7 @@ try {
             const rows = document.querySelectorAll('#accessLogsTable tbody tr');
             
             rows.forEach(row => {
-                // Skip the empty state row
+                // Skip empty state row
                 if (row.cells.length === 1) return;
                 
                 const dateValue = row.getAttribute('data-date');
@@ -1417,12 +1242,12 @@ try {
             });
         }
 
-        // Update the showLocationModal function
+        // Update showLocationModal function
         window.showLocationModal = function(locationJson) {
             try {
                 const data = JSON.parse(locationJson);
 
-                // Populate the modal with data
+                // Populate modal with data
                 document.getElementById('modalSource').textContent = data.source || 'Unknown';
                 
                 if (data.lat && data.lon) {
@@ -1443,10 +1268,10 @@ try {
                         maxZoom: 18
                     }).addTo(map);
                     
-                    // Add a marker for the location
+                    // Add a marker for location
                     const marker = L.marker([data.lat, data.lon]).addTo(map);
                     
-                    // Add a popup to the marker with formatted location
+                    // Add a popup to marker with formatted location
                     if (data.formatted_address) {
                         const { barangay, municipality, city_province, country } = data.formatted_address;
                         
@@ -1480,7 +1305,7 @@ try {
                     document.getElementById('locationMap').innerHTML = '<div class="alert alert-warning">No location coordinates available</div>';
                 }
                 
-                // Display the formatted address parts
+                // Display formatted address parts
                 if (data.formatted_address) {
                     const { barangay, municipality, city_province, country } = data.formatted_address;
                     
@@ -1495,7 +1320,7 @@ try {
                     document.getElementById('modalCountry').textContent = 'N/A';
                 }
 
-                // Show the modal
+                // Show modal
                 const locationModal = new bootstrap.Modal(document.getElementById('locationModal'));
                 locationModal.show();
 
