@@ -1,8 +1,9 @@
 <?php
+session_start();
 // admin/index.php
 include '../connection.php';
 include '../security-headers.php';
-session_start();
+
 date_default_timezone_set('Asia/Manila');
 // Additional security headers
 header("X-Frame-Options: DENY");
@@ -129,9 +130,11 @@ function reverseGeocode($lat, $lon) {
 
 // Function to log access attempts - FOR FAILED ATTEMPTS ONLY
 function logAccessAttempt($userId, $username, $activity, $status) {
-    global $db;
-        $db->query("SET time_zone = '+08:00'");
+    global $db;  
     try {
+        // Set MySQL timezone to match PHP timezone
+        $db->query("SET time_zone = '+08:00'"); // Add this line
+        
         $ipAddress = $_SERVER['REMOTE_ADDR'];
         $userAgent = $_SERVER['HTTP_USER_AGENT'];
         $location = 'Unknown';
@@ -199,6 +202,9 @@ function logFinalLogin($userId, $username) {
     global $db;
     
     try {
+        // Set MySQL timezone to match PHP timezone
+        $db->query("SET time_zone = '+08:00'"); // Add this line
+        
         $ipAddress = $_SERVER['REMOTE_ADDR'];
         $userAgent = $_SERVER['HTTP_USER_AGENT'];
         $location = 'Unknown';
