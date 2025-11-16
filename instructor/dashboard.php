@@ -31,7 +31,7 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
     header("Location: index.php?timeout=1");
     exit();
 }
-$_SESSION['last_activity'] = time();
+ $_SESSION['last_activity'] = time();
 
 // ✅ Hijack Prevention
 if (!isset($_SESSION['user_agent'])) {
@@ -54,11 +54,11 @@ if (!$db || $db->connect_error) {
 }
 
 // ✅ Fetch Updated Instructor Information
-$instructor_info = null;
-$instructor_id = $_SESSION['instructor_id'];
+ $instructor_info = null;
+ $instructor_id = $_SESSION['instructor_id'];
 
 // FIXED QUERY: Removed email and contact_number columns
-$stmt = $db->prepare("
+ $stmt = $db->prepare("
     SELECT i.fullname, i.id_number, d.department_name
     FROM instructor i 
     LEFT JOIN department d ON i.department_id = d.department_id 
@@ -91,15 +91,15 @@ if ($stmt) {
 }
 
 // ✅ Fetch Instructor Schedules (UPDATED TO USE INSTRUCTOR NAME INSTEAD OF ID)
-$today_classes = [];
-$upcoming_classes = [];
+ $today_classes = [];
+ $upcoming_classes = [];
 
 // Get instructor's fullname
-$instructor_name = $_SESSION['fullname'];
+ $instructor_name = $_SESSION['fullname'];
 
 // Today's classes (UPDATED QUERY)
-$today_day = date("l");
-$stmt = $db->prepare("
+ $today_day = date("l");
+ $stmt = $db->prepare("
     SELECT subject, room_name, section, start_time, end_time, day, year_level
     FROM room_schedules
     WHERE instructor = ? AND day = ?
@@ -114,7 +114,7 @@ if ($stmt) {
 }
 
 // Upcoming classes (week overview) - UPDATED QUERY
-$stmt = $db->prepare("
+ $stmt = $db->prepare("
     SELECT subject, room_name, section, start_time, end_time, day, year_level
     FROM room_schedules
     WHERE instructor = ?
@@ -130,11 +130,11 @@ if ($stmt) {
 }
 
 // ✅ Fetch today's attendance summary from archived_attendance_logs
-$today_attendance_summary = [];
-$today_date = date('Y-m-d');
+ $today_attendance_summary = [];
+ $today_date = date('Y-m-d');
 
 // Query to get attendance summary by class for today
-$attendance_summary_query = "
+ $attendance_summary_query = "
     SELECT 
         year_level as year,
         section,
@@ -149,7 +149,7 @@ $attendance_summary_query = "
     ORDER BY year_level, section
 ";
 
-$attendance_stmt = $db->prepare($attendance_summary_query);
+ $attendance_stmt = $db->prepare($attendance_summary_query);
 if ($attendance_stmt) {
     $attendance_stmt->bind_param("ss", $instructor_id, $today_date);
     $attendance_stmt->execute();
@@ -162,8 +162,8 @@ if ($attendance_stmt) {
 }
 
 // ✅ Fetch recent attendance activity from archived_attendance_logs
-$recent_attendance_activity = [];
-$recent_activity_query = "
+ $recent_attendance_activity = [];
+ $recent_activity_query = "
     SELECT 
         student_id,
         id_number,
@@ -183,7 +183,7 @@ $recent_activity_query = "
     LIMIT 10
 ";
 
-$recent_stmt = $db->prepare($recent_activity_query);
+ $recent_stmt = $db->prepare($recent_activity_query);
 if ($recent_stmt) {
     $recent_stmt->bind_param("i", $instructor_id);
     $recent_stmt->execute();
@@ -196,7 +196,7 @@ if ($recent_stmt) {
 }
 
 // ✅ Fetch weekly attendance data for charts
-$weekly_attendance_data = [];
+ $weekly_attendance_data = [];
 for ($i = 6; $i >= 0; $i--) {
     $date = date('Y-m-d', strtotime("-$i days"));
     $dayName = date('D', strtotime($date));
@@ -242,12 +242,12 @@ for ($i = 6; $i >= 0; $i--) {
 }
 
 // Get current date for display
-$currentDate = date('F j, Y');
+ $currentDate = date('F j, Y');
 
 // Calculate overall statistics
-$total_present = 0;
-$total_absent = 0;
-$total_students = 0;
+ $total_present = 0;
+ $total_absent = 0;
+ $total_students = 0;
 
 foreach ($today_attendance_summary as $summary) {
     $total_present += $summary['present_count'];
@@ -255,7 +255,7 @@ foreach ($today_attendance_summary as $summary) {
     $total_students += $summary['total_students'];
 }
 
-$overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_students) * 100, 1) : 0;
+ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_students) * 100, 1) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -794,6 +794,35 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
         .activity-badge.in { background-color: var(--success-color); }
         .activity-badge.out { background-color: var(--warning-color); }
 
+        /* Back to Top Button */
+        .back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color)) !important;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--box-shadow);
+            transition: var(--transition);
+            z-index: 997;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .back-to-top.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .back-to-top:hover {
+            transform: translateY(-3px);
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
@@ -1057,7 +1086,6 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
                     </div>
 
                     <!-- Today's Classes & Upcoming Classes -->
-                                        <!-- Today's Classes & Upcoming Classes -->
                     <!-- Today's Classes -->
                     <div class="row g-4 mb-4">
                         <div class="col-12">
@@ -1249,6 +1277,11 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
             </div>
         </div>
     </div><!-- /.main-content -->
+
+    <!-- Back to Top Button -->
+    <a href="#" class="back-to-top" id="backToTop">
+        <i class="fas fa-arrow-up"></i>
+    </a>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script type="text/javascript">
@@ -1442,6 +1475,27 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
         document.getElementById('sidebarOverlay').addEventListener('click', function() {
             document.getElementById('sidebar').classList.remove('active');
             document.getElementById('sidebarOverlay').classList.remove('active');
+        });
+
+        // Back to Top Button functionality
+        const backToTopButton = document.getElementById('backToTop');
+        
+        // Show/hide the button based on scroll position
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > 300) {
+                backToTopButton.classList.add('show');
+            } else {
+                backToTopButton.classList.remove('show');
+            }
+        });
+        
+        // Smooth scroll to top when button is clicked
+        backToTopButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
         });
 
         // Add smooth scrolling for better UX
