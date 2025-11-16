@@ -18,7 +18,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     !isset($_SESSION['instructor_id'])) {
     
     error_log("SESSION VALIDATION FAILED - Redirecting to index");
-    header("Location: index");
+    header("Location: index.php");
     exit();
 }
 
