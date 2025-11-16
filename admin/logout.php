@@ -6,6 +6,12 @@ include '../connection.php';
 // Log the logout if user is logged in
 if (isset($_SESSION['user_id'])) {
     try {
+         // Set MySQL timezone to match PHP timezone
+        $db->query("SET time_zone = '+08:00'"); // Adjust offset to match your timezone
+        
+        // Get current time in the correct timezone
+        $currentDateTime = date('Y-m-d H:i:s');
+        
         // Get location from IP
         $ipAddress = $_SERVER['REMOTE_ADDR'];
         $location = 'Unknown';
