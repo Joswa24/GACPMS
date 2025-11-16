@@ -1,4 +1,12 @@
+<?php
+session_start();
+// Simple error reporting
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
+// Include required files
+include 'security-headers.php';
+include 'connection.php';
 
 // Start session first
 
