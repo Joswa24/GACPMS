@@ -13,69 +13,7 @@ RewriteRule ^admin/img/ - [F,L,NC]
 RewriteRule ^admin/admin/uploads - [F,L,NC]
 RewriteRule ^admin/uploads/ - [F,L,NC]
 
-# ==========================================================
-# Remove .php Extension from URLs
-# ==========================================================
 
-# Enable Apache's URL rewriting engine
-RewriteEngine On
-
-# Set the base path for all rewrite rules
-# This assumes the .htaccess file is in the /instructor directory
-RewriteBase /instructor/
-
-# ----------------------------------------------------------
-# Rule 1: Internal rewrite to add .php extension
-# ----------------------------------------------------------
-# Conditions for this rule:
-# - The requested filename is not an existing file (!-f)
-# - The requested filename is not an existing directory (!-d)
-# - A file with the same name plus .php extension exists (.php -f)
-# Action: Internally rewrite to the .php file
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_FILENAME}.php -f
-RewriteRule ^(.+)$ $1.php [L,QSA]
-
-# ----------------------------------------------------------
-# Rule 2: External redirect from .php to clean URLs
-# ----------------------------------------------------------
-# This redirects users who access .php files directly to the clean URL
-# Example: domain.com/instructor/login.php → domain.com/instructor/login
-# Conditions:
-# - The request contains a .php file (THE_REQUEST checks the full request line)
-# Action: 301 permanent redirect to the URL without .php
-RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s([^.]+)\.php [NC]
-RewriteRule ^ %1 [R=301,L,NE]
-
-# ----------------------------------------------------------
-# Rule 3: Handle trailing slashes
-# ----------------------------------------------------------
-# Remove trailing slash if it's not a directory
-# Example: domain.com/instructor/login/ → domain.com/instructor/login
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)/$ /instructor/$1 [R=301,L]
-
-# ----------------------------------------------------------
-# Optional: Add trailing slash to directories
-# Uncomment if you want URLs to always end with /
-# ----------------------------------------------------------
-# RewriteCond %{REQUEST_FILENAME} -d
-# RewriteRule ^(.*[^/])$ /instructor/$1/ [R=301,L]
-
-# ----------------------------------------------------------
-# Optional: Prevent direct access to .php files
-# Uncomment for additional security
-# ----------------------------------------------------------
-# RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s(.+)\.php [NC]
-# RewriteRule ^ - [F]
-
-# ----------------------------------------------------------
-# Custom Error Pages
-# ----------------------------------------------------------
-# Create 404.php and 403.php files in your instructor directory
-ErrorDocument 404 /instructor/404.php
-ErrorDocument 403 /instructor/403.php
 
 
 # ======= SECURITY HEADERS & PROTECTION =======
