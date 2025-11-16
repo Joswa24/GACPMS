@@ -7,7 +7,7 @@ RewriteRule ^index\.php$ / [R=301,L]
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f
 RewriteRule ^(.*)$ $1.php [L]
-RewriteRule ^(.*)/$ /$1 [R=301,L]
+RewriteRule ^(.*)/$ $1 [R=301,L]
 
 # Block direct access to specific directories
 RewriteRule ^admin/img/ - [F,L,NC]
