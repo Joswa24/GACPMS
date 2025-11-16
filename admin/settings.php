@@ -21,6 +21,11 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     header('Location: index.php');
     exit();
 }
+// Log current access if not already logged for this session
+if (!isset($_SESSION['access_logged']) && !isset($_SESSION['last_access_log_id'])) {
+    logAdminAccess($db, $_SESSION['user_id'], $_SESSION['username'], 'success', 'Dashboard Access');
+    $_SESSION['access_logged'] = true;
+}
 
 // Function to get geolocation data from IP address
 function getGeolocation($ip) {
@@ -129,7 +134,29 @@ function reverseGeocode($lat, $lon) {
 }
 
 // Function to log admin access with geolocation
+// Function to log admin access with geolocation - UPDATED TO PREVENT DUPLICATES
 function logAdminAccess($db, $adminId, $username, $status = 'success', $activity = 'Login') {
+    // Check if this access was already logged in index.php
+    if (isset($_SESSION['last_access_log_time']) && 
+        isset($_SESSION['last_access_log_id']) &&
+        $_SESSION['last_access_log_time'] && 
+        $_SESSION['last_access_log_id']) {
+        
+        // This access was already logged in index.php, so don't create a duplicate
+        // Instead, just update the activity if needed
+        try {
+            $stmt = $db->prepare("UPDATE admin_access_logs SET activity = ? WHERE id = ?");
+            $stmt->bind_param("si", $activity, $_SESSION['last_access_log_id']);
+            $stmt->execute();
+            
+            return $_SESSION['last_access_log_id'];
+        } catch (Exception $e) {
+            error_log("Failed to update access log: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    // If not already logged, proceed with normal logging
     $ipAddress = $_SERVER['REMOTE_ADDR'];
     $userAgent = $_SERVER['HTTP_USER_AGENT'];
     
@@ -182,7 +209,6 @@ function logAdminAccess($db, $adminId, $username, $status = 'success', $activity
         return false;
     }
 }
-
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header('Location: index.php');
