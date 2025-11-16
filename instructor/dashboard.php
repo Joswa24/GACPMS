@@ -1107,7 +1107,6 @@ foreach ($today_attendance_summary as $summary) {
                                                         <th>Time</th>
                                                         <th>Status</th>
                                                         <th>Attendance</th>
-                                                        <th>Action</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -1180,13 +1179,6 @@ foreach ($today_attendance_summary as $summary) {
                                                                 <?php else: ?>
                                                                 <span class="text-muted">No data</span>
                                                                 <?php endif; ?>
-                                                            </td>
-                                                            <td>
-                                                                <a href="attendance.php?year=<?php echo urlencode($class['year_level']); ?>&section=<?php echo urlencode($class['section']); ?>&subject=<?php echo urlencode($class['subject']); ?>&date=<?php echo urlencode($today_date); ?>" 
-                                                                   class="btn btn-sm btn-outline-primary view-attendance-btn">
-                                                                   <i class="fas fa-chart-bar me-1"></i>
-                                                                   <?php echo $attendance_data ? 'View Details' : 'View Records'; ?>
-                                                                </a>
                                                             </td>
                                                         </tr>
                                                     <?php endwhile; ?>
