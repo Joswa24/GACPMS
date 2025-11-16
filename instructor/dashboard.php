@@ -1057,9 +1057,10 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
                     </div>
 
                     <!-- Today's Classes & Upcoming Classes -->
-                    <div class="row g-4">
-                        <!-- Today's Classes -->
-                        <div class="col-lg-6">
+                                        <!-- Today's Classes & Upcoming Classes -->
+                    <!-- Today's Classes -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
                             <div class="card">
                                 <div class="card-header bg-primary-custom d-flex justify-content-between align-items-center">
                                     <h5 class="card-title mb-0"><i class="fas fa-calendar-day me-2"></i>Today's Classes</h5>
@@ -1067,98 +1068,102 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
                                 </div>
                                 <div class="card-body">
                                     <?php if ($today_classes && $today_classes->num_rows > 0): ?>
-                                        <div class="list-group">
-                                            <?php while ($class = $today_classes->fetch_assoc()): 
-                                                $start_time = date("g:i A", strtotime($class['start_time']));
-                                                $end_time = date("g:i A", strtotime($class['end_time']));
-                                                $current_time = time();
-                                                $class_start = strtotime($class['start_time']);
-                                                $class_end = strtotime($class['end_time']);
-                                                
-                                                // Determine class status
-                                                if ($current_time >= $class_start && $current_time <= $class_end) {
-                                                    $status = 'In Progress';
-                                                    $status_class = 'status-in-progress';
-                                                    $badge_class = 'bg-success';
-                                                } elseif ($current_time < $class_start) {
-                                                    $status = 'Upcoming';
-                                                    $status_class = 'status-upcoming';
-                                                    $badge_class = 'bg-info';
-                                                } else {
-                                                    $status = 'Completed';
-                                                    $status_class = 'status-completed';
-                                                    $badge_class = 'bg-secondary';
-                                                }
-                                                
-                                                // Check if attendance data exists for this class today
-                                                $attendance_data = null;
-                                                foreach ($today_attendance_summary as $attendance) {
-                                                    if ($attendance['year'] == $class['year_level'] && 
-                                                        $attendance['section'] == $class['section'] &&
-                                                        $attendance['subject'] == $class['subject']) {
-                                                        $attendance_data = $attendance;
-                                                        break;
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Subject</th>
+                                                        <th>Room</th>
+                                                        <th>Section</th>
+                                                        <th>Year Level</th>
+                                                        <th>Time</th>
+                                                        <th>Status</th>
+                                                        <th>Attendance</th>
+                                                        <th>Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php 
+                                                    // Reset the result pointer to start from the beginning
+                                                    if ($today_classes) {
+                                                        $today_classes->data_seek(0);
                                                     }
-                                                }
-                                            ?>
-                                                <div class="list-group-item list-group-item-action">
-                                                    <div class="d-flex justify-content-between align-items-start mb-2">
-                                                        <h6 class="mb-1">
-                                                            <span class="class-status-indicator <?php echo $status_class; ?>"></span>
-                                                            <?php echo htmlspecialchars($class['subject']); ?>
-                                                        </h6>
-                                                        <span class="badge <?php echo $badge_class; ?>"><?php echo $status; ?></span>
-                                                    </div>
                                                     
-                                                    <p class="mb-1">
-                                                        <i class="fas fa-door-open me-1 text-muted"></i>
-                                                        Room: <?php echo htmlspecialchars($class['room_name']); ?>
-                                                    </p>
-                                                    
-                                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                                        <small class="text-muted">
-                                                            <i class="fas fa-users me-1"></i>
-                                                            Section: <?php echo htmlspecialchars($class['section']); ?> | 
-                                                            Year: <?php echo htmlspecialchars($class['year_level'] ?? 'N/A'); ?>
-                                                        </small>
-                                                        <span class="time-badge">
-                                                            <i class="fas fa-clock me-1"></i>
-                                                            <?php echo $start_time . ' - ' . $end_time; ?>
-                                                        </span>
-                                                    </div>
-
-                                                    <!-- Attendance Summary -->
-                                                    <?php if ($attendance_data): ?>
-                                                    <div class="attendance-summary mt-2 p-2 bg-light rounded">
-                                                        <div class="row text-center">
-                                                            <div class="col-4">
-                                                                <small class="text-success fw-bold"><?php echo $attendance_data['present_count']; ?></small>
-                                                                <br><small class="text-muted">Present</small>
-                                                            </div>
-                                                            <div class="col-4">
-                                                                <small class="text-danger fw-bold"><?php echo $attendance_data['absent_count']; ?></small>
-                                                                <br><small class="text-muted">Absent</small>
-                                                            </div>
-                                                            <div class="col-4">
-                                                                <small class="text-primary fw-bold"><?php echo $attendance_data['attendance_rate']; ?>%</small>
-                                                                <br><small class="text-muted">Rate</small>
-                                                            </div>
-                                                        </div>
-                                                        <div class="progress attendance-progress mt-1">
-                                                            <div class="progress-bar bg-success" style="width: <?php echo $attendance_data['attendance_rate']; ?>%"></div>
-                                                        </div>
-                                                    </div>
-                                                    <?php endif; ?>
-
-                                                    <div class="mt-3">
-                                                        <a href="attendance.php?year=<?php echo urlencode($class['year_level']); ?>&section=<?php echo urlencode($class['section']); ?>&subject=<?php echo urlencode($class['subject']); ?>&date=<?php echo urlencode($today_date); ?>" 
-                                                           class="btn btn-sm btn-outline-primary view-attendance-btn w-100">
-                                                            <i class="fas fa-chart-bar me-1"></i>
-                                                            <?php echo $attendance_data ? 'View Detailed Attendance' : 'View Attendance Records'; ?>
-                                                        </a>
-                                                    </div>
-                                                </div>
-                                            <?php endwhile; ?>
+                                                    while ($class = $today_classes->fetch_assoc()): 
+                                                        $start_time = date("g:i A", strtotime($class['start_time']));
+                                                        $end_time = date("g:i A", strtotime($class['end_time']));
+                                                        $current_time = time();
+                                                        $class_start = strtotime($class['start_time']);
+                                                        $class_end = strtotime($class['end_time']);
+                                                        
+                                                        // Determine class status
+                                                        if ($current_time >= $class_start && $current_time <= $class_end) {
+                                                            $status = 'In Progress';
+                                                            $status_class = 'status-in-progress';
+                                                            $badge_class = 'bg-success';
+                                                        } elseif ($current_time < $class_start) {
+                                                            $status = 'Upcoming';
+                                                            $status_class = 'status-upcoming';
+                                                            $badge_class = 'bg-info';
+                                                        } else {
+                                                            $status = 'Completed';
+                                                            $status_class = 'status-completed';
+                                                            $badge_class = 'bg-secondary';
+                                                        }
+                                                        
+                                                        // Check if attendance data exists for this class today
+                                                        $attendance_data = null;
+                                                        foreach ($today_attendance_summary as $attendance) {
+                                                            if ($attendance['year'] == $class['year_level'] && 
+                                                                $attendance['section'] == $class['section'] &&
+                                                                $attendance['subject'] == $class['subject']) {
+                                                                $attendance_data = $attendance;
+                                                                break;
+                                                            }
+                                                        }
+                                                    ?>
+                                                        <tr>
+                                                            <td>
+                                                                <div class="d-flex align-items-center">
+                                                                    <span class="class-status-indicator <?php echo $status_class; ?> me-2"></span>
+                                                                    <strong><?php echo htmlspecialchars($class['subject']); ?></strong>
+                                                                </div>
+                                                            </td>
+                                                            <td><?php echo htmlspecialchars($class['room_name']); ?></td>
+                                                            <td><?php echo htmlspecialchars($class['section']); ?></td>
+                                                            <td><?php echo isset($class['year_level']) ? htmlspecialchars($class['year_level']) : '-'; ?></td>
+                                                            <td>
+                                                                <span class="time-badge">
+                                                                    <i class="fas fa-clock me-1"></i>
+                                                                    <?php echo $start_time . ' - ' . $end_time; ?>
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <span class="badge <?php echo $badge_class; ?>"><?php echo $status; ?></span>
+                                                            </td>
+                                                            <td>
+                                                                <?php if ($attendance_data): ?>
+                                                                <div class="d-flex align-items-center">
+                                                                    <small class="text-success fw-bold me-2"><?php echo $attendance_data['present_count']; ?></small>
+                                                                    <small class="text-muted">/</small>
+                                                                    <small class="text-danger fw-bold ms-2"><?php echo $attendance_data['absent_count']; ?></small>
+                                                                    <small class="text-primary fw-bold ms-2"><?php echo $attendance_data['attendance_rate']; ?>%</small>
+                                                                </div>
+                                                                <?php else: ?>
+                                                                <span class="text-muted">No data</span>
+                                                                <?php endif; ?>
+                                                            </td>
+                                                            <td>
+                                                                <a href="attendance.php?year=<?php echo urlencode($class['year_level']); ?>&section=<?php echo urlencode($class['section']); ?>&subject=<?php echo urlencode($class['subject']); ?>&date=<?php echo urlencode($today_date); ?>" 
+                                                                   class="btn btn-sm btn-outline-primary view-attendance-btn">
+                                                                   <i class="fas fa-chart-bar me-1"></i>
+                                                                   <?php echo $attendance_data ? 'View Details' : 'View Records'; ?>
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endwhile; ?>
+                                                </tbody>
+                                            </table>
                                         </div>
                                     <?php else: ?>
                                         <div class="text-center py-4">
@@ -1173,9 +1178,11 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Upcoming Classes -->
-                        <div class="col-lg-6">
+                    <!-- Upcoming Classes -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
                             <div class="card">
                                 <div class="card-header bg-primary-custom d-flex justify-content-between align-items-center">
                                     <h5 class="card-title mb-0"><i class="fas fa-calendar-week me-2"></i>Upcoming Classes This Week</h5>
@@ -1197,7 +1204,13 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <?php while ($class = $upcoming_classes->fetch_assoc()): ?>
+                                                    <?php 
+                                                    // Reset the result pointer to start from the beginning
+                                                    if ($upcoming_classes) {
+                                                        $upcoming_classes->data_seek(0);
+                                                    }
+                                                    
+                                                    while ($class = $upcoming_classes->fetch_assoc()): ?>
                                                         <tr>
                                                             <td>
                                                                 <strong><?php echo htmlspecialchars($class['day']); ?></strong>
