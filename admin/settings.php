@@ -96,72 +96,6 @@ try {
     error_log("Failed to create admin_access_logs table: " . $e->getMessage());
 }
 
-// Handle clear all logs request
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'clear_all_logs') {
-    // Verify CSRF token
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $response = ['status' => 'error', 'message' => 'Invalid request. Please try again.'];
-        echo json_encode($response);
-        exit();
-    }
-    
-    try {
-        $stmt = $db->prepare("DELETE FROM admin_access_logs");
-        $stmt->execute();
-        
-        $deletedRows = $stmt->affected_rows;
-        
-        // Log the current user's session immediately after clearing
-        if (isset($_SESSION['user_id']) && isset($_SESSION['username'])) {
-            $userId = $_SESSION['user_id'];
-            $username = $_SESSION['username'];
-            $ipAddress = $_SERVER['REMOTE_ADDR'];
-            $userAgent = $_SERVER['HTTP_USER_AGENT'];
-            
-            // Get location data if available
-            $location = 'Unknown';
-            $locationJson = null;
-            
-            // Try to get IP-based location
-            if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
-                $context = stream_context_create([
-                    'http' => [
-                        'timeout' => 3,
-                        'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    ]
-                ]);
-                
-                $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
-                if ($ipData) {
-                    $ipInfo = json_decode($ipData);
-                    if ($ipInfo && $ipInfo->status === 'success') {
-                        $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
-                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
-                    }
-                }
-            }
-            
-            // Insert current session log
-            $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
-            $activity = "Login with 2FA (Logs Cleared)";
-            $status = "success";
-            $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
-            $stmt->execute();
-        }
-        
-        $response = [
-            'status' => 'success', 
-            'message' => "Successfully deleted {$deletedRows} log entries and preserved current session."
-        ];
-        echo json_encode($response);
-        exit();
-    } catch (Exception $e) {
-        $response = ['status' => 'error', 'message' => 'Failed to clear logs: ' . $e->getMessage()];
-        echo json_encode($response);
-        exit();
-    }
-}
-
 // Handle clear old logs request
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'clear_old_logs') {
     // Verify CSRF token
@@ -188,102 +122,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit();
     } catch (Exception $e) {
         $response = ['status' => 'error', 'message' => 'Failed to clear old logs: ' . $e->getMessage()];
-        echo json_encode($response);
-        exit();
-    }
-}
-
-// Handle regenerate sample logs request (for testing)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'regenerate_sample_logs') {
-    // Verify CSRF token
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $response = ['status' => 'error', 'message' => 'Invalid request. Please try again.'];
-        echo json_encode($response);
-        exit();
-    }
-    
-    try {
-        // Clear existing logs first
-        $db->query("DELETE FROM admin_access_logs");
-        
-        // Get current user info
-        $userId = $_SESSION['user_id'];
-        $username = $_SESSION['username'];
-        $ipAddress = $_SERVER['REMOTE_ADDR'];
-        $userAgent = $_SERVER['HTTP_USER_AGENT'];
-        
-        // Sample GPS locations (real coordinates)
-        $sampleLocations = [
-            [
-                'lat' => 14.5995, 'lon' => 120.9842, // Manila, Philippines
-                'address' => 'Manila, Metro Manila, Philippines'
-            ],
-            [
-                'lat' => 10.3157, 'lon' => 123.8854, // Cebu City, Philippines
-                'address' => 'Cebu City, Cebu, Philippines'
-            ],
-            [
-                'lat' => 14.6760, 'lon' => 121.0437, // Quezon City, Philippines
-                'address' => 'Quezon City, Metro Manila, Philippines'
-            ],
-            [
-                'lat' => 7.1907, 'lon' => 125.4553, // Davao City, Philippines
-                'address' => 'Davao City, Davao del Sur, Philippines'
-            ]
-        ];
-        
-        // Generate sample logs for the last 7 days
-        for ($i = 0; $i < 20; $i++) {
-            $daysAgo = rand(0, 7);
-            $hoursAgo = rand(0, 23);
-            $minutesAgo = rand(0, 59);
-            
-            $loginTime = date('Y-m-d H:i:s', strtotime("-$daysAgo days -$hoursAgo hours -$minutesAgo minutes"));
-            
-            // Randomly decide if this log has GPS data
-            $hasGPS = rand(0, 1);
-            $locationData = $sampleLocations[array_rand($sampleLocations)];
-            
-            if ($hasGPS) {
-                $location = $locationData['address'];
-                $locationJson = json_encode([
-                    'source' => 'GPS',
-                    'lat' => $locationData['lat'],
-                    'lon' => $locationData['lon'],
-                    'accuracy_meters' => rand(5, 50),
-                    'address' => [
-                        'city' => explode(',', $locationData['address'])[0],
-                        'state' => explode(',', $locationData['address'])[1] ?? '',
-                        'country' => 'Philippines'
-                    ],
-                    'display_name' => $locationData['address']
-                ]);
-            } else {
-                $location = 'IP Based Location';
-                $locationJson = json_encode([
-                    'source' => 'IP',
-                    'city' => 'Sample City',
-                    'region' => 'Sample Region',
-                    'country' => 'Philippines'
-                ]);
-            }
-            
-            $activity = "Login with 2FA";
-            $status = "success";
-            
-            $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("issssssss", $userId, $username, $loginTime, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
-            $stmt->execute();
-        }
-        
-        $response = [
-            'status' => 'success', 
-            'message' => "Successfully generated 20 sample log entries with mixed GPS and IP locations."
-        ];
-        echo json_encode($response);
-        exit();
-    } catch (Exception $e) {
-        $response = ['status' => 'error', 'message' => 'Failed to generate sample logs: ' . $e->getMessage()];
         echo json_encode($response);
         exit();
     }
@@ -364,6 +202,11 @@ try {
 } catch (Exception $e) {
     error_log("Failed to fetch admin access logs: " . $e->getMessage());
 }
+
+// Count failed login attempts
+$failedLogins = count(array_filter($logs, function($log) { 
+    return $log['status'] === 'failed'; 
+}));
 ?>
 
 <!DOCTYPE html>
@@ -559,27 +402,14 @@ try {
 
         /* Clear Button */
         .btn-clear {
-            background: linear-gradient(135deg, var(--danger-color), #d73525);
+            background: linear-gradient(135deg, var(--warning-color), #f4b619);
             color: white;
-            box-shadow: 0 4px 15px rgba(231, 74, 59, 0.3);
+            box-shadow: 0 4px 15px rgba(246, 194, 62, 0.3);
         }
 
         .btn-clear:hover {
             transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(231, 74, 59, 0.4);
-            color: white;
-        }
-
-        /* Sample Logs Button */
-        .btn-sample {
-            background: linear-gradient(135deg, var(--success-color), #17a673);
-            color: white;
-            box-shadow: 0 4px 15px rgba(28, 200, 138, 0.3);
-        }
-
-        .btn-sample:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(28, 200, 138, 0.4);
+            box-shadow: 0 6px 20px rgba(246, 194, 62, 0.4);
             color: white;
         }
 
@@ -866,13 +696,7 @@ try {
                             </div>
                             <div class="col-6 d-flex justify-content-end">
                                 <div class="action-buttons">
-                                    <button class="btn btn-sm btn-sample" onclick="regenerateSampleLogs()">
-                                        <i class="fas fa-database"></i> Generate Sample Logs
-                                    </button>
-                                    <button class="btn btn-sm btn-clear" onclick="clearAllLogs()">
-                                        <i class="fas fa-trash"></i> Clear All Logs
-                                    </button>
-                                    <button class="btn btn-sm btn-warning" onclick="clearOldLogs()">
+                                    <button class="btn btn-sm btn-clear" onclick="clearOldLogs()">
                                         <i class="fas fa-broom"></i> Clear Old Logs
                                     </button>
                                 </div>
@@ -910,7 +734,7 @@ try {
 
                         <!-- Enhanced Statistics Cards -->
                         <div class="row mb-4">
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="card bg-primary text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -925,7 +749,7 @@ try {
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="card bg-success text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -940,7 +764,22 @@ try {
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
+                                <div class="card bg-danger text-white stats-card">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="mb-0">Failed</h6>
+                                                <h4 class="mb-0"><?php echo $failedLogins; ?></h4>
+                                            </div>
+                                            <div class="fs-1 opacity-50">
+                                                <i class="fas fa-times-circle"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
                                 <div class="card bg-info text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -955,7 +794,7 @@ try {
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="card bg-warning text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -970,6 +809,24 @@ try {
                                             </div>
                                             <div class="fs-1 opacity-50">
                                                 <i class="fas fa-calendar-day"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="card bg-secondary text-white stats-card">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="mb-0">Unique IPs</h6>
+                                                <h4 class="mb-0"><?php 
+                                                    $uniqueIPs = array_unique(array_column($logs, 'ip_address'));
+                                                    echo count($uniqueIPs);
+                                                ?></h4>
+                                            </div>
+                                            <div class="fs-1 opacity-50">
+                                                <i class="fas fa-network-wired"></i>
                                             </div>
                                         </div>
                                     </div>
@@ -1003,9 +860,6 @@ try {
                                                             <i class="fas fa-clipboard-list fa-3x mb-3 text-muted"></i>
                                                             <h5>No access logs found</h5>
                                                             <p class="text-muted">There are no access logs to display at this time.</p>
-                                                            <button class="btn btn-sample mt-2" onclick="regenerateSampleLogs()">
-                                                                <i class="fas fa-database"></i> Generate Sample Logs
-                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -1023,14 +877,14 @@ try {
                                                         <td>
                                                             <div class="d-flex flex-column">
                                                                 <span class="fw-medium"><?php echo date('M j, Y', strtotime($log['login_time'])); ?></span>
-                                                                <small class="text-muted"><?php echo date('g:i A', strtotime($log['login_time'])); ?></small>
+                                                                <small class="text-muted"><?php echo date('h:i A', strtotime($log['login_time'])); ?></small>
                                                             </div>
                                                         </td>
                                                         <td>
                                                             <?php if ($log['logout_time']): ?>
                                                                 <div class="d-flex flex-column">
                                                                     <span class="fw-medium"><?php echo date('M j, Y', strtotime($log['logout_time'])); ?></span>
-                                                                    <small class="text-muted"><?php echo date('g:i A', strtotime($log['logout_time'])); ?></small>
+                                                                    <small class="text-muted"><?php echo date('h:i A', strtotime($log['logout_time'])); ?></small>
                                                                 </div>
                                                             <?php else: ?>
                                                                 <span class="badge badge-warning">Still Active</span>
@@ -1185,138 +1039,6 @@ try {
                 }
                 
                 row.style.display = showRow ? '' : 'none';
-            });
-        }
-
-        // Clear all logs function
-        window.clearAllLogs = function() {
-            Swal.fire({
-                title: 'Clear All Logs',
-                html: `
-                    <p class="text-danger"><strong>Warning:</strong> This will delete ALL access logs except your current session!</p>
-                    <p>Are you sure you want to proceed?</p>
-                `,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Yes, Clear All Logs',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Show loading state
-                    Swal.fire({
-                        title: 'Clearing all logs...',
-                        html: 'Please wait while we clear all log entries',
-                        allowOutsideClick: false,
-                        didOpen: () => {
-                            Swal.showLoading();
-                        }
-                    });
-
-                    $.ajax({
-                        url: window.location.href,
-                        type: 'POST',
-                        data: { 
-                            action: 'clear_all_logs',
-                            csrf_token: '<?php echo $_SESSION['csrf_token']; ?>'
-                        },
-                        dataType: 'json',
-                        success: function(response) {
-                            if (response.status === 'success') {
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'Success!',
-                                    text: response.message,
-                                    confirmButtonText: 'OK'
-                                }).then(() => {
-                                    location.reload();
-                                });
-                            } else {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'Error!',
-                                    text: response.message,
-                                    confirmButtonText: 'OK'
-                                });
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Error!',
-                                text: 'Failed to clear logs. Please try again.',
-                                confirmButtonText: 'OK'
-                            });
-                        }
-                    });
-                }
-            });
-        }
-
-        // Regenerate sample logs function
-        window.regenerateSampleLogs = function() {
-            Swal.fire({
-                title: 'Generate Sample Logs',
-                html: `
-                    <p>This will generate 20 sample log entries with mixed GPS and IP locations for testing.</p>
-                    <p class="text-warning">Existing logs will be cleared first!</p>
-                `,
-                icon: 'info',
-                showCancelButton: true,
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Generate Sample Data',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Show loading state
-                    Swal.fire({
-                        title: 'Generating sample logs...',
-                        html: 'Please wait while we create sample data',
-                        allowOutsideClick: false,
-                        didOpen: () => {
-                            Swal.showLoading();
-                        }
-                    });
-
-                    $.ajax({
-                        url: window.location.href,
-                        type: 'POST',
-                        data: { 
-                            action: 'regenerate_sample_logs',
-                            csrf_token: '<?php echo $_SESSION['csrf_token']; ?>'
-                        },
-                        dataType: 'json',
-                        success: function(response) {
-                            if (response.status === 'success') {
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'Success!',
-                                    text: response.message,
-                                    confirmButtonText: 'OK'
-                                }).then(() => {
-                                    location.reload();
-                                });
-                            } else {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'Error!',
-                                    text: response.message,
-                                    confirmButtonText: 'OK'
-                                });
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Error!',
-                                text: 'Failed to generate sample logs. Please try again.',
-                                confirmButtonText: 'OK'
-                            });
-                        }
-                    });
-                }
             });
         }
 
