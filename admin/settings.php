@@ -22,8 +22,11 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true ||
     exit();
 }
 // Log current access if not already logged for this session
-if (!isset($_SESSION['access_logged']) && !isset($_SESSION['last_access_log_id'])) {
-    logAdminAccess($db, $_SESSION['user_id'], $_SESSION['username'], 'success', 'Dashboard Access');
+if (!isset($_SESSION['access_logged']) && !isset($_SESSION['access_log_id'])) {
+    $logId = logAdminAccess($db, $_SESSION['user_id'], $_SESSION['username'], 'success', 'Dashboard Access');
+    if ($logId) {
+        $_SESSION['access_log_id'] = $logId;
+    }
     $_SESSION['access_logged'] = true;
 }
 
@@ -1369,6 +1372,23 @@ if (!empty($logs)) {
             button.removeClass('btn-warning').addClass('ip-toggle');
         }
     });
+    // Add this to your settings.php or dashboard.php
+    function cleanupIncompleteSessions() {
+        global $db;
+        
+        try {
+            // Mark sessions without logout time as incomplete after 24 hours
+            $stmt = $db->prepare("UPDATE admin_access_logs SET activity = 'Incomplete Session', logout_time = DATE_ADD(login_time, INTERVAL 24 HOUR) WHERE logout_time IS NULL AND login_time < DATE_SUB(NOW(), INTERVAL 24 HOUR)");
+            $stmt->execute();
+            
+            error_log("Cleaned up incomplete sessions");
+        } catch (Exception $e) {
+            error_log("Failed to cleanup incomplete sessions: " . $e->getMessage());
+        }
+    }
+
+    // Call this function when dashboard loads
+    cleanupIncompleteSessions();
     </script>
 </body>
 </html>

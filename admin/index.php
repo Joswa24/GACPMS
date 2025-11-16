@@ -74,8 +74,7 @@ try {
 
 // Redirect if already logged in
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && isset($_SESSION['2fa_verified']) && $_SESSION['2fa_verified'] === true) {
-    header('Location: dashboard
-    ');
+    header('Location: dashboard.php');
     exit();
 }
 
@@ -129,6 +128,7 @@ function reverseGeocode($lat, $lon) {
 }
 
 // Handle 2FA verification
+// Handle 2FA verification
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_2fa'])) {
     // Combine the 6 input fields into one code
     $verificationCode = '';
@@ -176,11 +176,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_2fa'])) {
                     $stmt->bind_param("i", $codeId);
                     
                     if ($stmt->execute()) {
-                        // Log successful 2FA verification
-                        logAccessAttempt($userId, $username, '2FA Verification', 'success');
+                        // Log successful 2FA verification and store the log ID
+                        $logId = logAccessAttempt($userId, $username, '2FA Verification', 'success');
                         
                         // Set success message before redirect
                         $_SESSION['login_success'] = "Two-factor authentication successful! Welcome, " . htmlspecialchars($username);
+                        
+                        // Store the log ID in session
+                        if ($logId) {
+                            $_SESSION['access_log_id'] = $logId;
+                        }
                         
                         // Complete login process - THIS WILL REDIRECT TO DASHBOARD
                         completeLoginProcess($userId, $username, $email);
@@ -345,6 +350,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 }
 
 // Function to complete login process - UPDATED FOR PROPER REDIRECTION
+// Function to complete login process - UPDATED FOR PROPER REDIRECTION
 function completeLoginProcess($userId, $username, $email) {
     // Set session variables
     $_SESSION['user_id'] = $userId;
@@ -376,6 +382,12 @@ function completeLoginProcess($userId, $username, $email) {
     // Set success message for dashboard
     $_SESSION['success_message'] = "Login successful! Welcome, " . htmlspecialchars($username);
     
+    // Log successful login and store the log ID
+    $logId = logAccessAttempt($userId, $username, 'Login', 'success');
+    if ($logId) {
+        $_SESSION['access_log_id'] = $logId;
+    }
+    
     error_log("2FA successful - Redirecting to dashboard for user: $username");
     
     // Ensure no output before header redirect
@@ -384,10 +396,11 @@ function completeLoginProcess($userId, $username, $email) {
     }
     
     // Redirect to dashboard - THIS IS THE KEY REDIRECTION
-    header('Location: dashboard');
+    header('Location: dashboard.php');
     exit();
 }
 
+// Function to log access attempts - UPDATED TO HANDLE LOCATION DATA
 // Function to log access attempts - UPDATED TO HANDLE LOCATION DATA
 function logAccessAttempt($userId, $username, $activity, $status) {
     global $db;
@@ -449,9 +462,15 @@ function logAccessAttempt($userId, $username, $activity, $status) {
         if ($stmt) {
             $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
             $stmt->execute();
+            
+            // Return the ID of the inserted record
+            return $db->insert_id;
         }
+        
+        return false;
     } catch (Exception $e) {
         error_log("Failed to log access attempt: " . $e->getMessage());
+        return false;
     }
 }
 

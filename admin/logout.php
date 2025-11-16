@@ -49,6 +49,7 @@ if (isset($_SESSION['user_id'])) {
     }
 }
 
+
 // Destroy the session
 session_unset();
 session_destroy();
