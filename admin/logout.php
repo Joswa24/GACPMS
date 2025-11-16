@@ -46,11 +46,27 @@ if (isset($_SESSION['user_id'])) {
             }
         }
         
-        $stmt = $db->prepare("UPDATE admin_access_logs SET logout_time = NOW(), location = ? WHERE admin_id = ? AND logout_time IS NULL ORDER BY login_time DESC LIMIT 1");
+        // Update the most recent login record without logout time
+        $stmt = $db->prepare("UPDATE admin_access_logs 
+                             SET logout_time = ?, 
+                                 location = COALESCE(?, location),
+                                 location_details = COALESCE(?, location_details),
+                                 activity = 'Logout'
+                             WHERE admin_id = ? 
+                             AND logout_time IS NULL 
+                             ORDER BY login_time DESC 
+                             LIMIT 1");
+        
         if ($stmt) {
-            $stmt->bind_param("si", $location, $_SESSION['user_id']);
+            $stmt->bind_param("sssi", $currentDateTime, $location, $locationJson, $_SESSION['user_id']);
             $stmt->execute();
+            
+            // Log the update for debugging
+            error_log("Logout recorded for user {$_SESSION['user_id']} at {$currentDateTime} (timezone: " . date_default_timezone_get() . ")");
+        } else {
+            error_log("Failed to prepare logout statement");
         }
+        
     } catch (Exception $e) {
         error_log("Failed to log logout: " . $e->getMessage());
     }
