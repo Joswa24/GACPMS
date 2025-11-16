@@ -1200,7 +1200,6 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
                                                         <th>Room</th>
                                                         <th>Year Level</th>
                                                         <th>Section</th>
-                                                        <th>Action</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -1227,12 +1226,6 @@ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_
                                                             <td><?php echo htmlspecialchars($class['room_name']); ?></td>                                       
                                                             <td><?php echo isset($class['year_level']) ? htmlspecialchars($class['year_level']) : '-'; ?></td>
                                                             <td><?php echo htmlspecialchars($class['section']); ?></td>
-                                                            <td>
-                                                                <a href="attendance.php?year=<?php echo urlencode($class['year_level']); ?>&section=<?php echo urlencode($class['section']); ?>&subject=<?php echo urlencode($class['subject']); ?>" 
-                                                                   class="btn btn-sm btn-outline-primary">
-                                                                   <i class="fas fa-eye me-1"></i> View Records
-                                                                </a>
-                                                            </td>
                                                         </tr>
                                                     <?php endwhile; ?>
                                                 </tbody>
