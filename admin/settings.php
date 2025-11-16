@@ -654,34 +654,6 @@ if (!empty($logs)) {
             text-decoration: underline;
         }
 
-        /* Gmail-like location display */
-        .location-display {
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-            padding: 8px 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            transition: var(--transition);
-        }
-
-        .location-display:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-        }
-
-        .location-display .location-text {
-            font-size: 0.9rem;
-            color: var(--dark-text);
-            margin: 0;
-        }
-
-        .location-display .location-icon {
-            color: var(--icon-color);
-            margin-right: 8px;
-        }
-
         /* Responsive adjustments */
         @media (max-width: 768px) {
             .stats-card {
@@ -794,6 +766,34 @@ if (!empty($logs)) {
         .location-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(54, 185, 204, 0.3);
+        }
+        
+        /* Gmail-like location display */
+        .location-display {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            padding: 8px 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: var(--transition);
+        }
+
+        .location-display:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .location-display .location-text {
+            font-size: 0.9rem;
+            color: var(--dark-text);
+            margin: 0;
+        }
+
+        .location-display .location-icon {
+            color: var(--icon-color);
+            margin-right: 8px;
         }
         
         /* Location modal styles */
@@ -1004,7 +1004,7 @@ if (!empty($logs)) {
                                                         <td class="ip-address-column">
                                                             <div class="d-flex align-items-center gap-2">
                                                                 <span class="ip-display encrypted-ip" id="ip-<?php echo $log['id']; ?>">
-                                                                    •••••••••••••
+                                                                    ••••••••••••
                                                                 </span>
                                                                 <button type="button" class="btn btn-sm ip-toggle toggle-ip" 
                                                                         data-ip="<?php echo htmlspecialchars($log['ip_address']); ?>"
@@ -1329,7 +1329,7 @@ if (!empty($logs)) {
                 if (ipSpan.hasClass('actual-ip')) {
                     ipSpan.removeClass('actual-ip')
                         .addClass('encrypted-ip')
-                        .html('••••••••••••••');
+                        .html('••••••••••••');
                     icon.removeClass('fa-eye-slash').addClass('fa-eye');
                     button.removeClass('btn-warning').addClass('ip-toggle');
                 }
@@ -1338,7 +1338,7 @@ if (!empty($logs)) {
             // Hide IP
             ipSpan.removeClass('actual-ip')
                 .addClass('encrypted-ip')
-                .html('•••••••••••••');
+                .html('••••••••••••');
             icon.removeClass('fa-eye-slash').addClass('fa-eye');
             button.removeClass('btn-warning').addClass('ip-toggle');
         }
