@@ -12,7 +12,7 @@ RewriteRule ^(.*)$ $1.php [L]
 RewriteRule ^admin/img/ - [F,L,NC]
 RewriteRule ^admin/admin/uploads - [F,L,NC]
 RewriteRule ^admin/uploads/ - [F,L,NC]
-RewriteRule ^uploads/ - [F,L,NC]
+
 
 
 
