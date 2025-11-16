@@ -79,6 +79,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && isset($_
 }
 
 // Function to reverse geocode coordinates to get specific location
+// Function to reverse geocode coordinates to get specific location
 function reverseGeocode($lat, $lon) {
     // Using OpenStreetMap's Nominatim API (free, no API key required)
     $url = "https://nominatim.openstreetmap.org/reverse?format=json&lat={$lat}&lon={$lon}&zoom=16&addressdetails=1";
@@ -102,24 +103,13 @@ function reverseGeocode($lat, $lon) {
     if (isset($data['address'])) {
         $address = $data['address'];
         
-        // Extract Philippine administrative divisions
-        $barangay = $address['suburb'] ?? $address['village'] ?? $address['hamlet'] ?? $address['neighbourhood'] ?? '';
+        // Extract specific location parts
+        $barangay = $address['suburb'] ?? $address['village'] ?? $address['hamlet'] ?? '';
         $municipality = $address['town'] ?? $address['municipality'] ?? $address['city_district'] ?? '';
         $cityProvince = $address['city'] ?? $address['state'] ?? $address['province'] ?? '';
         $country = $address['country'] ?? '';
         
-        // Special handling for Philippine addresses
-        // If city is present and it's a highly urbanized city, it serves as both city and province
-        if (isset($address['city']) && isset($address['state'])) {
-            // Check if city and state are different (e.g., Cebu City, Cebu Province)
-            if ($address['city'] !== $address['state']) {
-                $cityProvince = $address['city'] . ', ' . $address['state'];
-            } else {
-                $cityProvince = $address['city'];
-            }
-        }
-        
-        // Build location string in the requested format: Barangay, Municipality, City/Province, Country
+        // Build location string in the requested format
         $parts = [];
         if (!empty($barangay)) $parts[] = $barangay;
         if (!empty($municipality)) $parts[] = $municipality;
@@ -133,13 +123,7 @@ function reverseGeocode($lat, $lon) {
             'barangay' => $barangay,
             'municipality' => $municipality,
             'city_province' => $cityProvince,
-            'country' => $country,
-            'formatted_address' => [
-                'barangay' => $barangay,
-                'municipality' => $municipality,
-                'city_province' => $cityProvince,
-                'country' => $country
-            ]
+            'country' => $country
         ];
     }
     
