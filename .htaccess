@@ -1,0 +1,77 @@
+
+
+# Remove duplicate RewriteEngine and fix index.php redirect
+RewriteRule ^index\.php$ / [R=301,L]
+
+#   Hide .php extensions
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}\.php -f
+RewriteRule ^(.*)$ $1.php [L]
+
+# Block direct access to specific directories
+RewriteRule ^admin/img/ - [F,L,NC]
+RewriteRule ^admin/admin/uploads - [F,L,NC]
+RewriteRule ^admin/uploads/ - [F,L,NC]
+
+
+# ======= SECURITY HEADERS & PROTECTION =======
+
+# Enable HSTS Header
+Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+# Additional Security Headers
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-XSS-Protection "1; mode=block"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+# Block common attacks
+RewriteCond %{QUERY_STRING} (eval\() [NC,OR]
+RewriteCond %{QUERY_STRING} (base64_encode) [NC,OR]
+RewriteCond %{QUERY_STRING} (javascript:) [NC,OR]
+RewriteCond %{QUERY_STRING} (<script) [NC,OR]
+RewriteCond %{QUERY_STRING} (document\.cookie) [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Block SQL injections
+RewriteCond %{QUERY_STRING} (union.*select) [NC,OR]
+RewriteCond %{QUERY_STRING} (insert.*into) [NC,OR]
+RewriteCond %{QUERY_STRING} (drop.*table) [NC,OR]
+RewriteCond %{QUERY_STRING} (update.*set) [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Block file inclusion attacks
+RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|\.\.%2f|\.\.%5c) [NC]
+RewriteRule ^(.*)$ - [F,L]
+
+# Disable server signature
+ServerSignature Off
+
+# Prevent clickjacking
+Header always set X-Frame-Options "SAMEORIGIN"
+
+# Prevent MIME type sniffing
+Header always set X-Content-Type-Options "nosniff"
+
+# Enable XSS protection
+Header always set X-XSS-Protection "1; mode=block"
+
+# Block direct access to recaptcha config files
+<Files "recaptcha.php">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+# Protect sensitive files
+<FilesMatch "\.(env|log|ini|conf|sql)$">
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "^\.">
+    Deny from all
+</FilesMatch>
+
+# Additional directory protection with .htaccess files
+# This is an alternative method you can use if the RewriteRules above don't work as expected
+# You would need to create a separate .htaccess file in each directory with:
+# Deny from all
