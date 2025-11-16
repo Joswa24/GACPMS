@@ -19,15 +19,15 @@ header("Pragma: no-cache");
 header("Expires: 0");
 
 // Initialize variables
- $maxAttempts = 3;
- $lockoutTime = 30;
- $error = '';
- $success = '';
- $twoFactorRequired = false;
+$maxAttempts = 3;
+$lockoutTime = 30;
+$error = '';
+$success = '';
+$twoFactorRequired = false;
 
 // reCAPTCHA configuration
- $recaptchaSiteKey = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
- $recaptchaSecretKey = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
+$recaptchaSiteKey = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
+$recaptchaSecretKey = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
 
 // Initialize session variables
 if (!isset($_SESSION['login_attempts'])) {
@@ -74,7 +74,7 @@ try {
 
 // Redirect if already logged in
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && isset($_SESSION['2fa_verified']) && $_SESSION['2fa_verified'] === true) {
-    header('Location: dashboard');
+    header('Location: dashboard.php');
     exit();
 }
 
@@ -127,7 +127,216 @@ function reverseGeocode($lat, $lon) {
     return null;
 }
 
-// Handle 2FA verification
+// Function to log access attempts - FOR FAILED ATTEMPTS ONLY
+function logAccessAttempt($userId, $username, $activity, $status) {
+    global $db;
+    
+    try {
+        $ipAddress = $_SERVER['REMOTE_ADDR'];
+        $userAgent = $_SERVER['HTTP_USER_AGENT'];
+        $location = 'Unknown';
+        $locationJson = null;
+        $locationSource = 'IP';
+
+        // Check for client-side location data
+        if (!empty($_POST['user_lat']) && !empty($_POST['user_lon'])) {
+            $lat = floatval($_POST['user_lat']);
+            $lon = floatval($_POST['user_lon']);
+            $accuracy = isset($_POST['user_accuracy']) ? floatval($_POST['user_accuracy']) : null;
+
+            // Get specific address from coordinates
+            $geoData = reverseGeocode($lat, $lon);
+            
+            if ($geoData) {
+                $location = $geoData['specific_location'];
+                $locationSource = 'GPS';
+                $locationJson = json_encode([
+                    'source' => 'GPS',
+                    'lat' => $lat,
+                    'lon' => $lon,
+                    'accuracy_meters' => $accuracy,
+                    'address' => $geoData['address'],
+                    'display_name' => $geoData['display_name']
+                ]);
+            } else {
+                // Fallback if reverse geocoding fails
+                $location = "Lat: {$lat}, Lon: {$lon}";
+                $locationJson = json_encode(['error' => 'Reverse geocoding failed', 'lat' => $lat, 'lon' => $lon]);
+            }
+        } else {
+            // Fallback to IP-based geolocation
+            if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
+                $context = stream_context_create([
+                    'http' => [
+                        'timeout' => 3,
+                        'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    ]
+                ]);
+                
+                $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
+                if ($ipData) {
+                    $ipInfo = json_decode($ipData);
+                    if ($ipInfo && $ipInfo->status === 'success') {
+                        $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
+                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
+                    }
+                }
+            }
+        }
+        
+        $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
+        if ($stmt) {
+            $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
+            $stmt->execute();
+        }
+    } catch (Exception $e) {
+        error_log("Failed to log access attempt: " . $e->getMessage());
+    }
+}
+
+// NEW FUNCTION: Log final combined login (replaces separate login and 2FA logs)
+function logFinalLogin($userId, $username) {
+    global $db;
+    
+    try {
+        $ipAddress = $_SERVER['REMOTE_ADDR'];
+        $userAgent = $_SERVER['HTTP_USER_AGENT'];
+        $location = 'Unknown';
+        $locationJson = null;
+        $locationSource = 'IP';
+
+        // Check for preserved location data from session or POST
+        $lat = null;
+        $lon = null;
+        $accuracy = null;
+        
+        if (!empty($_POST['user_lat']) && !empty($_POST['user_lon'])) {
+            // Use location from current POST (2FA verification)
+            $lat = floatval($_POST['user_lat']);
+            $lon = floatval($_POST['user_lon']);
+            $accuracy = isset($_POST['user_accuracy']) ? floatval($_POST['user_accuracy']) : null;
+        } elseif (isset($_SESSION['temp_location_data'])) {
+            // Use preserved location data from initial login
+            $lat = floatval($_SESSION['temp_location_data']['lat']);
+            $lon = floatval($_SESSION['temp_location_data']['lon']);
+            $accuracy = isset($_SESSION['temp_location_data']['accuracy']) ? floatval($_SESSION['temp_location_data']['accuracy']) : null;
+        }
+
+        if ($lat !== null && $lon !== null) {
+            // Get specific address from coordinates
+            $geoData = reverseGeocode($lat, $lon);
+            
+            if ($geoData) {
+                $location = $geoData['specific_location'];
+                $locationSource = 'GPS';
+                $locationJson = json_encode([
+                    'source' => 'GPS',
+                    'lat' => $lat,
+                    'lon' => $lon,
+                    'accuracy_meters' => $accuracy,
+                    'address' => $geoData['address'],
+                    'display_name' => $geoData['display_name']
+                ]);
+            } else {
+                // Fallback if reverse geocoding fails
+                $location = "Lat: {$lat}, Lon: {$lon}";
+                $locationJson = json_encode(['error' => 'Reverse geocoding failed', 'lat' => $lat, 'lon' => $lon]);
+            }
+        } else {
+            // Fallback to IP-based geolocation
+            if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
+                $context = stream_context_create([
+                    'http' => [
+                        'timeout' => 3,
+                        'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    ]
+                ]);
+                
+                $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
+                if ($ipData) {
+                    $ipInfo = json_decode($ipData);
+                    if ($ipInfo && $ipInfo->status === 'success') {
+                        $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
+                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
+                    }
+                }
+            }
+        }
+        
+        // Log the final combined login entry
+        $activity = "Login with 2FA";
+        $status = "success";
+        
+        $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
+        if ($stmt) {
+            $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
+            $stmt->execute();
+            error_log("Final login logged for user: $username with location source: $locationSource");
+        }
+    } catch (Exception $e) {
+        error_log("Failed to log final login: " . $e->getMessage());
+    }
+}
+
+// UPDATED Function to complete login process - NOW INCLUDES FINAL LOG ENTRY
+function completeLoginProcess($userId, $username, $email) {
+    global $db;
+    
+    try {
+        // Set session variables
+        $_SESSION['user_id'] = $userId;
+        $_SESSION['username'] = $username;
+        $_SESSION['email'] = $email;
+        $_SESSION['logged_in'] = true;
+        $_SESSION['2fa_verified'] = true;
+        $_SESSION['login_time'] = time();
+        
+        // Log the FINAL successful login (combining both auth steps)
+        logFinalLogin($userId, $username);
+        
+        // Clear temporary session variables
+        unset($_SESSION['temp_user_id']);
+        unset($_SESSION['temp_username']);
+        unset($_SESSION['temp_email']);
+        unset($_SESSION['password_verified']);
+        unset($_SESSION['temp_location_data']);
+        
+        // Regenerate session ID to prevent session fixation
+        session_regenerate_id(true);
+        
+        // Set secure session cookie parameters
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'domain' => $_SERVER['HTTP_HOST'],
+            'secure' => isset($_SERVER['HTTPS']),
+            'httponly' => true,
+            'samesite' => 'Strict'
+        ]);
+        
+        // Set success message for dashboard
+        $_SESSION['success_message'] = "Login successful! Welcome, " . htmlspecialchars($username);
+        
+        error_log("2FA successful - Redirecting to dashboard for user: $username");
+        
+        // Ensure no output before header redirect
+        if (ob_get_length()) {
+            ob_clean();
+        }
+        
+        // Redirect to dashboard
+        header('Location: dashboard.php');
+        exit();
+        
+    } catch (Exception $e) {
+        error_log("Error in completeLoginProcess: " . $e->getMessage());
+        // Fallback redirect even if logging fails
+        header('Location: dashboard.php');
+        exit();
+    }
+}
+
+// Handle 2FA verification - REMOVED SEPARATE LOGGING
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_2fa'])) {
     // Combine the 6 input fields into one code
     $verificationCode = '';
@@ -151,7 +360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_2fa'])) {
                 $error = "Session expired. Please login again.";
                 $twoFactorRequired = false;
                 // Clear any existing session data
-                unset($_SESSION['temp_user_id'], $_SESSION['temp_username'], $_SESSION['temp_email'], $_SESSION['password_verified']);
+                unset($_SESSION['temp_user_id'], $_SESSION['temp_username'], $_SESSION['temp_email'], $_SESSION['password_verified'], $_SESSION['temp_location_data']);
             } else {
                 $userId = $_SESSION['temp_user_id'];
                 $username = $_SESSION['temp_username'];
@@ -175,30 +384,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_2fa'])) {
                     $stmt->bind_param("i", $codeId);
                     
                     if ($stmt->execute()) {
-                        // Get the most recent login record for this user
-                        $stmt = $db->prepare("SELECT id FROM admin_access_logs 
-                                          WHERE admin_id = ? AND logout_time IS NULL 
-                                          ORDER BY login_time DESC LIMIT 1");
-                        $stmt->bind_param("i", $userId);
-                        $stmt->execute();
-                        $result = $stmt->get_result();
-                        
-                        if ($result->num_rows > 0) {
-                            $logId = $result->fetch_assoc()['id'];
-                            
-                            // Update the existing log entry with 2FA verification success and GPS location
-                            $stmt = $db->prepare("UPDATE admin_access_logs 
-                                                 SET activity = 'Login Successful', 
-                                                     status = 'success',
-                                                     location_details = ?
-                                                     logout_time = NULL
-                                                 WHERE id = ?");
-                            $stmt->bind_param("is", $logId);
-                            $stmt->execute();
-                            
-                            // Store the log ID in session
-                            $_SESSION['access_log_id'] = $logId;
-                        }
+                        // REMOVED: Separate 2FA verification logging
+                        // The final login will be logged in completeLoginProcess
                         
                         // Set success message before redirect
                         $_SESSION['login_success'] = "Two-factor authentication successful! Welcome, " . htmlspecialchars($username);
@@ -214,7 +401,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_2fa'])) {
                     $error = "Invalid verification code. Please try again.";
                     $twoFactorRequired = true;
                     
-                    // Don't log failed 2FA attempts to avoid cluttering the log
+                    // Log failed 2FA attempt only (this is a security event)
+                    logAccessAttempt($userId, $username, 'Failed 2FA - Invalid Code', 'failed');
                 }
             }
         } catch (Exception $e) {
@@ -305,78 +493,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                                 $user = $result->fetch_assoc();
                                 
                                 if (password_verify($password, $user['password'])) {
-                                    // Get location data from the form
-                                    $ipAddress = $_SERVER['REMOTE_ADDR'];
-                                    $userAgent = $_SERVER['HTTP_USER_AGENT'];
-                                    $location = 'Unknown';
-                                    $locationJson = null;
-                                    $locationSource = 'IP'; // Track the source of the location data
-
-                                    // Check for client-side location data
-                                    if (!empty($_POST['user_lat']) && !empty($_POST['user_lon'])) {
-                                        $lat = floatval($_POST['user_lat']);
-                                        $lon = floatval($_POST['user_lon']);
-                                        $accuracy = isset($_POST['user_accuracy']) ? floatval($_POST['user_accuracy']) : null;
-
-                                        // Get specific address from coordinates
-                                        $geoData = reverseGeocode($lat, $lon);
-                                        
-                                        if ($geoData) {
-                                            $location = $geoData['specific_location']; // e.g., "Poblacion, Santa Fe, Cebu, Philippines"
-                                            $locationSource = 'GPS';
-                                            $locationJson = json_encode([
-                                                'source' => 'GPS',
-                                                'lat' => $lat,
-                                                'lon' => $lon,
-                                                'accuracy_meters' => $accuracy,
-                                                'address' => $geoData['address'],
-                                                'display_name' => $geoData['display_name']
-                                            ]);
-                                        } else {
-                                            // Fallback if reverse geocoding fails
-                                            $location = "Lat: {$lat}, Lon: {$lon}";
-                                            $locationJson = json_encode(['error' => 'Reverse geocoding failed', 'lat' => $lat, 'lon' => $lon]);
-                                        }
-                                    } else {
-                                        // Fallback to IP-based geolocation
-                                        if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
-                                            $context = stream_context_create([
-                                                'http' => [
-                                                    'timeout' => 3,
-                                                    'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                                                ]
-                                            ]);
-                                            
-                                            $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
-                                            if ($ipData) {
-                                                $ipInfo = json_decode($ipData);
-                                                if ($ipInfo && $ipInfo->status === 'success') {
-                                                    $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
-                                                    $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
-                                                }
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Create a single log entry with all the data
-                                    $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
-                                    if ($stmt) {
-                                        $stmt->bind_param("isssssss", $user['id'], $user['username'], $ipAddress, $userAgent, $location, $locationJson, 'Login', 'success');
-                                        $stmt->execute();
-                                        
-                                        // Get the ID of the inserted record
-                                        $logId = $db->insert_id;
-                                        
-                                        // Store the log ID in session
-                                        $_SESSION['access_log_id'] = $logId;
-                                        
-                                        // Store location data in session for use during logout
-                                        $_SESSION['user_lat'] = $lat;
-                                        $_SESSION['user_lon'] = $lon;
-                                        $_SESSION['user_accuracy'] = $accuracy;
-                                        
-                                        error_log("Login logged with ID: $logId for user: {$user['username']}");
-                                    }
+                                    // REMOVED: Separate successful login logging
+                                    // The final login will be logged in completeLoginProcess after 2FA
                                     
                                     // Reset login attempts
                                     $_SESSION['login_attempts'] = 0;
@@ -388,6 +506,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                                     $_SESSION['temp_email'] = $user['email'];
                                     $_SESSION['password_verified'] = true;
                                     
+                                    // PRESERVE LOCATION DATA for final logging
+                                    if (isset($_POST['user_lat']) && isset($_POST['user_lon'])) {
+                                        $_SESSION['temp_location_data'] = [
+                                            'lat' => $_POST['user_lat'],
+                                            'lon' => $_POST['user_lon'],
+                                            'accuracy' => $_POST['user_accuracy'] ?? null
+                                        ];
+                                    }
+                                    
                                     // Generate and send 2FA code
                                     $verificationCode = generate2FACode($user['id'], $user['email']);
                                     
@@ -398,7 +525,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                                         $error = "Failed to send verification code. Please try again.";
                                     }
                                 } else {
-                                    // Don't log failed login attempts to avoid cluttering the log
+                                    // Log failed login attempt
+                                    logAccessAttempt(0, $username, 'Failed Login', 'failed');
                                     
                                     $_SESSION['login_attempts']++;
                                     $attemptsLeft = $maxAttempts - $_SESSION['login_attempts'];
@@ -410,7 +538,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                                     }
                                 }
                             } else {
-                                // Don't log failed login attempts when user doesn't exist
+                                // Log failed login attempt
+                                logAccessAttempt(0, $username, 'Failed Login', 'failed');
                                 
                                 $_SESSION['login_attempts']++;
                                 $attemptsLeft = $maxAttempts - $_SESSION['login_attempts'];
@@ -429,121 +558,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                 }
             }
         }
-    }
-}
-
-// Function to complete login process - UPDATED FOR PROPER REDIRECTION
-function completeLoginProcess($userId, $username, $email) {
-    // Set session variables
-    $_SESSION['user_id'] = $userId;
-    $_SESSION['username'] = $username;
-    $_SESSION['email'] = $email;
-    $_SESSION['logged_in'] = true;
-    $_SESSION['2fa_verified'] = true;
-    $_SESSION['login_time'] = time();
-    
-    // Clear temporary session variables
-    unset($_SESSION['temp_user_id']);
-    unset($_SESSION['temp_username']);
-    unset($_SESSION['temp_email']);
-    unset($_SESSION['password_verified']);
-    
-    // Regenerate session ID to prevent session fixation
-    session_regenerate_id(true);
-    
-    // Set secure session cookie parameters
-    session_set_cookie_params([
-        'lifetime' => 0,
-        'path' => '/',
-        'domain' => $_SERVER['HTTP_HOST'],
-        'secure' => isset($_SERVER['HTTPS']),
-        'httponly' => true,
-        'samesite' => 'Strict'
-    ]);
-    
-    // Set success message for dashboard
-    $_SESSION['success_message'] = "Login successful! Welcome, " . htmlspecialchars($username);
-    
-    error_log("2FA successful - Redirecting to dashboard for user: $username");
-    
-    // Ensure no output before header redirect
-    if (ob_get_length()) {
-        ob_clean();
-    }
-    
-    // Redirect to dashboard - THIS IS THE KEY REDIRECTION
-    header('Location: dashboard.php');
-    exit();
-}
-
-// Function to log access attempts - UPDATED TO HANDLE LOCATION DATA AND RETURN LOG ID
-function logAccessAttempt($userId, $username, $activity, $status) {
-    global $db;
-    
-    try {
-        $ipAddress = $_SERVER['REMOTE_ADDR'];
-        $userAgent = $_SERVER['HTTP_USER_AGENT'];
-        $location = 'Unknown';
-        $locationJson = null;
-        $locationSource = 'IP'; // Track the source of the location data
-
-        // Check for client-side location data
-        if (!empty($_POST['user_lat']) && !empty($_POST['user_lon'])) {
-            $lat = floatval($_POST['user_lat']);
-            $lon = floatval($_POST['user_lon']);
-            $accuracy = isset($_POST['user_accuracy']) ? floatval($_POST['user_accuracy']) : null;
-
-            // Get specific address from coordinates
-            $geoData = reverseGeocode($lat, $lon);
-            
-            if ($geoData) {
-                $location = $geoData['specific_location']; // e.g., "Poblacion, Santa Fe, Cebu, Philippines"
-                $locationSource = 'GPS';
-                $locationJson = json_encode([
-                    'source' => 'GPS',
-                    'lat' => $lat,
-                    'lon' => $lon,
-                    'accuracy_meters' => $accuracy,
-                    'address' => $geoData['address'],
-                    'display_name' => $geoData['display_name']
-                ]);
-            } else {
-                // Fallback if reverse geocoding fails
-                $location = "Lat: {$lat}, Lon: {$lon}";
-                $locationJson = json_encode(['error' => 'Reverse geocoding failed', 'lat' => $lat, 'lon' => $lon]);
-            }
-        } else {
-            // Fallback to IP-based geolocation
-            if (function_exists('file_get_contents') && !in_array($ipAddress, ['127.0.0.1', '::1'])) {
-                $context = stream_context_create([
-                    'http' => [
-                        'timeout' => 3,
-                        'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    ]
-                ]);
-                
-                $ipData = @file_get_contents("http://ip-api.com/json/{$ipAddress}", false, $context);
-                if ($ipData) {
-                    $ipInfo = json_decode($ipData);
-                    if ($ipInfo && $ipInfo->status === 'success') {
-                        $location = $ipInfo->city . ', ' . $ipInfo->regionName . ', ' . $ipInfo->country;
-                        $locationJson = json_encode(['source' => 'IP'] + (array)$ipInfo);
-                    }
-                }
-            }
-        }
-        
-        $stmt = $db->prepare("INSERT INTO admin_access_logs (admin_id, username, login_time, ip_address, user_agent, location, location_details, activity, status) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
-        if ($stmt) {
-            $stmt->bind_param("isssssss", $userId, $username, $ipAddress, $userAgent, $location, $locationJson, $activity, $status);
-            $stmt->execute();
-            
-            // Return the ID of the inserted record
-            return $db->insert_id;
-        }
-    } catch (Exception $e) {
-        error_log("Failed to log access attempt: " . $e->getMessage());
-        return false;
     }
 }
 
@@ -602,7 +616,7 @@ function send2FACodeEmail($email, $verificationCode) {
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
         $mail->Username = 'joshuapastorpide10@gmail.com';
-        $mail->Password = 'vrvvaoydozyvmgjq';//'tzogwzhaecctdzdr';//'bmnvognbjqcpxcyf'; // REPLACE WITH APP PASSWORD
+        $mail->Password = 'vrvvaoydozyvmgjq';
         $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->Timeout = 30;
@@ -681,8 +695,8 @@ function send2FACodeEmail($email, $verificationCode) {
 }
 
 // Check if user is currently locked out
- $isLockedOut = ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime);
- $remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lockout_time'])) : 0;
+$isLockedOut = ($_SESSION['login_attempts'] >= $maxAttempts && (time() - $_SESSION['lockout_time']) < $lockoutTime);
+$remainingLockoutTime = $isLockedOut ? ($lockoutTime - (time() - $_SESSION['lockout_time'])) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1336,6 +1350,12 @@ function send2FACodeEmail($email, $verificationCode) {
                     </div>
 
                     <form method="POST" id="twoFactorForm">
+                        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                        <input type="hidden" name="location_granted" id="modal_location_granted" value="true">
+                        <input type="hidden" name="user_lat" id="modal_user_lat" value="">
+                        <input type="hidden" name="user_lon" id="modal_user_lon" value="">
+                        <input type="hidden" name="user_accuracy" id="modal_user_accuracy" value="">
+
                         <div class="form-group">
                             <label for="verification_code" class="form-label"><i class="fas fa-key"></i>Verification Code</label>
                             <div class="verification-code-container">
@@ -1366,6 +1386,7 @@ function send2FACodeEmail($email, $verificationCode) {
 
                     <!-- Resend Code Form -->
                     <form method="POST" id="resendForm" class="mb-3">
+                        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                         <button type="submit" name="resend_2fa" class="btn btn-resend" id="resendBtn">
                             <i class="fas fa-redo me-2"></i>
                             <span id="resendText">Resend Code</span>
@@ -1400,6 +1421,27 @@ function send2FACodeEmail($email, $verificationCode) {
                 passwordField.type = "password";
                 eyeIcon.classList.remove('fa-eye-slash');
                 eyeIcon.classList.add('fa-eye');
+            }
+        }
+
+        // Store location data in sessionStorage
+        function preserveLocationData(lat, lon, accuracy) {
+            sessionStorage.setItem('user_lat', lat);
+            sessionStorage.setItem('user_lon', lon);
+            sessionStorage.setItem('user_accuracy', accuracy);
+        }
+
+        // Restore location data for 2FA form
+        function restoreLocationData() {
+            const lat = sessionStorage.getItem('user_lat');
+            const lon = sessionStorage.getItem('user_lon');
+            const accuracy = sessionStorage.getItem('user_accuracy');
+            
+            if (lat && lon) {
+                document.getElementById('modal_user_lat').value = lat;
+                document.getElementById('modal_user_lon').value = lon;
+                document.getElementById('modal_user_accuracy').value = accuracy;
+                document.getElementById('modal_location_granted').value = 'true';
             }
         }
 
@@ -1440,16 +1482,23 @@ function send2FACodeEmail($email, $verificationCode) {
                 navigator.geolocation.getCurrentPosition(
                     // SUCCESS: Location was retrieved
                     function(position) {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        const accuracy = position.coords.accuracy;
+                        
                         // Set the location values
-                        document.getElementById('user_lat').value = position.coords.latitude;
-                        document.getElementById('user_lon').value = position.coords.longitude;
-                        document.getElementById('user_accuracy').value = position.coords.accuracy;
+                        document.getElementById('user_lat').value = lat;
+                        document.getElementById('user_lon').value = lon;
+                        document.getElementById('user_accuracy').value = accuracy;
                         document.getElementById('location_granted').value = 'true';
+                        
+                        // Preserve location data for 2FA
+                        preserveLocationData(lat, lon, accuracy);
                         
                         // Update UI
                         locationStatus.classList.remove('info');
                         locationStatus.classList.add('success');
-                        locationStatusText.textContent = `Location obtained (accuracy: ±${Math.round(position.coords.accuracy)}m)`;
+                        locationStatusText.textContent = `Location obtained (accuracy: ±${Math.round(accuracy)}m)`;
                         locationSpinner.style.display = 'none';
                         
                         // Update button text
@@ -1678,9 +1727,22 @@ function send2FACodeEmail($email, $verificationCode) {
             }
             
             // Submit the form via AJAX to handle response better
+            submit2FAViaAJAX(verificationCode);
+        }
+
+        /**
+         * Submit 2FA via AJAX for better user experience
+         */
+        function submit2FAViaAJAX(verificationCode) {
             const formData = new FormData();
             formData.append('verify_2fa', '1');
             formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
+            
+            // Add location data
+            formData.append('location_granted', document.getElementById('modal_location_granted').value);
+            formData.append('user_lat', document.getElementById('modal_user_lat').value);
+            formData.append('user_lon', document.getElementById('modal_user_lon').value);
+            formData.append('user_accuracy', document.getElementById('modal_user_accuracy').value);
             
             // Add individual code fields
             for (let i = 0; i < 6; i++) {
@@ -1897,6 +1959,9 @@ function send2FACodeEmail($email, $verificationCode) {
             <?php if ($twoFactorRequired): ?>
                 const twoFactorModal = new bootstrap.Modal(document.getElementById('twoFactorModal'));
                 twoFactorModal.show();
+                
+                // Restore location data for 2FA form
+                restoreLocationData();
                 
                 // Auto-focus on first verification code input
                 setTimeout(() => {
