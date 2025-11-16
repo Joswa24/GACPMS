@@ -1348,9 +1348,9 @@ function send2FACodeEmail($email, $verificationCode) {
                     // SUCCESS: Location was retrieved
                     function(position) {
                         // Set the location values
-                        document.getElementById($_SESSION['user_lat']).value = position.coords.latitude;
-                        document.getElementById($_SESSION['user_lon']).value = position.coords.longitude;
-                        document.getElementById($_SESSION['user_accuracy']).value = position.coords.accuracy;
+                        document.getElementById('user_lat').value = position.coords.latitude;
+                        document.getElementById('user_lon').value = position.coords.longitude;
+                        document.getElementById('user_accuracy').value = position.coords.accuracy;
                         document.getElementById('location_granted').value = 'true';
                         
                         // Update UI
