@@ -1,324 +1,269 @@
 <?php
-include 'header.php';   
-include '../connection.php';
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+
+// ✅ Session & Role Check - MUST BE AT THE VERY TOP
 session_start();
 
-// Session & Role Check
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || $_SESSION['role'] !== 'instructor') {
-    header("Location: index.php");
+// Debug session data
+error_log("=== DASHBOARD ACCESS ===");
+error_log("Session ID: " . session_id());
+error_log("Session data: " . print_r($_SESSION, true));
+
+// Check if essential session variables exist
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
+    !isset($_SESSION['role']) || $_SESSION['role'] !== 'instructor' ||
+    !isset($_SESSION['instructor_id'])) {
+    
+    error_log("SESSION VALIDATION FAILED - Redirecting to index");
+    header("Location: index");
     exit();
 }
 
- $instructor_id = $_SESSION['instructor_id'];
+error_log("SESSION VALIDATION PASSED - Loading dashboard");
 
-// Capture filter params - AUTO-POPULATE FROM DASHBOARD CLICK
- $filter_year    = isset($_GET['year']) ? $_GET['year'] : null;
- $filter_section = isset($_GET['section']) ? $_GET['section'] : null;
- $filter_subject = isset($_GET['subject']) ? $_GET['subject'] : null;
- $filter_date    = isset($_GET['date']) ? $_GET['date'] : null;
- $filter_status  = isset($_GET['status']) ? $_GET['status'] : null;
- $filter_month   = isset($_GET['month']) ? $_GET['month'] : null;
- $print_view     = isset($_GET['print']) ? true : false;
-
-// Check if this is a direct link from dashboard (has year and section but no form submission)
- $from_dashboard = ($filter_year && $filter_section && !isset($_GET['form_submitted']));
-
- $attendance_data = [];
- $available_dates = [];
- $available_classes = [];
- $summary_data = [];
- $monthly_stats = [];
-
-// Get available summary records for this instructor
- $summary_query = "SELECT DISTINCT 
-                  id,
-                  year_level as year,
-                  section,
-                  subject_name as subject,
-                  session_date as date,
-                  instructor_name,
-                  time_in,
-                  time_out,
-                  total_students,
-                  present_count,
-                  absent_count,
-                  attendance_rate
-                  FROM instructor_attendance_admin 
-                  WHERE instructor_id = ? 
-                  ORDER BY session_date DESC, year_level, section";
- $summary_stmt = $db->prepare($summary_query);
- $summary_stmt->bind_param("s", $instructor_id);
- $summary_stmt->execute();
- $summary_result = $summary_stmt->get_result();
-
-while ($summary_row = $summary_result->fetch_assoc()) {
-    $available_classes[] = [
-        'year' => $summary_row['year'],
-        'section' => $summary_row['section'],
-        'subject' => $summary_row['subject']
-    ];
-    
-    if ($summary_row['date']) {
-        $available_dates[] = $summary_row['date'];
-    }
-    
-    // Store summary data for display
-    $summary_key = $summary_row['year'] . '-' . $summary_row['section'] . '-' . $summary_row['date'];
-    $summary_data[$summary_key] = $summary_row;
+// ✅ Timeout (15 minutes)
+if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 900)) {
+    session_unset();
+    session_destroy();
+    header("Location: index.php?timeout=1");
+    exit();
 }
- $summary_stmt->close();
+ $_SESSION['last_activity'] = time();
 
-// Get monthly statistics
- $monthly_query = "SELECT 
-                  YEAR(session_date) as year,
-                  MONTH(session_date) as month,
-                  COUNT(DISTINCT session_date) as session_count,
-                  SUM(total_students) as total_students,
-                  SUM(present_count) as total_present,
-                  AVG(attendance_rate) as avg_attendance_rate
-                  FROM instructor_attendance_admin 
-                  WHERE instructor_id = ?
-                  GROUP BY YEAR(session_date), MONTH(session_date)
-                  ORDER BY year DESC, month DESC";
- $monthly_stmt = $db->prepare($monthly_query);
- $monthly_stmt->bind_param("s", $instructor_id);
- $monthly_stmt->execute();
- $monthly_result = $monthly_stmt->get_result();
-
-while ($month_row = $monthly_result->fetch_assoc()) {
-    $monthly_stats[] = $month_row;
-}
- $monthly_stmt->close();
-
-// Remove duplicate dates and classes
- $available_dates = array_unique($available_dates);
-rsort($available_dates); // Sort dates in descending order
- $available_classes = array_unique($available_classes, SORT_REGULAR);
-
-// Get detailed attendance records when filters are applied
-if ($filter_year && $filter_section) {
-    $attendance_query = "
-        SELECT 
-            a.id,
-            a.student_id,
-            a.id_number,
-            a.fullname as student_name,
-            a.time_in,
-            a.time_out,
-            a.department,
-            a.location as subject,
-            a.instructor_id,
-            a.status,
-            a.session_date as date,
-            a.year_level as year,
-            a.section as section
-        FROM archived_attendance_logs a
-        WHERE a.instructor_id = ? 
-        AND a.year_level = ?
-        AND a.section = ?
-    ";
-    
-    $params = [$instructor_id, $filter_year, $filter_section];
-    $types = "sss";
-    
-    // Add date filter if specified
-    if ($filter_date) {
-        $attendance_query .= " AND a.session_date = ?";
-        $params[] = $filter_date;
-        $types .= "s";
-    }
-    
-    // Add subject filter if specified
-    if ($filter_subject) {
-        $attendance_query .= " AND a.subject_name = ?";
-        $params[] = $filter_subject;
-        $types .= "s";
-    }
-    
-    // Add status filter if specified
-    if ($filter_status && $filter_status !== 'all') {
-        $attendance_query .= " AND a.status = ?";
-        $params[] = ucfirst($filter_status);
-        $types .= "s";
-    }
-    
-    // Add month filter if specified
-    if ($filter_month) {
-        $month_year = explode('-', $filter_month);
-        if (count($month_year) == 2) {
-            $attendance_query .= " AND YEAR(a.session_date) = ? AND MONTH(a.session_date) = ?";
-            $params[] = $month_year[0];
-            $params[] = $month_year[1];
-            $types .= "ii";
-        }
-    }
-    
-    $attendance_query .= " ORDER BY a.status DESC, a.fullname, a.time_in DESC";
-    
-    $stmt = $db->prepare($attendance_query);
-    if ($stmt) {
-        $stmt->bind_param($types, ...$params);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        while ($row = $result->fetch_assoc()) {
-            $attendance_data[] = $row;
-        }
-        $stmt->close();
-    }
-}
-
-// If print view is requested, show simplified printable version
-    if ($print_view && $filter_year && $filter_section && !empty($attendance_data)) {
-        header('Content-Type: text/html; charset=utf-8');
-        ?>
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Attendance Report - Print View</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 20px; }
-                .print-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 15px; }
-                .print-header h1 { margin: 0; color: #333; }
-                .print-header .subtitle { color: #666; margin: 5px 0; }
-                .session-info { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
-                .stats-summary { display: flex; justify-content: space-around; margin: 20px 0; text-align: center; }
-                .stat-item { padding: 10px; }
-                .stat-number { font-size: 24px; font-weight: bold; }
-                .table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                .table th { background-color: #333; color: white; padding: 10px; text-align: left; }
-                .table td { padding: 8px; border-bottom: 1px solid #ddd; }
-                .present { color: #28a745; }
-                .absent { color: #dc3545; }
-                .print-footer { margin-top: 30px; text-align: center; color: #666; font-size: 12px; }
-                @media print {
-                    body { margin: 0; }
-                    .no-print { display: none; }
-                    .table { page-break-inside: avoid; }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="print-header">
-                <h1>ATTENDANCE REPORT</h1>
-                <div class="subtitle">Class: <?php echo htmlspecialchars($filter_year . ' - ' . $filter_section); ?></div>
-                <?php if ($filter_subject): ?>
-                    <div class="subtitle">Subject: <?php echo htmlspecialchars($filter_subject); ?></div>
-                <?php endif; ?>
-                <?php if ($filter_date): ?>
-                    <div class="subtitle">Date: <?php echo date('F j, Y', strtotime($filter_date)); ?></div>
-                <?php endif; ?>
-                <div class="subtitle">Generated on: <?php echo date('F j, Y g:i A'); ?></div>
-            </div>
-
-            <?php 
-            $summary_key = $filter_year . '-' . $filter_section . '-' . $filter_date;
-            $current_summary = $summary_data[$summary_key] ?? null;
-            ?>
-            
-            <?php if ($current_summary): ?>
-            <div class="session-info">
-                <strong>Session Summary:</strong><br>
-                Instructor: <?php echo htmlspecialchars($current_summary['instructor_name']); ?> | 
-                Time: <?php echo date('g:i A', strtotime($current_summary['time_in'])); ?> - <?php echo date('g:i A', strtotime($current_summary['time_out'])); ?> | 
-                Attendance Rate: <?php echo $current_summary['attendance_rate']; ?>%
-            </div>
-            <?php endif; ?>
-
-            <div class="stats-summary">
-                <?php
-                $present_count = 0;
-                $absent_count = 0;
-                foreach ($attendance_data as $record) {
-                    if (strtolower($record['status']) == 'present') $present_count++;
-                    else $absent_count++;
-                }
-                $total_count = count($attendance_data);
-                ?>
-                <div class="stat-item">
-                    <div class="stat-number"><?php echo $present_count; ?></div>
-                    <div>Present</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number"><?php echo $absent_count; ?></div>
-                    <div>Absent</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number"><?php echo $total_count; ?></div>
-                    <div>Total</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number"><?php echo $total_count > 0 ? round(($present_count / $total_count) * 100, 1) : 0; ?>%</div>
-                    <div>Rate</div>
-                </div>
-            </div>
-
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>ID Number</th>
-                        <th>Student Name</th>
-                        <th>Time In</th>
-                        <th>Time Out</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($attendance_data as $index => $record): ?>
-                        <tr>
-                            <td><?php echo $index + 1; ?></td>
-                            <td><?php echo htmlspecialchars($record['id_number']); ?></td>
-                            <td><?php echo htmlspecialchars($record['student_name']); ?></td>
-                            <td>
-                                <?php if ($record['time_in']): ?>
-                                    <?php echo date('M j, Y g:i A', strtotime($record['time_in'])); ?>
-                                <?php else: ?>
-                                    -
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <?php if ($record['time_out']): ?>
-                                    <?php echo date('M j, Y g:i A', strtotime($record['time_out'])); ?>
-                                <?php else: ?>
-                                    -
-                                <?php endif; ?>
-                            </td>
-                            <td class="<?php echo strtolower($record['status']); ?>">
-                                <strong><?php echo htmlspecialchars($record['status']); ?></strong>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-
-            <div class="print-footer">
-                Generated by Class Checker System | <?php echo date('Y'); ?>
-            </div>
-
-            <script>
-                window.onload = function() {
-                    window.print();
-                    setTimeout(function() {
-                        window.close();
-                    }, 500);
-                };
-            </script>
-        </body>
-        </html>
-        <?php
+// ✅ Hijack Prevention
+if (!isset($_SESSION['user_agent'])) {
+    $_SESSION['user_agent'] = $_SERVER['HTTP_USER_AGENT'];
+} else {
+    if ($_SESSION['user_agent'] !== $_SERVER['HTTP_USER_AGENT']) {
+        session_unset();
+        session_destroy();
+        header("Location: index.php?hijack=1");
         exit();
     }
+}
+
+// Now include other files
+include '../connection.php';
+include 'header.php';
+// Check database connection
+if (!$db || $db->connect_error) {
+    die("Database connection failed: " . ($db->connect_error ?? 'Unknown error'));
+}
+
+// ✅ Fetch Updated Instructor Information
+ $instructor_info = null;
+ $instructor_id = $_SESSION['instructor_id'];
+
+// FIXED QUERY: Removed email and contact_number columns
+ $stmt = $db->prepare("
+    SELECT i.fullname, i.id_number, d.department_name
+    FROM instructor i 
+    LEFT JOIN department d ON i.department_id = d.department_id 
+    WHERE i.id = ?
+");
+
+if ($stmt) {
+    $stmt->bind_param("i", $instructor_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
     
+    if ($result->num_rows > 0) {
+        $instructor_info = $result->fetch_assoc();
+        
+        // Update session variables with fresh data from database
+        $_SESSION['fullname'] = $instructor_info['fullname'];
+        $_SESSION['department'] = $instructor_info['department_name'] ?? 'Not Assigned';
+        $_SESSION['id_number'] = $instructor_info['id_number'] ?? '';
+        
+    } else {
+        // Instructor not found in database - logout user
+        session_unset();
+        session_destroy();
+        header("Location: index.php?error=instructor_not_found");
+        exit();
+    }
+    $stmt->close();
+} else {
+    die("Database error: " . $db->error);
+}
+
+// ✅ Fetch Instructor Schedules (UPDATED TO USE INSTRUCTOR NAME INSTEAD OF ID)
+ $today_classes = [];
+ $upcoming_classes = [];
+
+// Get instructor's fullname
+ $instructor_name = $_SESSION['fullname'];
+
+// Today's classes (UPDATED QUERY)
+ $today_day = date("l");
+ $stmt = $db->prepare("
+    SELECT subject, room_name, section, start_time, end_time, day, year_level
+    FROM room_schedules
+    WHERE instructor = ? AND day = ?
+    ORDER BY start_time ASC
+");
+
+if ($stmt) {
+    $stmt->bind_param("ss", $instructor_name, $today_day);
+    $stmt->execute();
+    $today_classes = $stmt->get_result();
+    $stmt->close();
+}
+
+// Upcoming classes (week overview) - UPDATED QUERY
+ $stmt = $db->prepare("
+    SELECT subject, room_name, section, start_time, end_time, day, year_level
+    FROM room_schedules
+    WHERE instructor = ?
+    ORDER BY FIELD(day,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),
+             start_time ASC
+");
+
+if ($stmt) {
+    $stmt->bind_param("s", $instructor_name);
+    $stmt->execute();
+    $upcoming_classes = $stmt->get_result();
+    $stmt->close();
+}
+
+// ✅ Fetch today's attendance summary from archived_attendance_logs
+ $today_attendance_summary = [];
+ $today_date = date('Y-m-d');
+
+// Query to get attendance summary by class for today
+ $attendance_summary_query = "
+    SELECT 
+        year_level as year,
+        section,
+        subject_name as subject,
+        COUNT(CASE WHEN status = 'Present' THEN 1 END) as present_count,
+        COUNT(CASE WHEN status = 'Absent' THEN 1 END) as absent_count,
+        COUNT(*) as total_students,
+        ROUND((COUNT(CASE WHEN status = 'Present' THEN 1 END) / COUNT(*) * 100), 1) as attendance_rate
+    FROM archived_attendance_logs 
+    WHERE instructor_id = ? AND session_date = ?
+    GROUP BY year_level, section, subject_name
+    ORDER BY year_level, section
+";
+
+ $attendance_stmt = $db->prepare($attendance_summary_query);
+if ($attendance_stmt) {
+    $attendance_stmt->bind_param("ss", $instructor_id, $today_date);
+    $attendance_stmt->execute();
+    $attendance_result = $attendance_stmt->get_result();
+    
+    while ($attendance_row = $attendance_result->fetch_assoc()) {
+        $today_attendance_summary[] = $attendance_row;
+    }
+    $attendance_stmt->close();
+}
+
+// ✅ Fetch recent attendance activity from archived_attendance_logs
+ $recent_attendance_activity = [];
+ $recent_activity_query = "
+    SELECT 
+        student_id,
+        id_number,
+        fullname,
+        department,
+        location,
+        time_in,
+        time_out,
+        status,
+        subject_name,
+        room,
+        session_date,
+        archived_at
+    FROM archived_attendance_logs 
+    WHERE instructor_id = ? 
+    ORDER BY archived_at DESC 
+    LIMIT 10
+";
+
+ $recent_stmt = $db->prepare($recent_activity_query);
+if ($recent_stmt) {
+    $recent_stmt->bind_param("i", $instructor_id);
+    $recent_stmt->execute();
+    $recent_result = $recent_stmt->get_result();
+    
+    while ($recent_row = $recent_result->fetch_assoc()) {
+        $recent_attendance_activity[] = $recent_row;
+    }
+    $recent_stmt->close();
+}
+
+// ✅ Fetch weekly attendance data for charts
+ $weekly_attendance_data = [];
+for ($i = 6; $i >= 0; $i--) {
+    $date = date('Y-m-d', strtotime("-$i days"));
+    $dayName = date('D', strtotime($date));
+    
+    $weekly_query = "
+        SELECT 
+            COUNT(CASE WHEN status = 'Present' THEN 1 END) as total_present,
+            COUNT(CASE WHEN status = 'Absent' THEN 1 END) as total_absent,
+            COUNT(*) as total_students
+        FROM archived_attendance_logs 
+        WHERE instructor_id = ? AND session_date = ?
+    ";
+    
+    $weekly_stmt = $db->prepare($weekly_query);
+    if ($weekly_stmt) {
+        $weekly_stmt->bind_param("ss", $instructor_id, $date);
+        $weekly_stmt->execute();
+        $weekly_result = $weekly_stmt->get_result();
+        
+        $present = 0;
+        $absent = 0;
+        $total = 0;
+        
+        if ($weekly_result && $row = $weekly_result->fetch_assoc()) {
+            $present = $row['total_present'] ?? 0;
+            $absent = $row['total_absent'] ?? 0;
+            $total = $row['total_students'] ?? 0;
+        }
+        
+        $rate = $total > 0 ? round(($present / $total) * 100, 1) : 0;
+        
+        $weekly_attendance_data[] = [
+            'day' => $dayName,
+            'date' => $date,
+            'present' => $present,
+            'absent' => $absent,
+            'total' => $total,
+            'rate' => $rate
+        ];
+        
+        $weekly_stmt->close();
+    }
+}
+
+// Get current date for display
+ $currentDate = date('F j, Y');
+
+// Calculate overall statistics
+ $total_present = 0;
+ $total_absent = 0;
+ $total_students = 0;
+
+foreach ($today_attendance_summary as $summary) {
+    $total_present += $summary['present_count'];
+    $total_absent += $summary['absent_count'];
+    $total_students += $summary['total_students'];
+}
+
+ $overall_attendance_rate = $total_students > 0 ? round(($total_present / $total_students) * 100, 1) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instructor Attendance - RFID System</title>
+    <title>Instructor Dashboard - RFID System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
@@ -798,87 +743,84 @@ if ($filter_year && $filter_section) {
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
 
-        /* Filter Section Styles */
-        .filter-section {
+        /* Chart container */
+        .chart-container {
             background: white;
             border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
             padding: 25px;
             margin-bottom: 20px;
-            box-shadow: var(--box-shadow);
-        }
-
-        .filter-badge {
-            background-color: var(--info-color);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.8rem;
-            margin-right: 5px;
-        }
-
-        .session-info {
-            background-color: #f8f9fa;
-            border-radius: var(--border-radius);
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .attendance-timeline {
+            height: 400px;
             position: relative;
-            padding-left: 30px;
+            overflow: hidden;
         }
 
-        .attendance-timeline::before {
-            content: '';
-            position: absolute;
-            left: 15px;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background-color: var(--icon-color);
-        }
-
-        .timeline-item {
-            position: relative;
+        .chart-title {
+            color: var(--dark-text);
+            font-weight: 600;
             margin-bottom: 20px;
+            text-align: center;
+            font-size: 1.1rem;
         }
 
-        .timeline-item::before {
-            content: '';
-            position: absolute;
-            left: -23px;
-            top: 5px;
-            width: 12px;
-            height: 12px;
+        /* Activity feed */
+        .activity-feed {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            transition: var(--transition);
+        }
+
+        .activity-item:hover {
+            background-color: rgba(92, 149, 233, 0.05);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-badge {
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            background-color: var(--icon-color);
+            display: inline-block;
+            margin-right: 10px;
         }
 
-        .auto-load-banner {
-            background: linear-gradient(135deg, #28a745, #20c997);
-            color: white;
-            padding: 15px;
-            border-radius: var(--border-radius);
-            margin-bottom: 20px;
-            animation: fadeIn 0.5s ease-in;
-        }
+        .activity-badge.in { background-color: var(--success-color); }
+        .activity-badge.out { background-color: var(--warning-color); }
 
-        .loading-overlay {
+        /* Back to Top Button */
+        .back-to-top {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255,255,255,0.8);
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color)) !important;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
             display: flex;
-            justify-content: center;
             align-items: center;
-            z-index: 9999;
+            justify-content: center;
+            box-shadow: var(--box-shadow);
+            transition: var(--transition);
+            z-index: 997;
+            opacity: 0;
+            visibility: hidden;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .back-to-top.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .back-to-top:hover {
+            transform: translateY(-3px);
         }
 
         @media (max-width: 768px) {
@@ -938,13 +880,13 @@ if ($filter_year && $filter_section) {
         <div class="sidebar-nav">
             <ul class="nav">
                 <li class="nav-item">
-                    <a href="dashboard" class="nav-link">
+                    <a href="dashboard" class="nav-link active">
                         <i class="fas fa-tachometer-alt"></i>
                         <span>Dashboard</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="attendance" class="nav-link active">
+                    <a href="attendance" class="nav-link">
                         <i class="fas fa-clipboard-check"></i>
                         <span>Attendance</span>
                     </a>
@@ -972,7 +914,7 @@ if ($filter_year && $filter_section) {
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle text-white" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-user-circle me-1"></i> 
-                            <?php echo htmlspecialchars($_SESSION['fullname']); ?>
+                            <?php echo htmlspecialchars($_SESSION['fullname'] ?? 'Instructor'); ?>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="logout"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
@@ -985,25 +927,9 @@ if ($filter_year && $filter_section) {
 
     <!-- Main Content -->
     <div class="main-content">
+        <div class="container-fluid pt-4 px-4">
             <div class="col-sm-12 col-xl-12">
                 <div class="bg-light rounded h-100 p-4">
-                    <!-- Auto-load Banner -->
-                    <?php if ($from_dashboard && !empty($attendance_data)): ?>
-                    <div class="auto-load-banner">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-bolt fa-2x me-3"></i>
-                            <div>
-                                <h5 class="mb-1">Auto-loaded Attendance Data</h5>
-                                <p class="mb-0">
-                                    Showing attendance for <?php echo htmlspecialchars($filter_year . ' - ' . $filter_section); ?>
-                                    <?php if ($filter_subject): ?> in <?php echo htmlspecialchars($filter_subject); ?><?php endif; ?>
-                                    on <?php echo $filter_date ? date('F j, Y', strtotime($filter_date)) : 'all dates'; ?>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-
                     <!-- Enhanced Welcome Header -->
                     <div class="welcome-header">
                         <div class="welcome-content">
@@ -1011,8 +937,8 @@ if ($filter_year && $filter_section) {
                                 <div class="col-md-8">
                                     <div class="d-flex align-items-center mb-3">
                                         <div>
-                                            <h2 class="mb-1">Attendance Records</h2>
-                                            <p class="mb-0">Manage and view student attendance</p>
+                                            <h2 class="mb-1">Welcome, <?php echo htmlspecialchars($_SESSION['fullname']); ?></h2>
+                                            <p class="mb-0"><?php echo htmlspecialchars($_SESSION['department']); ?> Instructor</p>
                                         </div>
                                     </div>
                                     <div class="mb-3">
@@ -1024,10 +950,10 @@ if ($filter_year && $filter_section) {
                                             <i class="fas fa-building me-1"></i>
                                             Department: <?php echo htmlspecialchars($_SESSION['department']); ?>
                                         </span>
-                                        <?php if (!empty($available_classes)): ?>
+                                        <?php if (!empty($today_attendance_summary)): ?>
                                         <span class="info-badge">
                                             <i class="fas fa-clipboard-check me-1"></i>
-                                            <?php echo count($available_classes); ?> Classes Available
+                                            <?php echo count($today_attendance_summary); ?> Classes Tracked Today
                                         </span>
                                         <?php endif; ?>
                                     </div>
@@ -1046,527 +972,477 @@ if ($filter_year && $filter_section) {
                         </div>
                     </div>
 
-                    <!-- Quick Stats -->
+                    <!-- Enhanced Statistics Cards -->
                     <div class="row g-4 mb-4">
-                        <!-- Total Classes -->
+                        <!-- Today's Classes -->
                         <div class="col-sm-6 col-md-4 col-xl-3">
                             <div class="stats-card text-info">
                                 <div class="stats-icon">
-                                    <i class="fas fa-chalkboard-teacher"></i>
+                                    <i class="fas fa-calendar-day"></i>
                                 </div>
                                 <div class="stats-content">
-                                    <h3><?php echo count($available_classes); ?></h3>
-                                    <p>Total Classes</p>
+                                    <h3><?php echo $today_classes ? $today_classes->num_rows : 0; ?></h3>
+                                    <p>Today's Classes</p>
                                     <div class="stats-detail">
-                                        <small class="text-muted">Available records</small>
+                                        <small class="text-muted">Scheduled for today</small>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Total Sessions -->
+                        <!-- Total Students Present -->
                         <div class="col-sm-6 col-md-4 col-xl-3">
-                            <div class="stats-card text-primary">
+                            <div class="stats-card text-success">
                                 <div class="stats-icon">
-                                    <i class="fas fa-calendar-check"></i>
-                                </div>
-                                <div class="stats-content">
-                                    <h3><?php echo count($available_dates); ?></h3>
-                                    <p>Total Sessions</p>
-                                    <div class="stats-detail">
-                                        <small class="text-muted">Attendance records</small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Avg Sessions/Month -->
-                        <div class="col-sm-6 col-md-4 col-xl-3">
-                            <div class="stats-card text-warning">
-                                <div class="stats-icon">
-                                    <i class="fas fa-chart-line"></i>
+                                    <i class="fas fa-user-check"></i>
                                 </div>
                                 <div class="stats-content">
                                     <h3>
                                         <?php 
-                                        $total_sessions = count($available_dates);
-                                        $total_months = count($monthly_stats);
-                                        echo $total_months > 0 ? round($total_sessions / $total_months, 1) : 0;
+                                        $total_present = 0;
+                                        foreach ($today_attendance_summary as $summary) {
+                                            $total_present += $summary['present_count'];
+                                        }
+                                        echo $total_present;
                                         ?>
                                     </h3>
-                                    <p>Avg Sessions/Month</p>
+                                    <p>Students Present</p>
                                     <div class="stats-detail">
-                                        <small class="text-muted">Monthly average</small>
+                                        <small class="text-muted">Across all classes</small>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Current Filtered Records -->
+                        <!-- Total Students Absent -->
                         <div class="col-sm-6 col-md-4 col-xl-3">
-                            <div class="stats-card text-success">
+                            <div class="stats-card text-danger">
                                 <div class="stats-icon">
-                                    <i class="fas fa-users"></i>
+                                    <i class="fas fa-user-times"></i>
                                 </div>
                                 <div class="stats-content">
-                                    <h3><?php echo count($attendance_data); ?></h3>
-                                    <p>Filtered Records</p>
+                                    <h3>
+                                        <?php 
+                                        $total_absent = 0;
+                                        foreach ($today_attendance_summary as $summary) {
+                                            $total_absent += $summary['absent_count'];
+                                        }
+                                        echo $total_absent;
+                                        ?>
+                                    </h3>
+                                    <p>Students Absent</p>
                                     <div class="stats-detail">
-                                        <small class="text-muted">Current selection</small>
+                                        <small class="text-muted">Across all classes</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Average Attendance Rate -->
+                        <div class="col-sm-6 col-md-4 col-xl-3">
+                            <div class="stats-card text-warning">
+                                <div class="stats-icon">
+                                    <i class="fas fa-percentage"></i>
+                                </div>
+                                <div class="stats-content">
+                                    <h3>
+                                        <?php 
+                                        $total_students = 0;
+                                        $total_present = 0;
+                                        foreach ($today_attendance_summary as $summary) {
+                                            $total_students += $summary['total_students'];
+                                            $total_present += $summary['present_count'];
+                                        }
+                                        $overall_rate = $total_students > 0 ? round(($total_present / $total_students) * 100, 1) : 0;
+                                        echo $overall_rate . '%';
+                                        ?>
+                                    </h3>
+                                    <p>Avg. Attendance</p>
+                                    <div class="stats-detail">
+                                        <small class="text-muted">Today's rate</small>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Enhanced Filter Section -->
-                    <div class="filter-section">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5><i class="fas fa-filter me-2"></i>Filter Attendance Records</h5>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-outline-primary btn-sm" id="toggleAdvancedFilters">
-                                    <i class="fas fa-sliders-h me-1"></i>Advanced
-                                </button>
+                    <!-- Enhanced Charts Section -->
+                    <div class="row g-4 mb-4">
+                        <!-- Weekly Attendance Trend -->
+                        <div class="col-lg-7">
+                            <div class="chart-container">
+                                <h5 class="chart-title"><i class="fas fa-chart-line me-2"></i>Weekly Attendance Trend</h5>
+                                <div id="weeklyAttendanceChart" style="height: 100%;"></div>
                             </div>
                         </div>
-                        
-                        <form method="GET" action="attendance" id="filterForm">
-                            <!-- Hidden field to track form submission -->
-                            <input type="hidden" name="form_submitted" value="1">
-                            
-                            <div class="row g-3">
-                                <!-- Basic Filters - Matching Dashboard Structure -->
-                                <div class="col-md-3">
-                                    <label for="year" class="form-label"><i class="fas fa-graduation-cap me-1"></i>Year Level</label>
-                                    <select class="form-select" id="year" name="year">
-                                        <option value="">Select Year Level</option>
-                                        <?php 
-                                        $unique_years = array_unique(array_column($available_classes, 'year'));
-                                        sort($unique_years);
-                                        foreach ($unique_years as $year): ?>
-                                            <option value="<?php echo htmlspecialchars($year); ?>" 
-                                                <?php echo ($filter_year == $year) ? 'selected' : ''; ?>>
-                                                Year <?php echo htmlspecialchars($year); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                
-                                <div class="col-md-3">
-                                    <label for="section" class="form-label"><i class="fas fa-users me-1"></i>Section</label>
-                                    <select class="form-select" id="section" name="section">
-                                        <option value="">Select Section</option>
-                                        <?php 
-                                        $filtered_sections = [];
-                                        foreach ($available_classes as $class) {
-                                            if (!$filter_year || $class['year'] == $filter_year) {
-                                                $filtered_sections[] = $class['section'];
-                                            }
-                                        }
-                                        $unique_sections = array_unique($filtered_sections);
-                                        sort($unique_sections);
-                                        foreach ($unique_sections as $section): ?>
-                                            <option value="<?php echo htmlspecialchars($section); ?>" 
-                                                <?php echo ($filter_section == $section) ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($section); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                
-                                <div class="col-md-3">
-                                    <label for="subject" class="form-label"><i class="fas fa-book me-1"></i>Subject</label>
-                                    <select class="form-select" id="subject" name="subject">
-                                        <option value="">Select Subject</option>
-                                        <?php 
-                                        $filtered_subjects = [];
-                                        foreach ($available_classes as $class) {
-                                            if ((!$filter_year || $class['year'] == $filter_year) && 
-                                                (!$filter_section || $class['section'] == $filter_section) && 
-                                                !empty($class['subject'])) {
-                                                $filtered_subjects[] = $class['subject'];
-                                            }
-                                        }
-                                        $unique_subjects = array_unique($filtered_subjects);
-                                        sort($unique_subjects);
-                                        foreach ($unique_subjects as $subject): ?>
-                                            <option value="<?php echo htmlspecialchars($subject); ?>" 
-                                                <?php echo ($filter_subject == $subject) ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($subject); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                
-                                <div class="col-md-3">
-                                    <label for="date" class="form-label"><i class="fas fa-calendar-day me-1"></i>Date</label>
-                                    <select class="form-select" id="date" name="date">
-                                        <option value="">All Dates</option>
-                                        <?php foreach ($available_dates as $date): ?>
-                                            <option value="<?php echo $date; ?>" <?php echo ($filter_date == $date) ? 'selected' : ''; ?>>
-                                                <?php echo date('M j, Y (D)', strtotime($date)); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
 
-                                <!-- Quick Action Buttons -->
-                                <div class="col-12">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div class="d-flex gap-2">
-                                            <button type="submit" class="btn btn-primary">
-                                                <i class="fas fa-search me-2"></i>Apply Filters
-                                            </button>
-                                            <a href="attendance" class="btn btn-secondary">
-                                                <i class="fas fa-refresh me-2"></i>Reset
-                                            </a>
-                                        </div>
-                                        
-                                        <?php if ($filter_year && $filter_section && !empty($attendance_data)): ?>
-                                        <div class="d-flex gap-2">
-                                            <a href="attendance?<?php 
-                                                echo http_build_query([
-                                                    'year' => $filter_year,
-                                                    'section' => $filter_section,
-                                                    'date' => $filter_date,
-                                                    'subject' => $filter_subject,
-                                                    'status' => $filter_status,
-                                                    'month' => $filter_month,
-                                                    'print' => '1'
-                                                ]); 
-                                            ?>" target="_blank" class="btn print-btn">
-                                                <i class="fas fa-print me-2"></i>Print Report
-                                            </a>
-                                            <a href="export_attendance.php?year=<?php echo $filter_year; ?>&section=<?php echo $filter_section; ?>&date=<?php echo $filter_date; ?>&subject=<?php echo $filter_subject; ?>&status=<?php echo $filter_status; ?>&month=<?php echo $filter_month; ?>" 
-                                            class="btn export-btn">
-                                                <i class="fas fa-download me-2"></i>Export to Excel
-                                            </a>
-                                        </div>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-
-                                <!-- Advanced Filters (Initially Hidden) -->
-                                <div class="col-12 advanced-filters" style="display: none;">
-                                    <hr>
-                                    <h6 class="mb-3"><i class="fas fa-cogs me-2"></i>Advanced Filters</h6>
-                                    <div class="row g-3">
-                                        <div class="col-md-4">
-                                            <label for="status" class="form-label"><i class="fas fa-user-check me-1"></i>Attendance Status</label>
-                                            <select class="form-select" id="status" name="status">
-                                                <option value="all" <?php echo ($filter_status == 'all' || !$filter_status) ? 'selected' : ''; ?>>All Students</option>
-                                                <option value="present" <?php echo ($filter_status == 'present') ? 'selected' : ''; ?>>Present Only</option>
-                                                <option value="absent" <?php echo ($filter_status == 'absent') ? 'selected' : ''; ?>>Absent Only</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label for="month" class="form-label"><i class="fas fa-calendar-alt me-1"></i>Month</label>
-                                            <select class="form-select" id="month" name="month">
-                                                <option value="">All Months</option>
-                                                <?php 
-                                                $months = [];
-                                                foreach ($available_dates as $date) {
-                                                    $month_key = date('Y-m', strtotime($date));
-                                                    if (!in_array($month_key, $months)) {
-                                                        $months[] = $month_key;
-                                                        echo '<option value="' . $month_key . '" ' . ($filter_month == $month_key ? 'selected' : '') . '>';
-                                                        echo date('F Y', strtotime($date));
-                                                        echo '</option>';
-                                                    }
-                                                }
-                                                ?>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label"><i class="fas fa-info-circle me-1"></i>Quick Info</label>
-                                            <div class="form-control bg-light">
-                                                <small class="text-muted">
-                                                    <?php if ($filter_year && $filter_section): ?>
-                                                        <i class="fas fa-database me-1"></i>
-                                                        <?php echo count($attendance_data); ?> records found
-                                                    <?php else: ?>
-                                                        <i class="fas fa-filter me-1"></i>
-                                                        Select filters to view data
-                                                    <?php endif; ?>
-                                                </small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Active Filters Display -->
-                                <?php if ($filter_year || $filter_section || $filter_date || $filter_status || $filter_subject || $filter_month): ?>
-                                <div class="col-12">
-                                    <div class="d-flex align-items-center flex-wrap gap-2 p-3 bg-light rounded">
-                                        <small class="text-muted me-2"><i class="fas fa-filter me-1"></i>Active Filters:</small>
-                                        <?php if ($filter_year): ?>
-                                            <span class="filter-badge">
-                                                <i class="fas fa-graduation-cap me-1"></i>
-                                                Year: <?php echo htmlspecialchars($filter_year); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        <?php if ($filter_section): ?>
-                                            <span class="filter-badge">
-                                                <i class="fas fa-users me-1"></i>
-                                                Section: <?php echo htmlspecialchars($filter_section); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        <?php if ($filter_subject): ?>
-                                            <span class="filter-badge">
-                                                <i class="fas fa-book me-1"></i>
-                                                Subject: <?php echo htmlspecialchars($filter_subject); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        <?php if ($filter_date): ?>
-                                            <span class="filter-badge">
-                                                <i class="fas fa-calendar-day me-1"></i>
-                                                Date: <?php echo date('M j, Y', strtotime($filter_date)); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        <?php if ($filter_status && $filter_status !== 'all'): ?>
-                                            <span class="filter-badge">
-                                                <i class="fas fa-user-check me-1"></i>
-                                                Status: <?php echo ucfirst($filter_status); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        <?php if ($filter_month): ?>
-                                            <span class="filter-badge">
-                                                <i class="fas fa-calendar-alt me-1"></i>
-                                                Month: <?php echo date('F Y', strtotime($filter_month . '-01')); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        
-                                        <?php if (!empty($attendance_data)): ?>
-                                            <span class="filter-badge bg-success">
-                                                <i class="fas fa-check-circle me-1"></i>
-                                                <?php echo count($attendance_data); ?> Records
-                                            </span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
+                        <!-- Today's Attendance by Class -->
+                        <div class="col-lg-5">
+                            <div class="chart-container">
+                                <h5 class="chart-title"><i class="fas fa-chart-pie me-2"></i>Today's Attendance by Class</h5>
+                                <div id="attendanceByClassChart" style="height: 100%;"></div>
                             </div>
-                        </form>
+                        </div>
                     </div>
 
-                    <!-- Main Content Card -->
-                    <div class="card">
-                        <div class="card-header bg-primary-custom d-flex justify-content-between align-items-center">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-clipboard-check me-2"></i>
-                                <?php if ($filter_year && $filter_section): ?>
-                                    Attendance Records - <?php echo htmlspecialchars($filter_year . " - " . $filter_section); ?>
-                                    <?php if ($filter_subject): ?> (<?php echo htmlspecialchars($filter_subject); ?>)<?php endif; ?>
-                                    <?php if ($filter_date): ?>
-                                        <span class="date-badge ms-2"><?php echo date('M j, Y', strtotime($filter_date)); ?></span>
-                                    <?php endif; ?>
-                                <?php else: ?>
-                                    Attendance Records - Select filters to view data
-                                <?php endif; ?>
-                            </h5>
-                            <?php if (!empty($attendance_data)): ?>
-                            <span class="badge bg-light text-dark">
-                                <?php echo count($attendance_data); ?> records
-                            </span>
-                            <?php endif; ?>
-                        </div>
-                        <div class="card-body">
-                            <?php if ($filter_year && $filter_section): ?>
-                                <!-- Session Summary -->
-                                <?php 
-                                $summary_key = $filter_year . '-' . $filter_section . '-' . $filter_date;
-                                $current_summary = $summary_data[$summary_key] ?? null;
-                                ?>
-                                <?php if (!empty($attendance_data)): ?>
-                                    <!-- Statistics Cards -->
-                                    <?php
-                                    $present_count = 0;
-                                    $absent_count = 0;
-                                    $early_count = 0;
-                                    $late_count = 0;
-                                    
-                                    foreach ($attendance_data as $record) {
-                                        if (strtolower($record['status']) == 'present') {
-                                            $present_count++;
-                                            // Simple logic for early/late (you can enhance this)
-                                            if ($record['time_in'] && $current_summary) {
-                                                $scan_time = strtotime($record['time_in']);
-                                                $session_time = strtotime($current_summary['time_in']);
-                                                if ($scan_time <= $session_time + 900) { // 15 minutes grace period
-                                                    $early_count++;
-                                                } else {
-                                                    $late_count++;
-                                                }
-                                            }
-                                        } else {
-                                            $absent_count++;
-                                        }
-                                    }
-                                    $total_count = count($attendance_data);
-                                    $attendance_rate = $total_count > 0 ? round(($present_count / $total_count) * 100, 1) : 0;
-                                    ?>
-                                    
-                                    <div class="row g-4 mb-4">
-                                        <div class="col-sm-6 col-md-4 col-xl-3">
-                                            <div class="stats-card text-success">
-                                                <div class="stats-icon">
-                                                    <i class="fas fa-user-check"></i>
-                                                </div>
-                                                <div class="stats-content">
-                                                    <h3><?php echo $present_count; ?></h3>
-                                                    <p>Present Students</p>
-                                                    <div class="stats-detail">
-                                                        <small class="text-muted">
-                                                            <?php echo $early_count; ?> on time, <?php echo $late_count; ?> late
-                                                        </small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-sm-6 col-md-4 col-xl-3">
-                                            <div class="stats-card text-danger">
-                                                <div class="stats-icon">
-                                                    <i class="fas fa-user-times"></i>
-                                                </div>
-                                                <div class="stats-content">
-                                                    <h3><?php echo $absent_count; ?></h3>
-                                                    <p>Absent Students</p>
-                                                    <div class="stats-detail">
-                                                        <small class="text-muted">
-                                                            <?php echo round(($absent_count / $total_count) * 100, 1); ?>% of class
-                                                        </small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-sm-6 col-md-4 col-xl-3">
-                                            <div class="stats-card text-info">
-                                                <div class="stats-icon">
-                                                    <i class="fas fa-users"></i>
-                                                </div>
-                                                <div class="stats-content">
-                                                    <h3><?php echo $total_count; ?></h3>
-                                                    <p>Total Records</p>
-                                                    <div class="stats-detail">
-                                                        <small class="text-muted">Filtered results</small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-sm-6 col-md-4 col-xl-3">
-                                            <div class="stats-card text-warning">
-                                                <div class="stats-icon">
-                                                    <i class="fas fa-chart-line"></i>
-                                                </div>
-                                                <div class="stats-content">
-                                                    <h3><?php echo $attendance_rate; ?>%</h3>
-                                                    <p>Attendance Rate</p>
-                                                    <div class="stats-detail">
-                                                        <small class="text-muted">Overall performance</small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Attendance Table -->
-                                    <div class="table-responsive">
-                                        <table class="table table-striped table-hover">
-                                            <thead>
-                                                <tr>
-                                                    <th>ID Number</th>
-                                                    <th>Student Name</th>
-                                                    <th>Section</th>
-                                                    <th>Year</th>
-                                                    <th>Time In</th>
-                                                    <th>Time Out</th>
-                                                    <th>Status</th>
-                                                    <th>Subject</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($attendance_data as $record): ?>
+                    <!-- Today's Classes Section -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-primary-custom d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title mb-0"><i class="fas fa-calendar-day me-2"></i>Today's Classes</h5>
+                                    <span class="badge bg-light text-dark"><?php echo $today_classes ? $today_classes->num_rows : 0; ?> classes</span>
+                                </div>
+                                <div class="card-body">
+                                    <?php if ($today_classes && $today_classes->num_rows > 0): ?>
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
                                                     <tr>
-                                                        <td>
-                                                            <span class="fw-bold"><?php echo htmlspecialchars($record['id_number']); ?></span>
-                                                        </td>
-                                                        <td><?php echo htmlspecialchars($record['student_name']); ?></td>
-                                                        <td>
-                                                            <span class="badge bg-secondary"><?php echo htmlspecialchars($record['section']); ?></span>
-                                                        </td>
-                                                        <td><?php echo htmlspecialchars($record['year']); ?></td>
-                                                        <td>
-                                                            <?php if ($record['time_in']): ?>
-                                                                <span class="text-success">
-                                                                    <?php echo date('M j, Y g:i A', strtotime($record['time_in'])); ?>
-                                                                </span>
-                                                            <?php else: ?>
-                                                                <span class="text-muted">-</span>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                        <td>
-                                                            <?php if ($record['time_out']): ?>
-                                                                <span class="text-info">
-                                                                    <?php echo date('M j, Y g:i A', strtotime($record['time_out'])); ?>
-                                                                </span>
-                                                            <?php else: ?>
-                                                                <span class="text-muted">-</span>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                        <td>
-                                                            <span class="badge <?php echo (strtolower($record['status']) == 'present') ? 'bg-success' : 'bg-danger'; ?>">
-                                                                <i class="fas <?php echo (strtolower($record['status']) == 'present') ? 'fa-check' : 'fa-times'; ?> me-1"></i>
-                                                                <?php echo htmlspecialchars($record['status']); ?>
-                                                            </span>
-                                                        </td>
-                                                        <td>
-                                                            <small class="text-muted"><?php echo htmlspecialchars($record['subject']); ?></small>
-                                                        </td>
+                                                        <th>Subject</th>
+                                                        <th>Room</th>
+                                                        <th>Section</th>
+                                                        <th>Year Level</th>
+                                                        <th>Time</th>
+                                                        <th>Status</th>
+                                                        <th>Attendance</th>
+                                                        <th>Action</th>
                                                     </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                <?php else: ?>
-                                    <div class="text-center py-5">
-                                        <i class="fas fa-clipboard-list fa-4x text-muted mb-3"></i>
-                                        <h4 class="text-muted">No Records Found</h4>
-                                        <p class="text-muted">No attendance records match your current filters.</p>
-                                        <div class="mt-3">
-                                            <a href="attendance" class="btn btn-primary me-2">View All Records</a>
-                                            <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
-                                        </div>
-                                    </div>
-                                <?php endif; ?>
-                            <?php else: ?>
-                                <div class="text-center py-5">
-                                    <i class="fas fa-clipboard-check fa-4x text-muted mb-3"></i>
-                                    <h4 class="text-muted">Welcome to Attendance Records</h4>
-                                    <p class="text-muted">Select year level and section above to view detailed attendance records.</p>
-                                    
-                                    <?php if (empty($available_classes)): ?>
-                                        <div class="alert alert-info mt-4">
-                                            <i class="fas fa-info-circle me-2"></i>
-                                            No attendance records found yet. 
-                                            <br>Attendance data will appear here after you save sessions from the scanner page.
+                                                </thead>
+                                                <tbody>
+                                                    <?php 
+                                                    // Reset the result pointer to start from the beginning
+                                                    if ($today_classes) {
+                                                        $today_classes->data_seek(0);
+                                                    }
+                                                    
+                                                    while ($class = $today_classes->fetch_assoc()): 
+                                                        $start_time = date("g:i A", strtotime($class['start_time']));
+                                                        $end_time = date("g:i A", strtotime($class['end_time']));
+                                                        $current_time = time();
+                                                        $class_start = strtotime($class['start_time']);
+                                                        $class_end = strtotime($class['end_time']);
+                                                        
+                                                        // Determine class status
+                                                        if ($current_time >= $class_start && $current_time <= $class_end) {
+                                                            $status = 'In Progress';
+                                                            $status_class = 'status-in-progress';
+                                                            $badge_class = 'bg-success';
+                                                        } elseif ($current_time < $class_start) {
+                                                            $status = 'Upcoming';
+                                                            $status_class = 'status-upcoming';
+                                                            $badge_class = 'bg-info';
+                                                        } else {
+                                                            $status = 'Completed';
+                                                            $status_class = 'status-completed';
+                                                            $badge_class = 'bg-secondary';
+                                                        }
+                                                        
+                                                        // Check if attendance data exists for this class today
+                                                        $attendance_data = null;
+                                                        foreach ($today_attendance_summary as $attendance) {
+                                                            if ($attendance['year'] == $class['year_level'] && 
+                                                                $attendance['section'] == $class['section'] &&
+                                                                $attendance['subject'] == $class['subject']) {
+                                                                $attendance_data = $attendance;
+                                                                break;
+                                                            }
+                                                        }
+                                                    ?>
+                                                        <tr>
+                                                            <td>
+                                                                <div class="d-flex align-items-center">
+                                                                    <span class="class-status-indicator <?php echo $status_class; ?> me-2"></span>
+                                                                    <strong><?php echo htmlspecialchars($class['subject']); ?></strong>
+                                                                </div>
+                                                            </td>
+                                                            <td><?php echo htmlspecialchars($class['room_name']); ?></td>
+                                                            <td><?php echo htmlspecialchars($class['section']); ?></td>
+                                                            <td><?php echo isset($class['year_level']) ? htmlspecialchars($class['year_level']) : '-'; ?></td>
+                                                            <td>
+                                                                <span class="time-badge">
+                                                                    <i class="fas fa-clock me-1"></i>
+                                                                    <?php echo $start_time . ' - ' . $end_time; ?>
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <span class="badge <?php echo $badge_class; ?>"><?php echo $status; ?></span>
+                                                            </td>
+                                                            <td>
+                                                                <?php if ($attendance_data): ?>
+                                                                <div class="d-flex align-items-center">
+                                                                    <small class="text-success fw-bold me-2"><?php echo $attendance_data['present_count']; ?></small>
+                                                                    <small class="text-muted">/</small>
+                                                                    <small class="text-danger fw-bold ms-2"><?php echo $attendance_data['absent_count']; ?></small>
+                                                                    <small class="text-primary fw-bold ms-2"><?php echo $attendance_data['attendance_rate']; ?>%</small>
+                                                                </div>
+                                                                <?php else: ?>
+                                                                <span class="text-muted">No data</span>
+                                                                <?php endif; ?>
+                                                            </td>
+                                                            <td>
+                                                                <a href="attendance.php?year=<?php echo urlencode($class['year_level']); ?>&section=<?php echo urlencode($class['section']); ?>&subject=<?php echo urlencode($class['subject']); ?>&date=<?php echo urlencode($today_date); ?>" 
+                                                                   class="btn btn-sm btn-outline-primary view-attendance-btn">
+                                                                   <i class="fas fa-chart-bar me-1"></i>
+                                                                   <?php echo $attendance_data ? 'View Details' : 'View Records'; ?>
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endwhile; ?>
+                                                </tbody>
+                                            </table>
                                         </div>
                                     <?php else: ?>
-                                        <div class="alert alert-success mt-4">
-                                            <i class="fas fa-check-circle me-2"></i>
-                                            You have <?php echo count($available_classes); ?> class session(s) in your records.
-                                            <br><small class="text-muted">Select filters above to get started.</small>
+                                        <div class="text-center py-4">
+                                            <i class="fas fa-calendar-times text-muted mb-3" style="font-size: 3rem;"></i>
+                                            <h5 class="text-muted">No Classes Today</h5>
+                                            <p class="text-muted">Enjoy your day off! No classes scheduled for today.</p>
+                                            <a href="schedule" class="btn btn-outline-primary">
+                                                <i class="fas fa-calendar-alt me-2"></i>View Full Schedule
+                                            </a>
                                         </div>
                                     <?php endif; ?>
                                 </div>
-                            <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Upcoming Classes Section -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-primary-custom d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title mb-0"><i class="fas fa-calendar-week me-2"></i>Upcoming Classes This Week</h5>
+                                    <span class="badge bg-light text-dark"><?php echo $upcoming_classes ? $upcoming_classes->num_rows : 0; ?> total</span>
+                                </div>
+                                <div class="card-body">
+                                    <?php if ($upcoming_classes && $upcoming_classes->num_rows > 0): ?>
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Day</th>
+                                                        <th>Time</th>
+                                                        <th>Subject</th>
+                                                        <th>Room</th>
+                                                        <th>Year Level</th>
+                                                        <th>Section</th>
+                                                        <th>Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php 
+                                                    // Reset the result pointer to start from the beginning
+                                                    if ($upcoming_classes) {
+                                                        $upcoming_classes->data_seek(0);
+                                                    }
+                                                    
+                                                    while ($class = $upcoming_classes->fetch_assoc()): ?>
+                                                        <tr>
+                                                            <td>
+                                                                <strong><?php echo htmlspecialchars($class['day']); ?></strong>
+                                                                <?php if ($class['day'] === $today_day): ?>
+                                                                    <span class="badge bg-success ms-1">Today</span>
+                                                                <?php endif; ?>
+                                                            </td>
+                                                            <td>
+                                                                <span class="time-badge">
+                                                                    <?php echo date("g:i A", strtotime($class['start_time'])) . ' - ' . date("g:i A", strtotime($class['end_time'])); ?>
+                                                                </span>
+                                                            </td>
+                                                            <td><?php echo htmlspecialchars($class['subject']); ?></td>
+                                                            <td><?php echo htmlspecialchars($class['room_name']); ?></td>                                       
+                                                            <td><?php echo isset($class['year_level']) ? htmlspecialchars($class['year_level']) : '-'; ?></td>
+                                                            <td><?php echo htmlspecialchars($class['section']); ?></td>
+                                                            <td>
+                                                                <a href="attendance.php?year=<?php echo urlencode($class['year_level']); ?>&section=<?php echo urlencode($class['section']); ?>&subject=<?php echo urlencode($class['subject']); ?>" 
+                                                                   class="btn btn-sm btn-outline-primary">
+                                                                   <i class="fas fa-eye me-1"></i> View Records
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endwhile; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="text-center py-4">
+                                            <i class="fas fa-calendar-plus text-muted mb-3" style="font-size: 3rem;"></i>
+                                            <h5 class="text-muted">No Upcoming Classes</h5>
+                                            <p class="text-muted">No classes scheduled for the rest of the week.</p>
+                                            <a href="schedule" class="btn btn-primary">
+                                                <i class="fas fa-calendar-alt me-2"></i>View Full Schedule
+                                            </a>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        
-    </div>
+        </div>
+    </div><!-- /.main-content -->
+
+    <!-- Back to Top Button -->
+    <a href="#" class="back-to-top" id="backToTop">
+        <i class="fas fa-arrow-up"></i>
+    </a>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="text/javascript">
+    // Load Google Charts
+    google.charts.load('current', {'packages':['corechart']});
+    google.charts.setOnLoadCallback(drawCharts);
+
+    function drawCharts() {
+        drawWeeklyAttendanceChart();
+        drawAttendanceByClassChart();
+    }
+
+    function drawWeeklyAttendanceChart() {
+        // Weekly attendance data from PHP
+        const weeklyData = <?php echo json_encode($weekly_attendance_data); ?>;
+        
+        const data = new google.visualization.DataTable();
+        data.addColumn('string', 'Day');
+        data.addColumn('number', 'Attendance Rate (%)');
+        data.addColumn('number', 'Present');
+        data.addColumn('number', 'Absent');
+        
+        weeklyData.forEach(day => {
+            data.addRow([
+                day.day, 
+                parseFloat(day.rate),
+                parseInt(day.present),
+                parseInt(day.absent)
+            ]);
+        });
+
+        const options = {
+            title: '',
+            curveType: 'function',
+            legend: { position: 'bottom' },
+            colors: ['#5c95e9', '#1cc88a', '#e74a3b'],
+            backgroundColor: 'transparent',
+            chartArea: {width: '85%', height: '70%', top: 20, bottom: 80},
+            hAxis: {
+                textStyle: {color: '#5a5c69', fontSize: 12},
+                gridlines: { color: 'transparent' },
+                baselineColor: '#5a5c69',
+                showTextEvery: 1,
+                slantedText: false
+            },
+            vAxis: {
+                title: 'Attendance Rate (%)',
+                titleTextStyle: {color: '#5a5c69', bold: true, fontSize: 12},
+                minValue: 0,
+                maxValue: 100,
+                gridlines: { 
+                    color: '#f0f0f0',
+                    count: 5
+                },
+                baseline: 0,
+                baselineColor: '#5a5c69',
+                format: '0',
+                viewWindow: {
+                    min: 0,
+                    max: 100
+                },
+                textStyle: {color: '#5a5c69', fontSize: 11}
+            },
+            titleTextStyle: {
+                color: '#5a5c69',
+                fontSize: 16,
+                bold: true
+            },
+            lineWidth: 3,
+            pointSize: 5,
+            animation: {
+                startup: true,
+                duration: 1000,
+                easing: 'out'
+            },
+            series: {
+                0: { type: 'line', pointSize: 6 },
+                1: { type: 'bars' },
+                2: { type: 'bars' }
+            }
+        };
+
+        const chart = new google.visualization.ComboChart(document.getElementById('weeklyAttendanceChart'));
+        chart.draw(data, options);
+    }
+
+    function drawAttendanceByClassChart() {
+        // Today's attendance by class data from PHP
+        const attendanceData = <?php 
+            $attendance_by_class = [];
+            foreach ($today_attendance_summary as $summary) {
+                $attendance_by_class[] = [
+                    'class' => $summary['subject'] . ' (' . $summary['year'] . '-' . $summary['section'] . ')',
+                    'present' => $summary['present_count'],
+                    'absent' => $summary['absent_count'],
+                    'rate' => $summary['attendance_rate']
+                ];
+            }
+            echo json_encode($attendance_by_class);
+        ?>;
+        
+        const data = new google.visualization.DataTable();
+        data.addColumn('string', 'Class');
+        data.addColumn('number', 'Present');
+        data.addColumn('number', 'Absent');
+        
+        attendanceData.forEach(item => {
+            data.addRow([
+                item.class, 
+                parseInt(item.present),
+                parseInt(item.absent)
+            ]);
+        });
+
+        const options = {
+            title: '',
+            pieHole: 0.3,
+            backgroundColor: 'transparent',
+            chartArea: {
+                width: '95%', 
+                height: '80%',
+                top: 10, 
+                left: 0,
+                right: 0,
+                bottom: 10
+            },
+            legend: {
+                position: 'bottom'
+            },
+            pieSliceText: 'percentage',
+            colors: ['#1cc88a', '#e74a3b'],
+            pieSliceBorderColor: 'white',
+            pieSliceBorderWidth: 2,
+            is3D: false,
+            pieStartAngle: 0,
+            sliceVisibilityThreshold: 0,
+            enableInteractivity: true,
+            tooltip: { 
+                trigger: 'focus',
+                showColorCode: true,
+                text: 'both',
+                isHtml: true
+            }
+        };
+
+        const chart = new google.visualization.PieChart(document.getElementById('attendanceByClassChart'));
+        chart.draw(data, options);
+    }
+
+    // Redraw charts on window resize
+    window.addEventListener('resize', function() {
+        drawCharts();
+    });
+</script>
+
     <script>
         // Update current time every second
         function updateCurrentTime() {
@@ -1591,6 +1467,11 @@ if ($filter_year && $filter_section) {
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
 
+        // Auto-refresh page every 5 minutes to prevent timeout
+        setTimeout(function() {
+            window.location.reload();
+        }, 300000); // 5 minutes
+
         // Sidebar toggle functionality for mobile
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('active');
@@ -1602,120 +1483,55 @@ if ($filter_year && $filter_section) {
             document.getElementById('sidebarOverlay').classList.remove('active');
         });
 
-        // Toggle advanced filters
-        document.getElementById('toggleAdvancedFilters').addEventListener('click', function() {
-            const advancedFilters = document.querySelector('.advanced-filters');
-            const icon = this.querySelector('i');
-            
-            if (advancedFilters.style.display === 'none') {
-                advancedFilters.style.display = 'block';
-                icon.className = 'fas fa-sliders-h me-1';
-                this.classList.remove('btn-outline-primary');
-                this.classList.add('btn-primary');
+        // Back to Top Button functionality
+        const backToTopButton = document.getElementById('backToTop');
+        
+        // Show/hide button based on scroll position
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > 300) {
+                backToTopButton.classList.add('show');
             } else {
-                advancedFilters.style.display = 'none';
-                icon.className = 'fas fa-sliders-h me-1';
-                this.classList.remove('btn-primary');
-                this.classList.add('btn-outline-primary');
+                backToTopButton.classList.remove('show');
             }
         });
+        
+        // Smooth scroll to top when button is clicked
+        backToTopButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
 
-        // Auto-submit form when coming from dashboard
+        // Add smooth scrolling for better UX
         document.addEventListener('DOMContentLoaded', function() {
-            const yearSelect = document.getElementById('year');
-            const sectionSelect = document.getElementById('section');
-            const subjectSelect = document.getElementById('subject');
-            const dateSelect = document.getElementById('date');
+            // Add click handlers for view attendance buttons
+            const viewButtons = document.querySelectorAll('.view-attendance-btn');
+            viewButtons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    // Optional: Add loading state
+                    const originalText = this.innerHTML;
+                    this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Loading...';
+                    this.disabled = true;
+                    
+                    // Revert after 2 seconds if still on same page
+                    setTimeout(() => {
+                        this.innerHTML = originalText;
+                        this.disabled = false;
+                    }, 2000);
+                });
+            });
             
-            <?php if ($from_dashboard): ?>
-            // If coming from dashboard with parameters, auto-submit the form
-            console.log('Auto-submitting form with parameters from dashboard');
-            setTimeout(function() {
-                document.getElementById('filterForm').submit();
-            }, 100);
-            <?php endif; ?>
-
-            // Update sections when year changes
-            yearSelect.addEventListener('change', function() {
-                const selectedYear = this.value;
-                sectionSelect.disabled = !selectedYear;
-                subjectSelect.disabled = !selectedYear;
-                
-                // Update sections and subjects based on selected year
-                updateFilters();
-            });
-
-            // Update subjects when section changes
-            sectionSelect.addEventListener('change', function() {
-                updateFilters();
-            });
-
-            // Auto-submit form when basic filters change (for quick filtering)
-            yearSelect.addEventListener('change', function() {
-                if (this.value && document.getElementById('section').value) {
-                    setTimeout(() => {
-                        document.getElementById('filterForm').submit();
-                    }, 500);
-                }
-            });
-
-            sectionSelect.addEventListener('change', function() {
-                if (this.value && document.getElementById('year').value) {
-                    setTimeout(() => {
-                        document.getElementById('filterForm').submit();
-                    }, 500);
-                }
-            });
-
-            // Quick Today's Records button
-            document.getElementById('quickToday').addEventListener('click', function() {
-                const today = new Date().toISOString().split('T')[0];
-                dateSelect.value = today;
-                document.getElementById('filterForm').submit();
-            });
-
-            // Initialize filters based on current selections
-            function updateFilters() {
-                const selectedYear = yearSelect.value;
-                const selectedSection = sectionSelect.value;
-                
-                // You can add AJAX here to dynamically update sections and subjects
-                // For now, we'll rely on the pre-populated options
-            }
-
-            // Auto-expand advanced filters if advanced filters are being used
-            <?php if ($filter_subject || $filter_month || $filter_status !== 'all'): ?>
-                document.getElementById('toggleAdvancedFilters').click();
-            <?php endif; ?>
-        });
-
-        function viewStudentDetails(studentId) {
-            // You can implement a modal or redirect to student details page
-            alert('Viewing details for student: ' + studentId);
-            // Example: window.location.href = 'student_details.php?id=' + studentId;
-        }
-
-        function clearFilters() {
-            document.getElementById('filterForm').reset();
-            window.location.href = 'attendance.php';
-        }
-
-        // Print functionality
-        function printReport() {
-            window.print();
-        }
-
-        // Add some interactive features
-        document.addEventListener('DOMContentLoaded', function() {
             // Add hover effects to table rows
-            const tableRows = document.querySelectorAll('.table tbody tr');
+            const tableRows = document.querySelectorAll('tbody tr');
             tableRows.forEach(row => {
                 row.addEventListener('mouseenter', function() {
-                    this.style.transform = 'translateX(5px)';
-                    this.style.transition = 'transform 0.2s ease';
+                    this.style.backgroundColor = '#f8f9fa';
+                    this.style.transition = 'background-color 0.2s ease';
                 });
                 row.addEventListener('mouseleave', function() {
-                    this.style.transform = 'translateX(0)';
+                    this.style.backgroundColor = '';
                 });
             });
         });
