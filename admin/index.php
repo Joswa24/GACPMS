@@ -130,7 +130,7 @@ function reverseGeocode($lat, $lon) {
 // Function to log access attempts - FOR FAILED ATTEMPTS ONLY
 function logAccessAttempt($userId, $username, $activity, $status) {
     global $db;
-    
+        $db->query("SET time_zone = '+08:00'");
     try {
         $ipAddress = $_SERVER['REMOTE_ADDR'];
         $userAgent = $_SERVER['HTTP_USER_AGENT'];
