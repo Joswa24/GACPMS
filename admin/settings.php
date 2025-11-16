@@ -8,6 +8,9 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
+// Set timezone to Manila/Philippines to fix the 4-hour advance issue
+date_default_timezone_set('Asia/Manila');
+
 // Check if user is logged in and 2FA verified
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || 
     !isset($_SESSION['2fa_verified']) || $_SESSION['2fa_verified'] !== true) {
@@ -732,9 +735,9 @@ $failedLogins = count(array_filter($logs, function($log) {
                             </div>
                         </div>
 
-                        <!-- Enhanced Statistics Cards -->
+                        <!-- Enhanced Statistics Cards - REMOVED UNIQUE IPs CARD -->
                         <div class="row mb-4">
-                            <div class="col-md-2">
+                            <div class="col-md-3">
                                 <div class="card bg-primary text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -749,7 +752,7 @@ $failedLogins = count(array_filter($logs, function($log) {
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-3">
                                 <div class="card bg-success text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -764,7 +767,7 @@ $failedLogins = count(array_filter($logs, function($log) {
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-3">
                                 <div class="card bg-danger text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -779,7 +782,7 @@ $failedLogins = count(array_filter($logs, function($log) {
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-3">
                                 <div class="card bg-info text-white stats-card">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -789,44 +792,6 @@ $failedLogins = count(array_filter($logs, function($log) {
                                             </div>
                                             <div class="fs-1 opacity-50">
                                                 <i class="fas fa-satellite-dish"></i>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="card bg-warning text-white stats-card">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <h6 class="mb-0">Active Today</h6>
-                                                <h4 class="mb-0"><?php 
-                                                    $today = date('Y-m-d');
-                                                    echo count(array_filter($logs, function($log) use ($today) { 
-                                                        return date('Y-m-d', strtotime($log['login_time'])) === $today; 
-                                                    })); 
-                                                ?></h4>
-                                            </div>
-                                            <div class="fs-1 opacity-50">
-                                                <i class="fas fa-calendar-day"></i>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="card bg-secondary text-white stats-card">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <h6 class="mb-0">Unique IPs</h6>
-                                                <h4 class="mb-0"><?php 
-                                                    $uniqueIPs = array_unique(array_column($logs, 'ip_address'));
-                                                    echo count($uniqueIPs);
-                                                ?></h4>
-                                            </div>
-                                            <div class="fs-1 opacity-50">
-                                                <i class="fas fa-network-wired"></i>
                                             </div>
                                         </div>
                                     </div>
