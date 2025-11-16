@@ -1687,6 +1687,21 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
             window.location.reload();
         }, 60000);
     });
+    $.fn.dataTable.ext.errMode = 'none';
+
+$(document).ready(function() {
+    $('#logsTable').DataTable({
+        order: [[3, 'desc']],
+        pageLength: 15,
+        responsive: true
+    }).on('error.dt', function(e, settings, techNote, message) {
+        // Suppress column count warnings
+        if (message.includes('column count')) {
+            return false;
+        }
+        console.log('DataTables error: ', message);
+    });
+});
     </script>
 </body>
 </html>
