@@ -3,7 +3,7 @@
 include '../connection.php';
 include '../security-headers.php';
 session_start();
-
+date_default_timezone_set('Asia/Manila');
 // Additional security headers
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
