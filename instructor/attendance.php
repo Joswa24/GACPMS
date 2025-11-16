@@ -8,6 +8,32 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || $_SESSI
     header("Location: index.php");
     exit();
 }
+// --- FETCH INSTRUCTOR ATTENDANCE RECORDS ---
+
+// Get the instructor's name from the existing summary data.
+// This is the key we will use to fetch their records.
+ $instructor_name = $current_summary['instructor_name'];
+
+// Prepare the SQL query to prevent SQL injection.
+// We select time_in and time_out, and order by the most recent date first.
+ $sql = "SELECT time_in, time_out FROM instructor_attendance_admin WHERE instructor_name = ? ORDER BY time_in DESC";
+
+ $stmt = mysqli_prepare($db_connection, $sql);
+
+// Bind the instructor's name to the query.
+mysqli_stmt_bind_param($stmt, "s", $instructor_name);
+
+// Execute the query.
+mysqli_stmt_execute($stmt);
+
+// Get the result set.
+ $result = mysqli_stmt_get_result($stmt);
+
+// Fetch all records into an associative array.
+ $attendance_records = mysqli_fetch_all($result, MYSQLI_ASSOC);
+
+// Close the statement.
+mysqli_stmt_close($stmt);
 
  $instructor_id = $_SESSION['instructor_id'];
 
@@ -311,32 +337,7 @@ if ($filter_year && $filter_section) {
         <?php
         exit();
     }
-    // --- FETCH INSTRUCTOR ATTENDANCE RECORDS ---
-
-// Get the instructor's name from the existing summary data.
-// This is the key we will use to fetch their records.
- $instructor_name = $current_summary['instructor_name'];
-
-// Prepare the SQL query to prevent SQL injection.
-// We select time_in and time_out, and order by the most recent date first.
- $sql = "SELECT time_in, time_out FROM instructor_attendance_admin WHERE instructor_name = ? ORDER BY time_in DESC";
-
- $stmt = mysqli_prepare($db_connection, $sql);
-
-// Bind the instructor's name to the query.
-mysqli_stmt_bind_param($stmt, "s", $instructor_name);
-
-// Execute the query.
-mysqli_stmt_execute($stmt);
-
-// Get the result set.
- $result = mysqli_stmt_get_result($stmt);
-
-// Fetch all records into an associative array.
- $attendance_records = mysqli_fetch_all($result, MYSQLI_ASSOC);
-
-// Close the statement.
-mysqli_stmt_close($stmt);
+    
 ?>
 <!DOCTYPE html>
 <html lang="en">
