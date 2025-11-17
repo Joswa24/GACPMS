@@ -1002,18 +1002,18 @@ if (isset($_GET['edit'])) {
                                         <div class="row mb-3 mt-1">
                                             <div class="col-lg-6 col-md-6 col-sm-12 mt-1">
                                                 <div class="form-group">
-                                                    <label class="fw-bold">Room Name:</label>
-                                                    <select name="room_name" id="eroom_name" class="form-control" required>
-                                                        <option value="">Select Room</option>
-                                                        <?php
-                                                        $rooms = $db->query("SELECT * FROM rooms ORDER BY room");
-                                                        while ($room = $rooms->fetch_assoc()) {
-                                                            echo '<option value="'.htmlspecialchars($room['room']).'" data-department="'.htmlspecialchars($room['department']).'">'.htmlspecialchars($room['room']).'</option>';
-                                                        }
-                                                        ?>
-                                                    </select>
-                                                    <div class="invalid-feedback" id="eroom_name-error"></div>
-                                                </div>
+                                                <label class="fw-bold">Room Name:</label>
+                                                <select name="room_name" id="eroom_name" class="form-control" required>
+                                                    <option value="">Select Room</option>
+                                                    <?php
+                                                    $rooms = $db->query("SELECT * FROM rooms WHERE room != 'gate' ORDER BY room");
+                                                    while ($room = $rooms->fetch_assoc()) {
+                                                        echo '<option value="'.htmlspecialchars($room['room']).'" data-department="'.htmlspecialchars($room['department']).'">'.htmlspecialchars($room['room']).'</option>';
+                                                    }
+                                                    ?>
+                                                </select>
+                                                <div class="invalid-feedback" id="eroom_name-error"></div>
+                                            </div>
                                             </div>
                                             <div class="col-lg-6 col-md-6 col-sm-12 mt-1">
                                                 <div class="form-group">
