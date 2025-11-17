@@ -13,6 +13,7 @@ RewriteRule ^admin/img/ - [F,L,NC]
 RewriteRule ^admin/admin/uploads - [F,L,NC]
 RewriteRule ^admin/uploads/ - [F,L,NC]
 
+
 # ======= SECURITY HEADERS & PROTECTION =======
 
 # Enable HSTS Header
