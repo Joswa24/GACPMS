@@ -1006,7 +1006,7 @@ if (isset($_GET['edit'])) {
                                                 <select name="room_name" id="eroom_name" class="form-control" required>
                                                     <option value="">Select Room</option>
                                                     <?php
-                                                    $rooms = $db->query("SELECT * FROM rooms WHERE room != 'gate' ORDER BY room");
+                                                    $rooms = $db->query("SELECT * FROM rooms WHERE room != 'Gate' ORDER BY room");
                                                     while ($room = $rooms->fetch_assoc()) {
                                                         echo '<option value="'.htmlspecialchars($room['room']).'" data-department="'.htmlspecialchars($room['department']).'">'.htmlspecialchars($room['room']).'</option>';
                                                     }
