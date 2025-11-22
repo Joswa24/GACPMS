@@ -27,8 +27,8 @@ $success = '';
 $twoFactorRequired = false;
 
 // reCAPTCHA configuration
-$recaptchaSiteKey = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
-$recaptchaSecretKey = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
+// $recaptchaSiteKey = '6Ld2w-QrAAAAAKcWH94dgQumTQ6nQ3EiyQKHUw4_';
+// $recaptchaSecretKey = '6Ld2w-QrAAAAAFeIvhKm5V6YBpIsiyHIyzHxeqm-';
 
 // Initialize session variables
 if (!isset($_SESSION['login_attempts'])) {
@@ -42,25 +42,25 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 // Function to verify reCAPTCHA response
-function verifyRecaptcha($response, $secretKey) {
-    $url = 'https://www.google.com/recaptcha/api/siteverify';
-    $data = [
-        'secret' => $secretKey,
-        'response' => $response
-    ];
+// function verifyRecaptcha($response, $secretKey) {
+//     $url = 'https://www.google.com/recaptcha/api/siteverify';
+//     $data = [
+//         'secret' => $secretKey,
+//         'response' => $response
+//     ];
     
-    $options = [
-        'http' => [
-            'header' => "Content-type: application/x-www-form-urlencoded\r\n",
-            'method' => 'POST',
-            'content' => http_build_query($data)
-        ]
-    ];
+//     $options = [
+//         'http' => [
+//             'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+//             'method' => 'POST',
+//             'content' => http_build_query($data)
+//         ]
+//     ];
     
-    $context = stream_context_create($options);
-    $result = file_get_contents($url, false, $context);
-    return json_decode($result, true);
-}
+//     $context = stream_context_create($options);
+//     $result = file_get_contents($url, false, $context);
+//     return json_decode($result, true);
+// }
 
 // Check and create location_details column if it doesn't exist
 try {

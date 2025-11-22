@@ -1144,7 +1144,7 @@ error_log("DASHBOARD DEBUG: " . json_encode($debug_info));
                                     </div>
                                     <div class="stats-content">
                                         <h3><?php echo sanitizeOutput($stats['current_inside']); ?></h3>
-                                        <p>Currently Inside</p>
+                                        <p>Total People Inside the Campus</p>
                                         <div class="stats-detail">
                                             <small class="text-muted">Exits today: <?php echo sanitizeOutput($stats['total_exits_today']); ?></small>
                                         </div>
